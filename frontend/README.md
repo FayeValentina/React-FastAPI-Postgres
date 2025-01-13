@@ -1,50 +1,54 @@
-# React + TypeScript + Vite
+# Frontend Service
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite + Material-UI frontend application.
 
-Currently, two official plugins are available:
+## Structure
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```
+frontend/
+├── src/                    # Source files
+│   ├── components/        # React components
+│   ├── hooks/            # Custom React hooks
+│   ├── pages/            # Page components
+│   ├── services/         # API services
+│   ├── types/            # TypeScript type definitions
+│   ├── utils/            # Utility functions
+│   ├── App.tsx          # Root component
+│   ├── main.tsx         # Entry point
+│   └── vite-env.d.ts    # Vite type definitions
+├── public/               # Static files
+├── Dockerfile           # Docker configuration
+├── package.json         # Dependencies and scripts
+├── tsconfig.json        # TypeScript configuration
+└── vite.config.ts       # Vite configuration
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+## Development
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+This service is part of a Docker Compose setup. Please refer to the root directory's README.md for setup instructions.
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+### Dependencies
+
+- Node.js 20+
+- React 18
+- Material-UI
+- TypeScript
+- Vite
+
+### Environment Variables
+
+All environment variables are managed in the root directory's `.env` file. See `.env.example` for available options.
+
+### Available Scripts
+
+In the development environment (via Docker Compose):
+- The application will automatically reload when you make changes
+- The development server runs on http://localhost:3000
+- API requests are automatically proxied to the backend
+
+### Code Style
+
+- TypeScript for type safety
+- ESLint for code linting
+- Material-UI for consistent styling
+- React hooks for state management

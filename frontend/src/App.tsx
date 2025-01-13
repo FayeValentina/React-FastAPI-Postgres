@@ -1,29 +1,52 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { Container, Typography, Button } from "@mui/material";
+import React, { useEffect } from "react";
+import { Typography, Button, CircularProgress, Alert, Box } from "@mui/material";
+import MainLayout from "./components/Layout/MainLayout";
+import useApi from "./hooks/useApi";
+
+interface HelloResponse {
+  message: string;
+  status: string;
+}
 
 const App: React.FC = () => {
-    const [message, setMessage] = useState<string>("");
+  const { data, loading, error, fetchData } = useApi<HelloResponse>("/hello");
 
-    useEffect(() => {
-        axios.get("/api/")
-            .then(response => setMessage(response.data.message))
-            .catch(error => console.error("Error fetching data", error));
-    }, []);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-    return (
-        <Container>
-            <Typography variant="h3" gutterBottom>
-                FastAPI + React + Vite + MUI (TypeScript)
+  return (
+    <MainLayout>
+      <Box sx={{ textAlign: 'center', py: 4 }}>
+        <Typography variant="h3" gutterBottom>
+          FastAPI + React Demo
+        </Typography>
+        
+        {loading ? (
+          <CircularProgress />
+        ) : error ? (
+          <Alert severity="error">Error: {error.message}</Alert>
+        ) : (
+          <Box sx={{ mt: 4 }}>
+            <Typography variant="h5" gutterBottom>
+              Server Response:
             </Typography>
-            <Typography variant="body1">
-                {message || "Loading..."}
+            <Typography variant="body1" sx={{ mb: 3 }}>
+              {data?.message || "No message received"}
             </Typography>
-            <Button variant="contained" color="primary" style={{ marginTop: '20px' }}>
-                Material UI Button
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={() => fetchData()}
+              disabled={loading}
+            >
+              Refresh Data
             </Button>
-        </Container>
-    );
+          </Box>
+        )}
+      </Box>
+    </MainLayout>
+  );
 };
 
 export default App;
