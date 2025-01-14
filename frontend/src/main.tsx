@@ -1,8 +1,9 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
+import AppRoutes from './routes'
 import './index.css'
-import App from './App.tsx'
 
 const theme = createTheme({
   palette: {
@@ -19,11 +20,13 @@ const theme = createTheme({
   },
 });
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <App />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </ThemeProvider>
-  </StrictMode>,
+  </React.StrictMode>,
 )

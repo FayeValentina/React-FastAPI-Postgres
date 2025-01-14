@@ -1,9 +1,9 @@
 from datetime import datetime
-from typing import Optional, List, TYPE_CHECKING # type: ignore
-from sqlalchemy import String, DateTime, func # type: ignore
-from sqlalchemy.orm import Mapped, mapped_column, relationship # type: ignore
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy import String, DateTime, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base # type: ignore
+from app.db.base_class import Base
 
 if TYPE_CHECKING:
     from .post import Post

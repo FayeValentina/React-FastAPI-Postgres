@@ -5,4 +5,8 @@ router = APIRouter()
 
 @router.get("/hello")
 async def hello() -> Dict[str, str]:
-    return {"message": "Hello from FastAPI!", "status": "success"} 
+    return {"message": "Hello, World From FastAPI", "status": "success"}
+
+@router.get("/world")
+async def world() -> Dict[str, str]:
+    return {"message": "Hello, World API", "status": "success"} 

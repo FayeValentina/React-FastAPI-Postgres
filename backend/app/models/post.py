@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, ForeignKey, func, Text # type: ignore
-from sqlalchemy.orm import Mapped, mapped_column, relationship # type: ignore
+from sqlalchemy import String, DateTime, ForeignKey, func, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.base_class import Base
 
 if TYPE_CHECKING:
     from .user import User

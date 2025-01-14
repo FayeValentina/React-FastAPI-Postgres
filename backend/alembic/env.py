@@ -6,6 +6,10 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from dotenv import load_dotenv
+
+# 加载 .env 文件
+load_dotenv()
 
 # 添加项目根目录到 Python 路径
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -16,6 +20,14 @@ from app.models import User
 
 # this is the Alembic Config object
 config = context.config
+
+# 从环境变量获取数据库连接信息
+section = config.config_ini_section
+config.set_section_option(section, "POSTGRES_USER", os.getenv("POSTGRES_USER"))
+config.set_section_option(section, "POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD"))
+config.set_section_option(section, "POSTGRES_HOST", os.getenv("POSTGRES_HOST"))
+config.set_section_option(section, "POSTGRES_PORT", os.getenv("POSTGRES_PORT"))
+config.set_section_option(section, "POSTGRES_DB", os.getenv("POSTGRES_DB"))
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
