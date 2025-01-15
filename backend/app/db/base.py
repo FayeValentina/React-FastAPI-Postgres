@@ -1,6 +1,6 @@
 from typing import AsyncGenerator
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker # type: ignore
 
 from app.core.config import settings
 from app.db.base_class import Base
@@ -35,9 +35,8 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
-        except Exception as e:
+        except Exception:
             await session.rollback()
-            logger.error(f"Database session error: {str(e)}")
             raise
         finally:
             await session.close()

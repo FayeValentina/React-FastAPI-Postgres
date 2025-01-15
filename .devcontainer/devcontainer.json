@@ -20,7 +20,18 @@
                 "python.linting.enabled": true,
                 "python.linting.pylintEnabled": true,
                 "editor.formatOnSave": true,
-                "editor.defaultFormatter": "esbenp.prettier-vscode",
+                "[javascript]": {
+                    "editor.defaultFormatter": "vscode.typescript-language-features"
+                },
+                "[typescript]": {
+                    "editor.defaultFormatter": "vscode.typescript-language-features"
+                },
+                "[typescriptreact]": {
+                    "editor.defaultFormatter": "vscode.typescript-language-features"
+                },
+                "[json]": {
+                    "editor.defaultFormatter": "vscode.json-language-features"
+                },
                 "[python]": {
                     "editor.defaultFormatter": "ms-python.python"
                 }
