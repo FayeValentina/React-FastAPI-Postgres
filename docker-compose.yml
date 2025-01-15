@@ -14,6 +14,11 @@ services:
       - backend
     networks:
       - dbNetWork
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   backend:
     build: ./backend
@@ -40,7 +45,7 @@ services:
       postgres:
         condition: service_healthy
     command: >
-      sh -c "poetry run alembic upgrade head && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "poetry run alembic upgrade head && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     networks:
       - dbNetWork
 
