@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   frontend:
@@ -12,6 +12,8 @@ services:
       - VITE_API_URL=http://backend:${BACKEND_PORT}
     depends_on:
       - backend
+    networks:
+      - dbNetWork
 
   backend:
     build: ./backend
@@ -35,10 +37,15 @@ services:
       - PGADMIN_PORT=${PGADMIN_PORT}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "poetry run alembic upgrade head && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - dbNetWork
 
   postgres:
-    image: postgres:latest
+    image: postgres:17
     ports:
       - "${POSTGRES_PORT}:5432"
     environment:
@@ -47,16 +54,33 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dbNetWork
 
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:8
     ports:
       - "${PGADMIN_PORT}:80"
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
+      - PGADMIN_CONFIG_SERVER_MODE=${PGADMIN_CONFIG_SERVER_MODE}
+      - PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=${PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION}
+      - PGADMIN_CONFIG_WTF_CSRF_ENABLED=${PGADMIN_CONFIG_WTF_CSRF_ENABLED}
+      - PGADMIN_CONFIG_WTF_CSRF_HEADERS=${PGADMIN_CONFIG_WTF_CSRF_HEADERS}
     depends_on:
       - postgres
+    networks:
+      - dbNetWork
 
 volumes:
-  postgres_data: 
+  postgres_data:
+
+networks:
+  dbNetWork:
+    driver: bridge
