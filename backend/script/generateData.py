@@ -32,8 +32,8 @@ def generate_sales_data(num_records=1000000):
     sales_dates = [start_date + timedelta(days=np.random.randint(0, days_range)) for _ in range(num_records)]
     planned_sales_volume = np.random.randint(100, 10000, num_records)
     
-    # 生成实际销售量（计划销售量的50%-150%）
-    actual_sales_volume = planned_sales_volume * np.random.uniform(0.5, 1.5, num_records)
+    # 生成实际销售量（计划销售量的50%-150%），并确保为整数
+    actual_sales_volume = np.round(planned_sales_volume * np.random.uniform(0.5, 1.5, num_records)).astype(int)
     
     # 生成计划单价
     planned_unit_price = np.random.uniform(10, 1000, num_records)
