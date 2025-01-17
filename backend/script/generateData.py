@@ -6,7 +6,7 @@ import os
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def generate_sales_data(num_records=1000000):
+def generate_sales_data(num_records=300000):
     # 定义常量
     CURRENCIES = ['AUD', 'CAD', 'DKK', 'EUR', 'GBP', 'HKD', 'INR', 'JPY', 'KRW', 'RMB', 'SEK', 'SGD', 'THB', 'TWD', 'USD']
     
