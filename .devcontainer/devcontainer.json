@@ -13,7 +13,8 @@
                 "esbenp.prettier-vscode",
                 "bradlc.vscode-tailwindcss",
                 "dsznajder.es7-react-js-snippets",
-                "ms-azuretools.vscode-docker"
+                "ms-azuretools.vscode-docker",
+                "CTC.vscode-tree-extension"
             ],
             "settings": {
                 "python.defaultInterpreterPath": "/usr/local/bin/python",

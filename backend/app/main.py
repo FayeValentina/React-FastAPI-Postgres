@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.api import api_router
+from app.api import router
 from app.core.config import settings
 
 app = FastAPI(title="FastAPI Demo")
@@ -15,4 +15,4 @@ app.add_middleware(
 )
 
 # Include API router
-app.include_router(api_router)
+app.include_router(router)

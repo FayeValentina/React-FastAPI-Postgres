@@ -3,7 +3,7 @@ from typing import Dict
 
 router = APIRouter()
 
-@router.get("/hello")
+@router.get("/")
 async def hello() -> Dict[str, str]:
     return {"message": "Hello, World From FastAPI", "status": "success"}
 
