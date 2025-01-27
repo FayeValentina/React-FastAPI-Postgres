@@ -88,6 +88,9 @@ def generate_sales_data(total_records=200000):
             record = {
                 'CUSTOMER_NO': customer_no,
                 'INVOICE_DATE': date,
+                'ORDER_DATE': date,
+                'OPEN_AMT': np.random.randint(1000,100001),
+                'OPEN_QTY':np.random.randint(1000,10001),
                 'SALES_AMT': np.random.randint(1000, 100001),
                 'INVOICE_NUM': generate_invoice_num(invoice_counter),
                 'SALES_QTY': np.random.randint(1000, 10001),
