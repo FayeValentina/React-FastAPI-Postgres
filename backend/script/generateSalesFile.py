@@ -20,6 +20,19 @@ def read_txt_file(filename):
         print(f"读取{filename}时发生错误：{str(e)}")
         raise
 
+def read_relation_mapping():
+    """读取关系映射文件"""
+    relation_path = os.path.join(SCRIPT_DIR, 'relation.csv')
+    try:
+        df = pd.read_csv(relation_path)
+        # 创建映射字典
+        sales_unit_to_company = dict(zip(df['SALES_UNIT'], df['COMPANY_CODE']))
+        sales_unit_to_currency = dict(zip(df['SALES_UNIT'], df['CURRENCY']))
+        return df['SALES_UNIT'].tolist(), sales_unit_to_company, sales_unit_to_currency
+    except Exception as e:
+        print(f"读取relation.csv时发生错误：{str(e)}")
+        raise
+
 def generate_invoice_num(index):
     """生成唯一的订单编号"""
     return f"TBC{str(index).zfill(10)}"
@@ -57,12 +70,12 @@ def generate_monthly_dates(start_date, end_date, records_per_month):
     return dates
 
 def generate_sales_data(total_records=200000):
-    # 读取各个txt文件中的数据
+    # 读取数据
     CUSTOMER_NOS = read_txt_file('CUSTOMER_NO.txt')
-    SALES_UNITS = read_txt_file('SALES_UNIT.txt')
-    COMPANY_CODES = read_txt_file('COMPANY_CODE.txt')
     SEG5S = read_txt_file('SEG5.txt')
-    CURRENCIES = read_txt_file('CURRENCY.txt')
+    
+    # 读取关系映射
+    SALES_UNITS, sales_unit_to_company, sales_unit_to_currency = read_relation_mapping()
     
     # 设置日期范围
     start_date = datetime(2024, 1, 1)
@@ -84,28 +97,32 @@ def generate_sales_data(total_records=200000):
         dates = generate_monthly_dates(start_date, end_date, records_per_month)
         
         for date in dates:
+            # 先选择 SALES_UNIT，然后根据映射获取对应的 COMPANY_CODE 和 CURRENCY
+            sales_unit = np.random.choice(SALES_UNITS)
+            company_code = sales_unit_to_company[sales_unit]
+            currency = sales_unit_to_currency[sales_unit]
+            
             # 生成一条记录
             record = {
                 'CUSTOMER_NO': customer_no,
                 'INVOICE_DATE': date,
                 'ORDER_DATE': date,
                 'OPEN_AMT': np.random.randint(1000,100001),
-                'OPEN_QTY':np.random.randint(1000,10001),
+                'OPEN_QTY': np.random.randint(1000,10001),
                 'SALES_AMT': np.random.randint(1000, 100001),
                 'INVOICE_NUM': generate_invoice_num(invoice_counter),
                 'SALES_QTY': np.random.randint(1000, 10001),
                 'PACKED_QTY': np.random.randint(1000, 10001),
-                'SALES_UNIT': np.random.choice(SALES_UNITS),
+                'SALES_UNIT': sales_unit,
                 'STD_COST_AMT': np.random.randint(1000, 100001),
                 'SALES_AMT_ORG': np.random.randint(1000, 100001),
-                'CURRENCY': np.random.choice(CURRENCIES),
+                'CURRENCY': currency,
                 'SEG5': np.random.choice(SEG5S),
-                'COMPANY_CODE': np.random.choice(COMPANY_CODES)
+                'COMPANY_CODE': company_code
             }
             data.append(record)
             invoice_counter += 1
             
-            # 如果已经达到目标记录数，就停止生成
             if len(data) >= total_records:
                 break
         if len(data) >= total_records:
