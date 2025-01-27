@@ -125,7 +125,7 @@ def generate_sales_data(total_records=200000):
 
 def main():
     # 设置要生成的记录总数
-    total_records = 250000
+    total_records = 220000
     print(f"开始生成{total_records}条数据...")
     
     # 生成数据
