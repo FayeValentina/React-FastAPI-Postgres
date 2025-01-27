@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, constr, conint, validator
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -79,4 +79,68 @@ class UserResponse(UserBase):
     updated_at: datetime
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+
+# Response Models
+class SessionResponse(BaseModel):
+    message: str
+    session_id: str
+
+
+class PreferencesResponse(BaseModel):
+    preferences: Dict[str, str | bool]
+    message: str
+
+
+class ThemePreferenceResponse(BaseModel):
+    theme: str
+    message: str
+
+
+class LoginResponse(BaseModel):
+    message: str
+    user_id: int
+    session_id: str
+
+
+class UserLevelResponse(BaseModel):
+    level: UserLevel
+    limit: int
+    offset: int
+
+
+# 添加登录相关的模型
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6)
+    remember_me: bool = False
+
+
+class LoginFormResponse(BaseModel):
+    username: str
+    remember_me: bool
+    message: str = "Login successful"
+
+    class Config:
+        from_attributes = True
+
+
+# Form response model
+class FileUploadResponse(BaseModel):
+    filename: str
+    content_type: str
+    file_size: int
+    description: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "filename": "test.pdf",
+                "content_type": "application/pdf",
+                "file_size": 1024,
+                "description": "Test document",
+                "tags": ["document", "test"]
+            }
+        } 

@@ -16,8 +16,9 @@ COPY . .
 # Configure poetry to not create a virtual environment
 RUN poetry config virtualenvs.create false
 
-# Install dependencies
-RUN poetry install --only main --no-interaction --no-ansi
+# Generate lock file and install dependencies
+RUN poetry lock && \
+    poetry install --only main --no-interaction --no-ansi
 
 # Expose port
 EXPOSE 8000
