@@ -12,6 +12,7 @@ uvicorn = "^0.27.0"
 sqlalchemy = "^2.0.25"
 pydantic = {extras = ["email"], version = "^2.5.3"}
 pydantic-settings = "^2.1.0"
+pydantic-extra-types = "^2.5.0"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 python-multipart = "^0.0.6"

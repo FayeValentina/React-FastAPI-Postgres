@@ -11,7 +11,6 @@ from pydantic import (
     field_validator,
     model_validator,
     AnyUrl,
-    PaymentCardNumber,
     StringConstraints,
     Json,
     SecretStr,
@@ -21,6 +20,7 @@ from pydantic import (
     StrictBool,
     UUID4
 )
+from pydantic_extra_types.payment import PaymentCardNumber
 from typing import List, Optional, Dict, Any, Set
 from datetime import datetime, date
 from enum import Enum
@@ -34,20 +34,20 @@ class ProductCategory(str, Enum):
 
 
 class AdvancedProduct(BaseModel):
-    id: UUID4  # UUID4 格式验证
-    name: str = Field(..., pattern="^[a-zA-Z0-9\s-]+$")  # 正则表达式验证
+    id: UUID4
+    name: str = Field(..., pattern="^[a-zA-Z0-9\s-]+$")
     description: str = Field(..., min_length=10, max_length=1000)
-    price: confloat(gt=0, lt=1000000)  # type: ignore # 浮点数范围验证
-    quantity: PositiveInt  # 正整数验证
+    price: float = Field(..., gt=0, lt=1000000)
+    quantity: PositiveInt
     category: ProductCategory
-    tags: Set[str] = Field(default_factory=set)  # 使用 Set 来确保唯一性
-    website: Optional[HttpUrl] = None  # URL 格式验证
-    secure_code: SecretStr  # 敏感数据处理
-    meta_data: Json  # JSON 字符串验证
-    ip_address: Optional[IPvAnyAddress] = None  # IP 地址验证
-    rating: confloat(ge=0, le=5)  # type: ignore # 评分范围验证
-    discount: Optional[NegativeFloat] = None  # 负数验证
-    is_active: StrictBool  # 严格布尔值验证
+    tags: Set[str] = Field(default_factory=set)
+    website: Optional[HttpUrl] = None
+    secure_code: SecretStr
+    meta_data: Json
+    ip_address: Optional[IPvAnyAddress] = None
+    rating: float = Field(..., ge=0, le=5)
+    discount: Optional[NegativeFloat] = None
+    is_active: StrictBool
 
     @field_validator('name')
     def name_must_not_contain_special_chars(cls, v):
@@ -65,10 +65,10 @@ class AdvancedProduct(BaseModel):
 
 
 class PaymentInfo(BaseModel):
-    card_number: PaymentCardNumber  # 信用卡号验证
+    card_number: PaymentCardNumber
     expiry_date: date
-    cvv: constr(min_length=3, max_length=4)  # type: ignore
-    amount: confloat(gt=0)  # type: ignore
+    cvv: str = Field(..., min_length=3, max_length=4)
+    amount: float = Field(..., gt=0)
 
 
 class ComplexAddress(BaseModel):
@@ -115,8 +115,8 @@ class AdvancedUser(BaseModel):
             raise ValueError('Birth date cannot be in the future')
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "username": "john_doe",
                 "email": "john@example.com",
@@ -137,4 +137,4 @@ class AdvancedUser(BaseModel):
                 },
                 "interests": ["coding", "reading"]
             }
-        } 
+        }} 
