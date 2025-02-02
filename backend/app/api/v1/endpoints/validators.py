@@ -53,14 +53,14 @@ async def create_product(
     product: Annotated[AdvancedProduct, Body()]
 ):
     """
-    Create a new product with advanced validation
+    创建新产品（高级验证示例）
 
-    This endpoint allows you to create a new product with various validations:
-    - UUID format for id
-    - String patterns for name
-    - Price and quantity validations
-    - Enum for category
-    - Various field types including URL, IP, and JSON
+    此端点演示了多种验证方式：
+    - UUID格式验证
+    - 字符串模式验证
+    - 数值范围验证
+    - 枚举类型验证
+    - URL、IP地址、JSON等特殊类型验证
     """
     return product
 
@@ -82,7 +82,10 @@ async def validate_payment(
     )]
 ):
     """
-    Validate payment information
+    验证支付信息
+    
+    参数说明：
+    - payment: 支付信息，包含卡号、过期日期、CVV和金额
     """
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
@@ -95,11 +98,18 @@ async def create_advanced_user(
     user: AdvancedUser,
     referral_code: Annotated[Optional[str], Query(
         pattern="^[A-Z]{3}[0-9]{3}$",
-        description="Referral code in format ABC123"
+        description="推荐码格式：ABC123"
     )] = None
 ):
     """
-    Create a new user with advanced validation and complex nested objects
+    创建高级用户（带复杂验证）
+    
+    参数说明：
+    - user: 用户信息，包含复杂的嵌套对象
+    - referral_code: 推荐码，格式为3个大写字母+3个数字
+    
+    异常：
+    - 400: 缺少推荐码
     """
     if not referral_code:
         raise HTTPException(
@@ -115,7 +125,7 @@ async def create_advanced_user(
 
 @router.put("/users/{user_id}/address/{address_type}", responses={
     status.HTTP_200_OK: {
-        "description": "Address updated successfully",
+        "description": "地址更新成功",
         "content": {
             "application/json": {
                 "example": {"status": "success", "message": "Address updated"}
@@ -123,7 +133,7 @@ async def create_advanced_user(
         }
     },
     status.HTTP_404_NOT_FOUND: {
-        "description": "User not found",
+        "description": "用户未找到",
         "content": {
             "application/json": {
                 "example": {"detail": "User not found"}
@@ -137,7 +147,15 @@ async def update_user_address(
     address: ComplexAddress
 ):
     """
-    Update user address with coordinate validation
+    更新用户地址信息
+    
+    参数说明：
+    - user_id: 用户UUID
+    - address_type: 地址类型（home/work/other）
+    - address: 详细地址信息，包含坐标验证
+    
+    异常：
+    - 404: 用户不存在
     """
     if str(user_id) == "00000000-0000-0000-0000-000000000000":
         raise HTTPException(
@@ -159,7 +177,16 @@ async def get_products_by_category(
     tags: Annotated[List[str], Query(min_length=1, max_length=5)] = []
 ):
     """
-    Get products by category with price range and tags validation
+    按类别获取产品列表
+    
+    参数说明：
+    - category: 产品类别（electronics/clothing/books）
+    - min_price: 最低价格，必须大于0
+    - max_price: 最高价格，必须大于0
+    - tags: 标签列表，1-5个标签
+    
+    异常：
+    - 400: 价格范围无效
     """
     if min_price >= max_price:
         return JSONResponse(

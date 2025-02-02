@@ -2,9 +2,9 @@ from fastapi import APIRouter, Path, Query, Body, Cookie, Header, HTTPException,
 from fastapi.responses import JSONResponse
 from typing import Annotated, List, Optional, Dict
 from datetime import datetime, timedelta
-import pytz  # 添加 pytz 用于处理时区
-import uuid  # 添加 uuid 用于生成唯一的会话ID
-from datetime import timezone  # 添加这一行
+import pytz  # 用于处理时区
+import uuid  # 用于生成唯一的会话ID
+from datetime import timezone
 
 from app.schemas.example import (
     ItemCreate,
@@ -19,15 +19,20 @@ from app.schemas.example import (
     UserLevelResponse,
     LoginRequest,
     LoginFormResponse,
-    FileUploadResponse
+    FileUploadResponse,
+    MultipleFilesResponse,
+    FileWithMetadataResponse
 )
 
 router = APIRouter()
 
 @router.get("/items/{item_id}")
 async def get_item(
+    # 路径参数：商品ID
     item_id: Annotated[int, Path(title="Item ID", ge=1)],
+    # 查询参数：可选的搜索词
     q: Annotated[Optional[str], Query(min_length=3, max_length=50)] = None,
+    # 以下是各种HTTP头部参数
     user_agent: Annotated[str | None, Header()] = None,
     accept: Annotated[str | None, Header()] = None,
     accept_language: Annotated[str | None, Header()] = None,
@@ -40,8 +45,9 @@ async def get_item(
     origin: Annotated[str | None, Header()] = None
 ):
     """
-    Get item by ID with optional query parameter and header
+    获取商品详情，演示各种HTTP头部的使用
     """
+    # 打印所有接收到的参数，用于调试
     print("item_id:", item_id)
     print("q:", q)
     print("user_agent:", user_agent)
@@ -73,6 +79,7 @@ async def get_item(
 
 @router.post("/items/", response_model=ItemResponse)
 async def create_item(
+    # 使用Body和示例数据验证请求体
     item: Annotated[ItemCreate, Body(
         examples={
             "normal": {
@@ -89,14 +96,15 @@ async def create_item(
         }
     )],
     x_token: Annotated[str | None, Header()] = None
-) -> ItemResponse: 
+) -> ItemResponse:
     """
-    Create a new item with body validation
+    创建新商品，需要在header中提供x-token
     """
+    # 验证token
     if not x_token:
         raise HTTPException(status_code=400, detail="X-Token header is required")
     
-    # Simulate database response
+    # 模拟数据库响应
     return {
         **item.model_dump(),
         "id": 1,
@@ -110,7 +118,7 @@ async def login(
     login_data: LoginRequest
 ) -> LoginFormResponse:
     """
-    Login endpoint demonstrating response model filtering
+    登录接口，演示响应模型过滤
     """
     # 这里可以添加实际的密码验证逻辑
     # 即使我们在函数内部访问了password，它也不会出现在响应中
@@ -131,7 +139,7 @@ async def create_profile(
     api_key: Annotated[str | None, Header()] = None
 ) -> UserProfile:
     """
-    Create user profile with nested models and multiple parameters
+    创建用户资料，包含嵌套模型和多个参数
     """
     if not api_key:
         raise HTTPException(status_code=400, detail="API key is required")
@@ -150,7 +158,7 @@ async def get_users_by_level(
     offset: Annotated[int, Query(ge=0)] = 0
 ) -> UserLevelResponse:
     """
-    Get users by level using enum
+    根据用户等级获取用户列表，使用枚举类型
     """
     return {
         "level": level,
@@ -162,6 +170,9 @@ async def get_users_by_level(
 # Custom response with headers
 @router.get("/custom-header")
 async def get_custom_header() -> JSONResponse:
+    """
+    返回自定义响应头的示例
+    """
     content = {"message": "Hello World"}
     headers = {"X-Custom-Header": "custom_value", "X-Another-Header": "another_value"}
     return JSONResponse(content=content, headers=headers)
@@ -176,7 +187,7 @@ async def update_item(
     importance: Annotated[int, Body(gt=0, lt=10)]
 ):
     """
-    Update item with multiple body parameters
+    更新商品信息，演示多个请求体参数的使用
     """
     return {
         "item_id": item_id,
@@ -192,12 +203,12 @@ async def set_theme_preference(
     remember: Annotated[bool, Query()] = False
 ) -> JSONResponse:
     """
-    Set user's theme preference in cookie
+    设置用户主题偏好，存储在cookie中
     """
     content = {"message": f"Theme preference set to {theme}"}
     response = JSONResponse(content=content)
     
-    # 使用 datetime.now(timezone.utc) 替代 pytz
+    # 设置cookie过期时间
     expires = datetime.now(timezone.utc) + timedelta(days=30) if remember else None
     
     response.set_cookie(
@@ -206,7 +217,7 @@ async def set_theme_preference(
         expires=expires,
         httponly=True,
         samesite="lax",
-        secure=False
+        secure=False  # 开发环境使用False
     )
     
     return response
@@ -218,7 +229,7 @@ async def get_theme_preference(
     theme: Annotated[str | None, Cookie()] = None
 ) -> ThemePreferenceResponse:
     """
-    Get user's theme preference from cookie
+    从cookie中获取用户主题偏好
     """
     if not theme:
         return {"theme": "default", "message": "No theme preference set"}
@@ -231,12 +242,11 @@ async def set_language_preference(
     remember: Annotated[bool, Query()] = False
 ) -> JSONResponse:
     """
-    Set user's language preference in cookie
+    设置用户语言偏好，存储在cookie中
     """
     content = {"message": f"Language preference set to {language}"}
     response = JSONResponse(content=content)
     
-    # 使用 datetime.now(timezone.utc) 替代 pytz
     expires = datetime.now(timezone.utc) + timedelta(days=30) if remember else None
     
     response.set_cookie(
@@ -259,7 +269,7 @@ async def get_user_preferences(
     session_id: Annotated[str | None, Cookie()] = None
 ) -> PreferencesResponse:
     """
-    Get all user preferences from cookies
+    获取所有用户偏好设置，从cookie中读取
     """
     preferences = {
         "theme": theme or "default",
@@ -285,8 +295,8 @@ async def simulate_login(
     remember: Annotated[bool, Query()] = False
 ) -> LoginResponse:
     """
-    Simulate a login by setting a session ID cookie
-    This is just for demonstration, in real applications you should use proper authentication
+    模拟登录过程，设置session ID cookie
+    注意：这只是演示用途，实际应用中应该使用proper authentication
     """
     session_id = str(uuid.uuid4())
     
@@ -297,7 +307,6 @@ async def simulate_login(
         "session_id": session_id
     }
     
-    # 使用 datetime.now(timezone.utc) 来创建纯 UTC 时间
     utc_now = datetime.now(timezone.utc)
     expires = utc_now + (
         timedelta(days=30) if remember else timedelta(hours=2)
@@ -310,29 +319,28 @@ async def simulate_login(
         expires=expires,
         httponly=True,
         samesite="lax",
-        secure=False,  # 开发环境设为False，生产环境应该设为True
+        secure=False,  # 开发环境使用False
         max_age=2592000 if remember else 7200,
-        domain="localhost",  # 添加domain
-        path="/"  # 添加path
+        domain="localhost",
+        path="/"
     )
     
-    return response  # 返回response而不是content
+    return response
 
 
 # 登出路由
 @router.post("/auth/logout")
 async def logout() -> JSONResponse:
     """
-    Logout by clearing the session cookie
+    退出登录，清除session cookie
     """
     response = JSONResponse(content={"message": "Logged out successfully"})
     
-    # 通过设置空值和过期时间为0来删除cookie
     response.delete_cookie(
         key="session_id",
         httponly=True,
         samesite="lax",
-        secure=False  # 开发环境设为False，生产环境应该设为True
+        secure=False
     )
     
     return response
@@ -344,7 +352,7 @@ async def check_session(
     session_id: Annotated[str | None, Cookie()] = None
 ) -> SessionResponse:
     """
-    Check if user has a valid session
+    检查用户会话状态
     """
     if not session_id:
         raise HTTPException(
@@ -352,13 +360,10 @@ async def check_session(
             detail="Not authenticated"
         )
     
-    # 在实际应用中，你应该在这里验证session_id的有效性
-    # 比如检查数据库中是否存在这个session_id，是否过期等
-    else:
-        return {
-            "message": "Session is valid",
-            "session_id": session_id
-        }
+    return {
+        "message": "Session is valid",
+        "session_id": session_id
+    }
 
 
 @router.post("/upload/", response_model=FileUploadResponse)
@@ -368,18 +373,18 @@ async def upload_file(
     tags: Annotated[str, Form(description="Comma separated tags")] = "",
 ) -> FileUploadResponse:
     """
-    Upload a file using multipart/form-data
+    使用multipart/form-data上传单个文件
     
-    This endpoint demonstrates how to use Form and File together:
-    - file: The actual file to upload
-    - description: Optional text description
-    - tags: Comma separated list of tags
+    参数说明：
+    - file: 要上传的文件
+    - description: 可选的文件描述
+    - tags: 逗号分隔的标签列表
     """
-    # 读取文件内容（这里只是为了获取大小）
+    # 读取文件内容以获取大小
     contents = await file.read()
     file_size = len(contents)
     
-    # 重置文件指针，以便后续可能的操作
+    # 重置文件指针，以便后续操作
     await file.seek(0)
     
     # 处理标签
@@ -391,4 +396,56 @@ async def upload_file(
         "file_size": file_size,
         "description": description,
         "tags": tag_list
+    }
+
+
+@router.post("/upload-files/", response_model=MultipleFilesResponse)
+async def upload_files(
+    files: Annotated[List[bytes], File(description="Multiple files as bytes")],
+    fileb: Annotated[bytes, File(description="Single file as bytes")],
+) -> MultipleFilesResponse:
+    """
+    使用bytes模式上传多个文件
+    
+    参数说明：
+    - files: 多个文件的列表，每个文件都会被完整加载到内存中
+    - fileb: 单个额外的文件
+    
+    注意：此方法仅适用于小文件，因为会将整个文件加载到内存中
+    """
+    return {
+        "file_sizes": [len(file) for file in files],
+        "fileb_size": len(fileb),
+        "message": f"Successfully uploaded {len(files) + 1} files",
+        "total_size": sum(len(file) for file in files) + len(fileb)
+    }
+
+
+@router.post("/upload-file-with-metadata/", response_model=FileWithMetadataResponse)
+async def upload_file_with_metadata(
+    file: Annotated[bytes, File()],
+    filename: Annotated[str, Form()],
+    content_type: Annotated[str, Form()] = "application/octet-stream",
+    description: Annotated[Optional[str], Form()] = None
+) -> FileWithMetadataResponse:
+    """
+    上传带元数据的单个文件
+    
+    参数说明：
+    - file: 文件内容（二进制）
+    - filename: 文件名
+    - content_type: 文件类型
+    - description: 可选的文件描述
+    
+    注意：此方法将整个文件加载到内存中，仅适用于小文件
+    """
+    file_content = file  # 在实际应用中，你可能想要保存到磁盘或进行处理
+    
+    return {
+        "filename": filename,
+        "content_type": content_type,
+        "description": description,
+        "file_size": len(file_content),
+        "first_bytes": file_content[:10].hex(),  # 显示前10个字节的十六进制表示
+        "message": "File successfully processed"
     } 
