@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Path, Query, Body, Cookie, Header, HTTPException, Depends, Form, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from typing import Annotated, List, Optional, Dict
 from datetime import datetime, timedelta
 import pytz  # 用于处理时区
@@ -26,7 +27,17 @@ from app.schemas.example import (
 
 router = APIRouter()
 
-@router.get("/items/{item_id}")
+@router.get("/items/{item_id}",
+    response_model=dict,
+    tags=["items"],
+    summary="获取商品详情",
+    description="获取指定ID商品的详细信息，包括HTTP头部信息",
+    responses={
+        200: {"description": "成功获取商品信息"},
+        404: {"description": "商品未找到"},
+        400: {"description": "无效的商品ID"}
+    }
+)
 async def get_item(
     # 路径参数：商品ID
     item_id: Annotated[int, Path(title="Item ID", ge=1)],
@@ -77,9 +88,19 @@ async def get_item(
     }
 
 
-@router.post("/items/", response_model=ItemResponse)
+@router.post("/items/", 
+    response_model=ItemResponse,
+    tags=["items"],
+    summary="创建新商品",
+    description="创建一个新的商品项目，需要在header中提供x-token",
+    status_code=201,
+    responses={
+        201: {"description": "商品创建成功"},
+        400: {"description": "无效的请求数据或缺少x-token"},
+        401: {"description": "无效的token"}
+    }
+)
 async def create_item(
-    # 使用Body和示例数据验证请求体
     item: Annotated[ItemCreate, Body(
         examples={
             "normal": {
@@ -104,16 +125,32 @@ async def create_item(
     if not x_token:
         raise HTTPException(status_code=400, detail="X-Token header is required")
     
+    # 使用jsonable_encoder转换item数据
+    item_data = jsonable_encoder(item)
+    
     # 模拟数据库响应
-    return {
-        **item.model_dump(),
+    created_item = {
+        **item_data,
         "id": 1,
         "created_at": datetime.now(),
         "updated_at": datetime.now()
     }
+    
+    # 再次使用jsonable_encoder处理包含datetime的响应数据
+    return jsonable_encoder(created_item)
 
 
-@router.post("/login/", response_model=LoginFormResponse)
+@router.post("/login/", 
+    response_model=LoginFormResponse,
+    tags=["auth"],
+    summary="用户登录",
+    description="处理用户登录请求，返回登录状态",
+    responses={
+        200: {"description": "登录成功"},
+        401: {"description": "登录失败，用户名或密码错误"},
+        422: {"description": "无效的请求数据格式"}
+    }
+)
 async def login(
     login_data: LoginRequest
 ) -> LoginFormResponse:
@@ -131,27 +168,62 @@ async def login(
     }
 
 
-@router.post("/users/profile")
+@router.post("/users/profile",
+    response_model=dict,
+    tags=["users"],
+    summary="创建用户资料",
+    description="创建用户资料，包含地址信息和优先级设置",
+    status_code=201,
+    responses={
+        201: {"description": "用户资料创建成功"},
+        400: {"description": "无效的请求数据或缺少API key"},
+        401: {"description": "无效的API key"}
+    }
+)
 async def create_profile(
     profile: UserProfile,
     address: Annotated[Address, Body()],
     priority: Annotated[int, Query(gt=0, le=5)] = 1,
     api_key: Annotated[str | None, Header()] = None
-) -> UserProfile:
+) -> JSONResponse:
     """
     创建用户资料，包含嵌套模型和多个参数
     """
     if not api_key:
         raise HTTPException(status_code=400, detail="API key is required")
     
-    return {
-        "profile": profile,
-        "address": address,
-        "priority": priority
+    # 使用jsonable_encoder处理嵌套的Pydantic模型
+    profile_data = jsonable_encoder(profile, exclude_unset=True)  # 排除未设置的字段
+    address_data = jsonable_encoder(address, exclude_none=True)   # 排除None值
+    
+    # 组合响应数据
+    response_data = {
+        "profile": profile_data,
+        "address": address_data,
+        "priority": priority,
+        "created_at": datetime.now()
     }
+    
+    # 使用自定义datetime格式
+    return JSONResponse(content=jsonable_encoder(
+        response_data,
+        custom_encoder={
+            datetime: lambda dt: dt.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    ))
 
 
-@router.get("/users/levels/{level}", response_model=UserLevelResponse)
+@router.get("/users/levels/{level}", 
+    response_model=UserLevelResponse,
+    tags=["users"],
+    summary="获取用户等级列表",
+    description="根据指定的用户等级获取用户列表，支持分页",
+    responses={
+        200: {"description": "成功获取用户列表"},
+        400: {"description": "无效的用户等级或分页参数"},
+        404: {"description": "指定等级没有用户"}
+    }
+)
 async def get_users_by_level(
     level: UserLevel,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
@@ -293,33 +365,52 @@ async def get_user_preferences(
 async def simulate_login(
     user_id: Annotated[int, Query(ge=1)],
     remember: Annotated[bool, Query()] = False
-) -> LoginResponse:
+) -> JSONResponse:
     """
     模拟登录过程，设置session ID cookie
     注意：这只是演示用途，实际应用中应该使用proper authentication
     """
     session_id = str(uuid.uuid4())
+    utc_now = datetime.now(timezone.utc)
     
-    print("session_id: ", session_id)
-    content = {
+    # 创建包含复杂类型的响应数据
+    response_data = {
         "message": "Login successful",
         "user_id": user_id,
-        "session_id": session_id
+        "session_id": session_id,
+        "login_time": utc_now,
+        "expires_at": utc_now + (timedelta(days=30) if remember else timedelta(hours=2)),
+        "metadata": {
+            "ip": "127.0.0.1",
+            "user_agent": "Mozilla/5.0",
+            "login_type": "simulation"
+        }
     }
     
-    utc_now = datetime.now(timezone.utc)
+    # 使用jsonable_encoder处理包含datetime的数据
+    json_compatible_data = jsonable_encoder(
+        response_data,
+        exclude_none=True,  # 排除None值
+        custom_encoder={
+            # 自定义datetime格式
+            datetime: lambda dt: dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+        }
+    )
+    
+    response = JSONResponse(content=json_compatible_data)
+    
+    # 设置cookie
     expires = utc_now + (
         timedelta(days=30) if remember else timedelta(hours=2)
     )
     
-    response = JSONResponse(content=content)
     response.set_cookie(
         key="session_id",
         value=session_id,
         expires=expires,
         httponly=True,
         samesite="lax",
-        secure=False,  # 开发环境使用False
+        secure=False,
         max_age=2592000 if remember else 7200,
         domain="localhost",
         path="/"
@@ -371,7 +462,7 @@ async def upload_file(
     file: Annotated[UploadFile, File(description="A file read as UploadFile")],
     description: Annotated[Optional[str], Form(description="File description")] = None,
     tags: Annotated[str, Form(description="Comma separated tags")] = "",
-) -> FileUploadResponse:
+) -> JSONResponse:
     """
     使用multipart/form-data上传单个文件
     
@@ -390,13 +481,33 @@ async def upload_file(
     # 处理标签
     tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
     
-    return {
+    # 创建文件信息对象
+    file_info = {
         "filename": file.filename,
         "content_type": file.content_type,
         "file_size": file_size,
         "description": description,
-        "tags": tag_list
+        "tags": tag_list,
+        "upload_time": datetime.now(),
+        "file_metadata": {
+            "headers": dict(file.headers),
+            "content_type": file.content_type,
+            "size": file_size,
+            "extension": file.filename.split(".")[-1] if "." in file.filename else None
+        }
     }
+    
+    # 使用jsonable_encoder处理包含文件信息的响应
+    json_compatible_data = jsonable_encoder(
+        file_info,
+        exclude_unset=True,
+        custom_encoder={
+            datetime: lambda dt: dt.strftime("%Y-%m-%d %H:%M:%S"),
+            bytes: lambda b: b.decode("utf-8", errors="ignore")
+        }
+    )
+    
+    return JSONResponse(content=json_compatible_data)
 
 
 @router.post("/upload-files/", response_model=MultipleFilesResponse)

@@ -5,7 +5,15 @@ from typing import Annotated, Dict, List
 router = APIRouter()
 
 # 基础Hello World端点
-@router.get("/")
+@router.get("/",
+    response_model=Dict[str, str],
+    tags=["hello"],
+    summary="基础Hello World",
+    description="返回一个简单的Hello World消息",
+    responses={
+        200: {"description": "成功返回问候消息"}
+    }
+)
 async def hello() -> Dict[str, str]:
     """
     基础的Hello World API
@@ -13,7 +21,15 @@ async def hello() -> Dict[str, str]:
     return {"message": "Hello, World From FastAPI", "status": "success"}
 
 # 另一个Hello World变体
-@router.get("/world")
+@router.get("/world",
+    response_model=Dict[str, str],
+    tags=["hello"],
+    summary="Hello World变体",
+    description="返回另一个版本的Hello World消息",
+    responses={
+        200: {"description": "成功返回问候消息"}
+    }
+)
 async def world() -> Dict[str, str]:
     """
     另一个Hello World API变体
@@ -32,7 +48,17 @@ class CategoryEnum(str, Enum):
     CLOTHING = "clothing"      # 服装
 
 # 产品搜索端点
-@router.get("/products")
+@router.get("/products",
+    response_model=Dict,
+    tags=["products"],
+    summary="获取产品列表",
+    description="根据搜索条件获取产品列表，支持分页和类别筛选",
+    responses={
+        200: {"description": "成功获取产品列表"},
+        400: {"description": "无效的查询参数"},
+        404: {"description": "未找到匹配的产品"}
+    }
+)
 async def get_products(
     search: SearchQuery,  # 使用预定义的SearchQuery类型
     page: Annotated[int, Query(ge=1, description="页码")] = 1,
@@ -53,7 +79,16 @@ async def get_products(
     }
 
 # 用户搜索端点
-@router.get("/users")
+@router.get("/users",
+    response_model=Dict,
+    tags=["users"],
+    summary="获取用户列表",
+    description="获取用户列表，支持按名称和年龄筛选，以及自定义排序",
+    responses={
+        200: {"description": "成功获取用户列表"},
+        400: {"description": "无效的查询参数"}
+    }
+)
 async def get_users(
     # 多个查询参数示例
     name: Annotated[str | None, Query(min_length=2, description="用户名")] = None,
@@ -75,7 +110,17 @@ async def get_users(
     }
 
 # 通用搜索端点
-@router.get("/search")
+@router.get("/search",
+    response_model=Dict,
+    tags=["search"],
+    summary="通用搜索接口",
+    description="提供通用搜索功能，支持分页、排序和过滤条件",
+    responses={
+        200: {"description": "搜索成功"},
+        400: {"description": "无效的搜索参数"},
+        422: {"description": "无效的过滤条件格式"}
+    }
+)
 async def search(
     q: SearchQuery,  # 重用预定义的SearchQuery类型
     page_size: PageSize = 10,  # 重用预定义的PageSize类型
@@ -102,7 +147,17 @@ async def search(
     }
 
 # 订单查询端点
-@router.get("/orders")
+@router.get("/orders",
+    response_model=Dict,
+    tags=["orders"],
+    summary="获取订单列表",
+    description="获取订单列表，支持日期范围和状态筛选",
+    responses={
+        200: {"description": "成功获取订单列表"},
+        400: {"description": "无效的日期格式或状态值"},
+        404: {"description": "未找到匹配的订单"}
+    }
+)
 async def get_orders(
     start_date: Annotated[
         str | None, 
