@@ -1,6 +1,8 @@
 from fastapi import APIRouter
-from .v1.router import api_router as v1_router
+from app.api.v1.router import router as api_v1_router
 
-# 创建主路由并注册 v1 版本的路由
+# Create top-level router
 router = APIRouter()
-router.include_router(v1_router)  # 如果不需要版本控制，不加 prefix
+
+# Include versioned routers
+router.include_router(api_v1_router, prefix="/v1")

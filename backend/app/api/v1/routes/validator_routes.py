@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Path, Query, Body, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Path, Query, Body, status
 from fastapi.responses import JSONResponse
-from typing import Annotated, List, Optional, Dict
-from datetime import date
+from typing import Annotated, List
 import uuid
 
-from app.schemas.validators import (
+from app.schemas import (
     AdvancedProduct,
     PaymentInfo,
     AdvancedUser,
@@ -12,11 +11,10 @@ from app.schemas.validators import (
     ProductCategory
 )
 
-router = APIRouter()
-
+router = APIRouter(prefix="/validators", tags=["validators"])
 
 @router.post(
-    "/products/",
+    "/products",
     response_model=AdvancedProduct,
     status_code=status.HTTP_201_CREATED,
     openapi_extra={
@@ -49,68 +47,27 @@ router = APIRouter()
         }
     }
 )
-async def create_product(
-    product: Annotated[AdvancedProduct, Body()]
-):
-    """
-    创建新产品（高级验证示例）
-
-    此端点演示了多种验证方式：
-    - UUID格式验证
-    - 字符串模式验证
-    - 数值范围验证
-    - 枚举类型验证
-    - URL、IP地址、JSON等特殊类型验证
-    """
+async def create_product(product: AdvancedProduct):
+    """创建新产品（高级验证示例）"""
     return product
 
-
 @router.post("/payments/validate", status_code=status.HTTP_202_ACCEPTED)
-async def validate_payment(
-    payment: Annotated[PaymentInfo, Body(
-        examples={
-            "normal": {
-                "summary": "Valid payment info",
-                "value": {
-                    "card_number": "4532756279624064",
-                    "expiry_date": "2025-12-31",
-                    "cvv": "123",
-                    "amount": 99.99
-                }
-            }
-        }
-    )]
-):
-    """
-    验证支付信息
-    
-    参数说明：
-    - payment: 支付信息，包含卡号、过期日期、CVV和金额
-    """
+async def validate_payment(payment: PaymentInfo):
+    """验证支付信息"""
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={"status": "valid", "payment": payment.model_dump()}
     )
 
-
 @router.post("/users/advanced", status_code=status.HTTP_201_CREATED)
 async def create_advanced_user(
     user: AdvancedUser,
-    referral_code: Annotated[Optional[str], Query(
+    referral_code: Annotated[str | None, Query(
         pattern="^[A-Z]{3}[0-9]{3}$",
         description="推荐码格式：ABC123"
     )] = None
 ):
-    """
-    创建高级用户（带复杂验证）
-    
-    参数说明：
-    - user: 用户信息，包含复杂的嵌套对象
-    - referral_code: 推荐码，格式为3个大写字母+3个数字
-    
-    异常：
-    - 400: 缺少推荐码
-    """
+    """创建高级用户（带复杂验证）"""
     if not referral_code:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -122,41 +79,13 @@ async def create_advanced_user(
         "referral_code": referral_code
     }
 
-
-@router.put("/users/{user_id}/address/{address_type}", responses={
-    status.HTTP_200_OK: {
-        "description": "地址更新成功",
-        "content": {
-            "application/json": {
-                "example": {"status": "success", "message": "Address updated"}
-            }
-        }
-    },
-    status.HTTP_404_NOT_FOUND: {
-        "description": "用户未找到",
-        "content": {
-            "application/json": {
-                "example": {"detail": "User not found"}
-            }
-        }
-    }
-})
+@router.put("/users/{user_id}/address/{address_type}")
 async def update_user_address(
     user_id: uuid.UUID,
     address_type: Annotated[str, Path(pattern="^(home|work|other)$")],
     address: ComplexAddress
 ):
-    """
-    更新用户地址信息
-    
-    参数说明：
-    - user_id: 用户UUID
-    - address_type: 地址类型（home/work/other）
-    - address: 详细地址信息，包含坐标验证
-    
-    异常：
-    - 404: 用户不存在
-    """
+    """更新用户地址信息"""
     if str(user_id) == "00000000-0000-0000-0000-000000000000":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -168,7 +97,6 @@ async def update_user_address(
         "address": address
     }
 
-
 @router.get("/products/by-category/{category}")
 async def get_products_by_category(
     category: ProductCategory,
@@ -176,18 +104,7 @@ async def get_products_by_category(
     max_price: Annotated[float, Query(gt=0)] = 1000000.0,
     tags: Annotated[List[str], Query(min_length=1, max_length=5)] = []
 ):
-    """
-    按类别获取产品列表
-    
-    参数说明：
-    - category: 产品类别（electronics/clothing/books）
-    - min_price: 最低价格，必须大于0
-    - max_price: 最高价格，必须大于0
-    - tags: 标签列表，1-5个标签
-    
-    异常：
-    - 400: 价格范围无效
-    """
+    """按类别获取产品列表"""
     if min_price >= max_price:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,

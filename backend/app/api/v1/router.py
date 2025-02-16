@@ -1,32 +1,22 @@
 from fastapi import APIRouter
-from .endpoints import hello, users, example, validators
-
-api_router = APIRouter()
-
-# 注册路由并添加更多信息
-api_router.include_router(
-    hello.router,
-    prefix="/hello",  # 添加前缀使路由更有层次
-    tags=["hello"],
-    responses={404: {"description": "Not found"}}
+from app.api.v1.routes import (
+    user_routes,
+    product_routes,
+    auth_routes,
+    file_routes,
+    basic_routes,
+    validator_routes,
+    dependency_demo_routes
 )
 
-api_router.include_router(
-    users.router,
-    tags=["users"],
-    responses={404: {"description": "Not found"}}
-)
+# 创建主路由
+router = APIRouter()
 
-api_router.include_router(
-    example.router,
-    prefix="/examples",
-    tags=["examples"],
-    responses={404: {"description": "Not found"}}
-)
-
-api_router.include_router(
-    validators.router,
-    prefix="/validators",
-    tags=["validators"],
-    responses={404: {"description": "Not found"}}
-)
+# 包含所有子路由
+router.include_router(user_routes.router)
+router.include_router(product_routes.router)
+router.include_router(auth_routes.router)
+router.include_router(file_routes.router)
+router.include_router(basic_routes.router)
+router.include_router(validator_routes.router)
+router.include_router(dependency_demo_routes.router)
