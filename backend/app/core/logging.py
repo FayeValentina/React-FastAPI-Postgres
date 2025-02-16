@@ -45,14 +45,13 @@ def setup_logging(
         "uvicorn",
         "uvicorn.error",
         "fastapi",
-        "sqlalchemy.engine",
-        "app.middleware.timing",  # 添加 timing 中间件的日志
+        "sqlalchemy.engine"
     ]
     for logger_name in loggers:
         logging_logger = logging.getLogger(logger_name)
         logging_logger.handlers = [InterceptHandler()]
 
-    # 准备日志处理器配置
+    # 配置 loguru
     handlers = [
         {
             "sink": sys.stdout,
@@ -62,6 +61,13 @@ def setup_logging(
                      "<level>{level: <8}</level> | "
                      "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
                      "{message}",
+            "filter": lambda record: record["name"] != "app.middleware.timing"  # 排除 timing 中间件的日志
+        },
+        {
+            "sink": sys.stdout,
+            "level": "INFO",
+            "format": "\n{message}",  # timing 中间件使用简化格式
+            "filter": lambda record: record["name"] == "app.middleware.timing"
         }
     ]
 
@@ -80,14 +86,5 @@ def setup_logging(
 
     # 配置 loguru
     logger.configure(handlers=handlers)
-
-    # 添加一个特殊的格式化处理器用于 timing 中间件
-    timing_handler = {
-        "sink": sys.stdout,
-        "level": "INFO",
-        "format": "\n{message}",  # 简化格式，因为 timing 中间件有自己的格式
-        "filter": lambda record: record["name"] == "app.middleware.timing"
-    }
-    logger.add(**timing_handler)
 
     logger.info("Logging system initialized") 
