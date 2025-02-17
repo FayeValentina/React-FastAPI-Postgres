@@ -1,12 +1,11 @@
 from typing import AsyncGenerator
-import logging
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker # type: ignore
 
 from app.core.config import settings
-
+from app.db.base_class import Base
 # Import all models here for Alembic
-
-logger = logging.getLogger(__name__)
+from app.models.user import User
+from app.models.post import Post
 
 # 创建异步数据库引擎
 engine = create_async_engine(
@@ -37,4 +36,5 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
-# Import all the models, so that Base has them before being imported by Alembic
+# Re-export Base and all models for Alembic
+__all__ = ["Base", "User", "Post"]
