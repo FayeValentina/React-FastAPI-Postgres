@@ -3,22 +3,18 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker # type: ignore
 
 from app.core.config import settings
-from app.db.base_class import Base
+
+# Import all models here for Alembic
 
 logger = logging.getLogger(__name__)
 
 # 创建异步数据库引擎
-try:
-    engine = create_async_engine(
-        str(settings.SQLALCHEMY_DATABASE_URI).replace("postgresql://", "postgresql+asyncpg://"),
-        echo=True,  # 启用SQL语句日志
-        future=True,
-        pool_pre_ping=True,  # 添加连接池健康检查
-    )
-    logger.info("Database engine created successfully")
-except Exception as e:
-    logger.error(f"Error creating database engine: {str(e)}")
-    raise
+engine = create_async_engine(
+    settings.postgres.SQLALCHEMY_DATABASE_URL,
+    echo=settings.DB_ECHO_LOG,
+    future=True,
+    pool_pre_ping=True,
+)
 
 # 创建异步会话工厂
 AsyncSessionLocal = async_sessionmaker(
@@ -41,6 +37,4 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
-# Import all models here for Alembic
-from app.models.user import User  # noqa
-from app.models.post import Post  # noqa
+# Import all the models, so that Base has them before being imported by Alembic

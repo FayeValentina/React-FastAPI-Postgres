@@ -5,16 +5,16 @@ from datetime import datetime
 # 登录请求模型
 class LoginRequest(BaseModel):
     """登录请求模型"""
-    username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=6)
-    remember_me: bool = False
+    username: str = Field(..., description="用户名或邮箱")
+    password: str = Field(..., min_length=6, description="密码")
+    remember_me: bool = Field(default=False, description="记住我")
 
 # 登录表单响应模型
 class LoginFormResponse(BaseModel):
     """登录表单响应模型"""
     username: str
     remember_me: bool
-    message: str = "Login successful"
+    message: str
 
     model_config = {"from_attributes": True}
 
@@ -24,6 +24,9 @@ class LoginResponse(BaseModel):
     message: str
     user_id: int
     session_id: str
+    login_time: str
+    expires_at: str
+    metadata: dict
 
 # 会话响应模型
 class SessionResponse(BaseModel):

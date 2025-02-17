@@ -12,22 +12,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 添加项目根目录到 Python 路径
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(current_dir)
 
 # 导入你的 SQLAlchemy 模型
 from app.db.base import Base
 from app.models import User
+from app.core.config import settings
 
 # this is the Alembic Config object
 config = context.config
 
-# 从环境变量获取数据库连接信息
-section = config.config_ini_section
-config.set_section_option(section, "POSTGRES_USER", os.getenv("POSTGRES_USER"))
-config.set_section_option(section, "POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD"))
-config.set_section_option(section, "POSTGRES_HOST", os.getenv("POSTGRES_HOST"))
-config.set_section_option(section, "POSTGRES_PORT", "5432")
-config.set_section_option(section, "POSTGRES_DB", os.getenv("POSTGRES_DB"))
+# 设置数据库 URL（使用 psycopg2 替代 asyncpg 用于同步迁移）
+db_url = settings.postgres.SQLALCHEMY_DATABASE_URL.replace("+asyncpg", "+psycopg2")
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
@@ -41,7 +39,7 @@ def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
-        target_metadata=target_metadata,  # 使用正确的 metadata
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -53,7 +51,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        config.get_section(config.config_ini_section),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
@@ -61,7 +59,7 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata  # 使用正确的 metadata
+            target_metadata=target_metadata
         )
 
         with context.begin_transaction():

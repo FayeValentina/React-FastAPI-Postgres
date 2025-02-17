@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Path, Query, Body, status
+from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import JSONResponse
 from typing import Annotated, List
 import uuid

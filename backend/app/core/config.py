@@ -1,54 +1,146 @@
-from typing import Any, Dict, Optional, List
-from pydantic import PostgresDsn, validator # type: ignore
-from pydantic_settings import BaseSettings # type: ignore
+from typing import Any, List, Optional, Union
+from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class PostgresSettings(BaseSettings):
+    """PostgreSQL 数据库配置"""
+    HOST: str
+    USER: str
+    PASSWORD: str
+    DB: str
+    PORT: str = "5432"
+    DATABASE_URL: Optional[PostgresDsn] = None
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_db_connection(cls, v: Optional[str], info: Any) -> Any:
+        if isinstance(v, str):
+            return v
+        
+        fields = info.data
+        if not all(fields.get(key) for key in ["USER", "PASSWORD", "HOST", "DB"]):
+            raise ValueError("Database configuration is incomplete. Please check your environment variables.")
+            
+        return PostgresDsn.build(
+            scheme="postgresql+asyncpg",
+            username=fields.get("USER"),
+            password=fields.get("PASSWORD"),
+            host=fields.get("HOST"),
+            port=int(fields.get("PORT", "5432")),
+            path=fields.get("DB", "")
+        )
+
+    @property
+    def SQLALCHEMY_DATABASE_URL(self) -> str:
+        """获取 SQLAlchemy 数据库 URI"""
+        if not self.DATABASE_URL:
+            raise ValueError("Database URI is not set")
+        return str(self.DATABASE_URL)
+
+    model_config = SettingsConfigDict(
+        env_prefix="POSTGRES_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class PgAdminSettings(BaseSettings):
+    """PgAdmin 配置"""
+    PORT: int = 5050
+    DEFAULT_EMAIL: EmailStr
+    DEFAULT_PASSWORD: str
+    CONFIG_SERVER_MODE: bool = False
+    CONFIG_ENHANCED_COOKIE_PROTECTION: bool = False
+    CONFIG_WTF_CSRF_ENABLED: bool = False
+    CONFIG_WTF_CSRF_HEADERS: List[str] = ["Referer", "Origin"]
+
+    model_config = SettingsConfigDict(
+        env_prefix="PGADMIN_",
+        env_nested_delimiter="__",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
+class SecuritySettings(BaseSettings):
+    """安全相关配置"""
+    SECRET_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ALGORITHM: str = "HS256"
+
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
+class EmailSettings(BaseSettings):
+    """邮件配置"""
+    SMTP_TLS: bool = True
+    SMTP_PORT: Optional[int] = None
+    SMTP_HOST: Optional[str] = None
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    FROM_EMAIL: Optional[EmailStr] = None
+    FROM_NAME: Optional[str] = None
+
+    model_config = SettingsConfigDict(
+        env_prefix="EMAIL_",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
+class CORSSettings(BaseSettings):
+    """CORS 配置"""
+    ORIGINS: List[AnyHttpUrl] = []
+
+    @field_validator("ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
+
+    model_config = SettingsConfigDict(
+        env_prefix="BACKEND_CORS_",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
 
 
 class Settings(BaseSettings):
+    """主配置类"""
+    # 基本配置
     PROJECT_NAME: str = "FastAPI Backend"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
-    ENVIRONMENT: str
+    ENVIRONMENT: str = "development"
     
-    # CORS配置
-    FRONTEND_URL: str  # 从环境变量读取前端URL
-    BACKEND_CORS_ORIGINS: List[str] = []
-
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: str | List[str], values: Dict[str, Any]) -> List[str]:
-        if isinstance(v, str):
-            return [i.strip() for i in v.split(",")]
-        return v if v is not None else []
+    # 服务配置
+    FRONTEND_URL: str = "http://localhost:3000"
+    BACKEND_PORT: int = 8000
     
-    # PostgreSQL配置
-    POSTGRES_HOST: str
-    POSTGRES_PORT: int
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
-    SQLALCHEMY_DATABASE_URI: Optional[str] = None
+    # 子配置
+    postgres: PostgresSettings = PostgresSettings()
+    pgadmin: PgAdminSettings = PgAdminSettings()
+    security: SecuritySettings = SecuritySettings()
+    email: EmailSettings = EmailSettings()
+    cors: CORSSettings = CORSSettings()
 
-    @validator("SQLALCHEMY_DATABASE_URI", pre=True)
-    def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
-        if isinstance(v, str):
-            return v
-        return f"postgresql://{values.get('POSTGRES_USER')}:{values.get('POSTGRES_PASSWORD')}@{values.get('POSTGRES_HOST')}:5432/{values.get('POSTGRES_DB')}"
+    # 数据库日志
+    DB_ECHO_LOG: bool = True
 
-    # JWT配置
-    SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
-    
-    # 服务器配置
-    BACKEND_PORT: int
-    
-    # PgAdmin配置
-    PGADMIN_EMAIL: str
-    PGADMIN_PASSWORD: str
-    PGADMIN_PORT: int
-
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
 
 
 settings = Settings() 

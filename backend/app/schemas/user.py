@@ -8,17 +8,29 @@ from .common import ComplexAddress
 # 用户基础模型
 class UserBase(BaseModel):
     """用户基础信息"""
-    email: EmailStr           # 电子邮件地址，会自动验证格式
-    username: str            # 用户名
-    full_name: Optional[str] = None  # 全名，可选字段
-    is_active: bool = True    # 用户是否激活，默认为True
-    is_superuser: bool = False  # 是否为超级用户，默认为False
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = True
+    is_superuser: bool = False
+    full_name: Optional[str] = None
+    username: Optional[str] = None
 
 
 # 用户创建模型
 class UserCreate(UserBase):
     """创建用户时的模型"""
-    password: str  # 用户密码，创建时必需
+    email: EmailStr
+    password: str
+    username: str = Field(..., min_length=3, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
+
+
+# 用户更新模型
+class UserUpdate(BaseModel):
+    """更新用户时的模型"""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_superuser: Optional[bool] = None
 
 
 # 用户更新基础模型
@@ -137,4 +149,19 @@ class AdvancedUser(BaseModel):
                 "interests": ["coding", "reading"]
             }
         }
-    } 
+    }
+
+
+class UserInDBBase(UserBase):
+    id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class User(UserInDBBase):
+    pass
+
+
+class UserInDB(UserInDBBase):
+    hashed_password: str 

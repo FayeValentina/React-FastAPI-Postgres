@@ -1,10 +1,8 @@
 from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from typing import Annotated, Dict, List, Optional
+from typing import Annotated, Dict, Optional
 from datetime import datetime
-from pydantic import BaseModel
-
 from app.schemas import ItemCreate, ItemResponse, ProductUpdateFull, ProductUpdatePartial
 
 router = APIRouter(prefix="/products", tags=["products"])
