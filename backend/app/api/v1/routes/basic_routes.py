@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Query
 from typing import Annotated, Dict, List
-from enum import Enum
 
 router = APIRouter(tags=["basic"])
 
@@ -9,11 +8,6 @@ SearchQuery = Annotated[str, Query(min_length=3, max_length=50, description="搜
 PageSize = Annotated[int, Query(ge=1, le=100, description="每页显示数量")]
 SortOrder = Annotated[str, Query(pattern="^(asc|desc)$", description="排序方向")]
 
-# 定义产品类别枚举
-class CategoryEnum(str, Enum):
-    ELECTRONICS = "electronics"  # 电子产品
-    BOOKS = "books"            # 图书
-    CLOTHING = "clothing"      # 服装
 
 @router.get("/hello", response_model=Dict[str, str])
 async def hello() -> Dict[str, str]:
