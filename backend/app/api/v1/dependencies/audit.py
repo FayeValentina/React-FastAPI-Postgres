@@ -47,16 +47,23 @@ class AuditContext:
         print(f"[执行时间] {execution_time}秒")
         return execution_time
 
-# 全局审计上下文
-_audit_context: Optional[AuditContext] = None
 
-def get_audit_context() -> AuditContext:
-    """获取或创建审计上下文"""
-    global _audit_context
-    if _audit_context is None:
+def get_audit_context(request: Request) -> AuditContext:
+    """
+    获取或创建请求级别的审计上下文
+    
+    Args:
+        request: FastAPI 请求对象
+        
+    Returns:
+        AuditContext: 当前请求的审计上下文
+    """
+    # 使用请求状态存储上下文
+    context_key = "audit_context"
+    if context_key not in request.state.__dict__:
         print("\n1️⃣ 创建审计上下文")
-        _audit_context = AuditContext()
-    return _audit_context
+        request.state.__dict__[context_key] = AuditContext()
+    return request.state.__dict__[context_key]
 
 async def app_level_dependency(
     request: Request,

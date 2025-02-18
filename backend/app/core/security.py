@@ -7,8 +7,6 @@ from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-ALGORITHM = "HS256"
-
 
 def create_access_token(subject: str | Any, expires_delta: timedelta | None = None) -> str:
     """
@@ -42,7 +40,7 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
         encoded_jwt = jwt.encode(
             to_encode,
             settings.security.SECRET_KEY,
-            algorithm=ALGORITHM
+            algorithm=settings.security.ALGORITHM
         )
         return encoded_jwt
     except Exception as e:
@@ -63,7 +61,7 @@ def verify_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
         payload = jwt.decode(
             token,
             settings.security.SECRET_KEY,
-            algorithms=[ALGORITHM]
+            algorithms=[settings.security.ALGORITHM]
         )
         return True, payload
     except JWTError:
