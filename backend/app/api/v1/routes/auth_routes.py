@@ -1,17 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query, Cookie, status, Depends
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
-from typing import Annotated
-from datetime import datetime, timedelta
-import uuid
-from datetime import timezone
+from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
+from typing import Annotated
+from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas import (
     LoginRequest,
-    LoginResponse,
-    SessionResponse,
     UserCreate
 )
 from app.core.config import settings
@@ -20,87 +14,10 @@ from app.crud.user import user as crud_user
 from app.db.base import get_async_session
 from app.schemas.token import Token
 from app.schemas.user import User
+from app.api.v1.dependencies.current_user import get_current_active_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
-@router.post("/login-simulation", response_model=LoginResponse)
-async def simulate_login(
-    user_id: Annotated[int, Query(ge=1)],
-    remember: Annotated[bool, Query()] = False
-) -> JSONResponse:
-    """模拟登录过程"""
-    session_id = str(uuid.uuid4())
-    utc_now = datetime.now(timezone.utc)
-    
-    response_data = {
-        "message": "Login successful",
-        "user_id": user_id,
-        "session_id": session_id,
-        "login_time": utc_now,
-        "expires_at": utc_now + (timedelta(days=30) if remember else timedelta(hours=2)),
-        "metadata": {
-            "ip": "127.0.0.1",
-            "user_agent": "Mozilla/5.0",
-            "login_type": "simulation"
-        }
-    }
-    
-    json_compatible_data = jsonable_encoder(
-        response_data,
-        exclude_none=True,
-        custom_encoder={
-            datetime: lambda dt: dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-        }
-    )
-    
-    response = JSONResponse(content=json_compatible_data)
-    
-    expires = utc_now + (
-        timedelta(days=30) if remember else timedelta(hours=2)
-    )
-    
-    response.set_cookie(
-        key="session_id",
-        value=session_id,
-        expires=expires,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        max_age=2592000 if remember else 7200,
-        domain="localhost",
-        path="/"
-    )
-    
-    return response
-
-@router.post("/logout")
-async def logout() -> JSONResponse:
-    """退出登录"""
-    response = JSONResponse(content={"message": "Logged out successfully"})
-    response.delete_cookie(
-        key="session_id",
-        httponly=True,
-        samesite="lax",
-        secure=False
-    )
-    return response
-
-@router.get("/session", response_model=SessionResponse)
-async def check_session(
-    session_id: Annotated[str | None, Cookie()] = None
-) -> SessionResponse:
-    """检查会话状态"""
-    if not session_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
-        )
-    
-    return {
-        "message": "Session is valid",
-        "session_id": session_id
-    }
 
 @router.post("/login/token", response_model=Token)
 async def login_for_access_token(
@@ -133,6 +50,7 @@ async def login_for_access_token(
     
     return Token(access_token=access_token, token_type="bearer")
 
+
 @router.post("/login", response_model=Token)
 async def login_json(
     login_data: LoginRequest,
@@ -143,7 +61,7 @@ async def login_json(
     
     - **username**: 用户名或邮箱
     - **password**: 密码
-    - **remember_me**: 是否记住登录状态
+    - **remember_me**: 是否记住登录状态（如果为True，则延长令牌有效期）
     """
     # 先尝试通过用户名查找
     user = await crud_user.get_by_username(db, username=login_data.username)
@@ -158,12 +76,18 @@ async def login_json(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=settings.security.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # 根据remember_me决定令牌过期时间
+    if login_data.remember_me:
+        access_token_expires = timedelta(days=7)  # 记住登录状态延长到7天
+    else:
+        access_token_expires = timedelta(minutes=settings.security.ACCESS_TOKEN_EXPIRE_MINUTES)
+        
     access_token = create_access_token(
         subject=user.email, expires_delta=access_token_expires
     )
     
     return Token(access_token=access_token, token_type="bearer")
+
 
 @router.post("/register", response_model=User)
 async def register(
@@ -196,4 +120,16 @@ async def register(
     
     # 创建新用户
     user = await crud_user.create(db, obj_in=user_in)
-    return user 
+    return user
+
+
+@router.get("/me", response_model=User)
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_active_user)]
+) -> User:
+    """
+    获取当前登录用户信息
+    
+    此端点需要用户已通过JWT认证
+    """
+    return current_user 
