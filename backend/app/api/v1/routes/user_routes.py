@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_, desc, asc
 
 from app.schemas.user import (
     UserCreate, UserResponse, UserUpdateFull, UserUpdatePartial
@@ -91,19 +91,73 @@ async def update_user_partial(
 async def get_users(
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),  # 只有已认证用户可以查看用户列表
-    name: Annotated[str | None, Query(min_length=2, description="用户名")] = None,
+    name: Annotated[str | None, Query(min_length=2, description="用户名或全名")] = None,
+    email: Annotated[str | None, Query(description="邮箱地址")] = None,
     age: Annotated[int | None, Query(ge=0, le=150, description="年龄")] = None,
-    sort_by: Annotated[List[str], Query(description="排序字段")] = ["created_at"]
+    is_active: Annotated[bool | None, Query(description="是否激活")] = None,
+    sort_by: Annotated[List[str], Query(description="排序字段，前缀'-'表示降序")] = ["created_at"]
 ) -> List[UserResponse]:
     """
     获取用户列表
     
-    需要认证权限
+    需要认证权限。
+    
+    支持过滤条件：
+    - name: 用户名或全名（模糊匹配）
+    - email: 邮箱地址（模糊匹配）
+    - age: 精确年龄匹配
+    - is_active: 是否激活
+    
+    支持排序：
+    - 默认按创建时间排序
+    - 在字段名前加'-'表示降序排序，例如：-created_at
+    - 支持多字段排序
     """
-    # TODO: 实现用户列表查询功能，包括过滤和排序
-    # 目前简单返回所有用户
-    result = await db.execute(select(User))
-    return result.scalars().all()
+    # 构建查询
+    query = select(User)
+    
+    # 应用过滤条件
+    filters = []
+    if name:
+        filters.append(or_(
+            User.username.ilike(f"%{name}%"),
+            User.full_name.ilike(f"%{name}%")
+        ))
+    
+    if email:
+        filters.append(User.email.ilike(f"%{email}%"))
+    
+    if age is not None:
+        filters.append(User.age == age)
+    
+    if is_active is not None:
+        filters.append(User.is_active == is_active)
+    else:
+        # 非超级用户默认只能看到已激活用户
+        if not current_user.is_superuser:
+            filters.append(User.is_active == True)
+    
+    if filters:
+        query = query.where(and_(*filters))
+    
+    # 应用排序
+    for sort_field in sort_by:
+        # 检查是否是降序排序（字段名前有'-'符号）
+        if sort_field.startswith('-'):
+            field_name = sort_field[1:]
+            # 确保字段存在于User模型中
+            if hasattr(User, field_name):
+                query = query.order_by(desc(getattr(User, field_name)))
+        else:
+            # 确保字段存在于User模型中
+            if hasattr(User, sort_field):
+                query = query.order_by(asc(getattr(User, sort_field)))
+    
+    # 执行查询
+    result = await db.execute(query)
+    users = result.scalars().all()
+    
+    return users
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
@@ -155,4 +209,4 @@ async def delete_user(
             
         return await user.delete(db, id=user_id)
     except Exception as e:
-        raise handle_api_error(e) 
+        raise handle_error(e) 

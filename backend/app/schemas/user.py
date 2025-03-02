@@ -13,6 +13,7 @@ class UserBase(BaseModel):
     is_superuser: bool = False
     full_name: Optional[str] = None
     username: Optional[str] = None
+    age: Optional[int] = Field(None, ge=0, le=150)
 
 
 # 用户创建模型
@@ -21,6 +22,7 @@ class UserCreate(UserBase):
     email: EmailStr
     password: str
     username: str = Field(..., min_length=3, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
+    age: Optional[int] = Field(None, ge=0, le=150)
 
 
 # 用户更新模型

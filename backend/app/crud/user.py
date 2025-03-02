@@ -70,6 +70,7 @@ class CRUDUser:
                 username=obj_in.username,
                 hashed_password=get_password_hash(obj_in.password),
                 full_name=obj_in.full_name,
+                age=obj_in.age if hasattr(obj_in, "age") else None,
                 is_active=True,
                 is_superuser=obj_in.is_superuser,
             )
