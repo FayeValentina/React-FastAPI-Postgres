@@ -1,7 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from typing import Optional
+from typing import Optional, Dict, Any
+import re
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
@@ -10,7 +11,8 @@ from app.core.exceptions import (
     EmailAlreadyRegisteredError, 
     UsernameTakenError,
     DatabaseError,
-    ResourceNotFoundError
+    ResourceNotFoundError,
+    ValidationError
 )
 
 
@@ -81,6 +83,42 @@ class CRUDUser:
         except IntegrityError:
             await db.rollback()
             raise DatabaseError(detail=ERROR_CREATE_USER)
+            
+    async def create_with_validation(self, db: AsyncSession, obj_in: UserCreate) -> User:
+        """
+        创建新用户，附带完整的输入验证
+        
+        参数:
+            db: 数据库会话
+            obj_in: 用户创建数据
+            
+        返回:
+            创建的用户对象
+            
+        抛出:
+            ValidationError: 如果输入数据验证失败
+            EmailAlreadyRegisteredError: 如果邮箱已存在
+            UsernameTakenError: 如果用户名已存在
+            DatabaseError: 如果数据库操作失败
+        """
+        # 验证用户名格式 (3-50个字符，只能包含字母、数字、下划线和连字符)
+        if not re.match(r'^[a-zA-Z0-9_-]{3,50}$', obj_in.username):
+            raise ValidationError(detail="用户名必须为3-50个字符，只能包含字母、数字、下划线和连字符")
+        
+        # 验证邮箱格式
+        if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', obj_in.email):
+            raise ValidationError(detail="邮箱格式无效")
+        
+        # 验证密码强度 (至少8个字符)
+        if len(obj_in.password) < 8:
+            raise ValidationError(detail="密码长度必须至少为8个字符")
+        
+        # 验证年龄范围 (如果提供)
+        if obj_in.age is not None and (obj_in.age < 0 or obj_in.age > 150):
+            raise ValidationError(detail="年龄必须在0-150之间")
+            
+        # 使用基础创建方法完成用户创建
+        return await self.create(db, obj_in=obj_in)
 
     async def update(self, db: AsyncSession, db_obj: User, obj_in: UserUpdate) -> User:
         """更新用户信息"""

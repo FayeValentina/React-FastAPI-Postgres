@@ -68,6 +68,7 @@ class SecuritySettings(BaseSettings):
     """安全相关配置"""
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
 
     model_config = SettingsConfigDict(

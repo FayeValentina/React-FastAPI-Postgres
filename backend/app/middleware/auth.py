@@ -56,11 +56,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     headers={"WWW-Authenticate": "Bearer"}
                 )
                 
-            is_valid, payload = verify_token(token)
-            if not is_valid or not payload:
+            is_valid, payload, error_type = verify_token(token)
+            if not is_valid:
+                # 根据错误类型返回不同的错误消息
+                if error_type == "expired":
+                    return JSONResponse(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        content={"detail": "认证凭据已过期"},
+                        headers={"WWW-Authenticate": "Bearer"}
+                    )
+                else:
+                    return JSONResponse(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        content={"detail": "无效的认证凭据"},
+                        headers={"WWW-Authenticate": "Bearer"}
+                    )
+                
+            # 检查令牌类型，只接受访问令牌用于API访问
+            if payload.get("type") != "access_token":
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "无效的认证凭据"},
+                    content={"detail": "令牌类型无效，API访问需要使用访问令牌"},
                     headers={"WWW-Authenticate": "Bearer"}
                 )
                 

@@ -131,4 +131,18 @@ class ValidationError(ApiError):
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail
+        )
+
+
+class InvalidRefreshTokenError(ApiError):
+    """
+    无效的刷新令牌错误
+    
+    当提供的刷新令牌无效、已过期或已被吊销时抛出
+    """
+    def __init__(self, detail: str = "无效的刷新令牌"):
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail=detail,
+            headers={"WWW-Authenticate": "Bearer"}
         ) 
