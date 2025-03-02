@@ -1,15 +1,19 @@
 from typing import Annotated, Optional
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.db.base import get_async_session
 from app.crud.user import user as crud_user
 from app.models.user import User
+from app.core.exceptions import (
+    AuthenticationError, 
+    UserNotFoundError, 
+    InactiveUserError,
+    InsufficientPermissionsError
+)
 
-# Error messages
-ERROR_USER_NOT_FOUND = "User not found"
-ERROR_INACTIVE_USER = "Inactive user"
-ERROR_NOT_AUTHENTICATED = "Not authenticated"
+logger = logging.getLogger(__name__)
 
 async def get_current_user_from_request(
     request: Request,
@@ -20,28 +24,29 @@ async def get_current_user_from_request(
     
     这个依赖项在AuthMiddleware之后使用，依赖中间件已经验证了令牌
     并将用户信息存储在request.state.user_payload中
+    
+    抛出:
+        AuthenticationError: 如果用户未认证
+        UserNotFoundError: 如果找不到对应的用户
     """
+    # 检查请求状态中是否有用户payload
     if not hasattr(request.state, "user_payload"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ERROR_NOT_AUTHENTICATED,
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+        raise AuthenticationError("未认证")
     
     payload = request.state.user_payload
     username = payload.get("sub")
     if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail=ERROR_NOT_AUTHENTICATED
-        )
+        raise AuthenticationError("无效的令牌载荷")
     
+    # 获取用户信息
     user = await crud_user.get_by_email(db, email=username)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=ERROR_USER_NOT_FOUND
-        )
+        # 记录这种情况，因为这意味着有效的令牌但用户不存在
+        logger.warning(f"有效令牌但找不到用户: {username}")
+        raise UserNotFoundError()
+    
+    # 将完整用户对象设置到请求状态中，以便后续使用
+    request.state.current_user = user
     
     return user
 
@@ -54,10 +59,7 @@ async def get_current_active_user(
     验证用户是否处于活跃状态
     """
     if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ERROR_INACTIVE_USER
-        )
+        raise InactiveUserError()
     return current_user
 
 async def get_optional_current_user(
@@ -71,7 +73,7 @@ async def get_optional_current_user(
     """
     try:
         return await get_current_user_from_request(request, db)
-    except HTTPException:
+    except (AuthenticationError, UserNotFoundError, InactiveUserError):
         return None
 
 async def get_current_superuser(
@@ -83,8 +85,5 @@ async def get_current_superuser(
     验证用户是否为超级用户
     """
     if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
+        raise InsufficientPermissionsError("权限不足")
     return current_user 

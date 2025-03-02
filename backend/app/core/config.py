@@ -114,6 +114,19 @@ class CORSSettings(BaseSettings):
     )
 
 
+class LoggingSettings(BaseSettings):
+    """日志配置"""
+    LEVEL: str = "INFO"
+    JSON: bool = False
+    FILE: Optional[str] = None
+
+    model_config = SettingsConfigDict(
+        env_prefix="LOG_",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
 class Settings(BaseSettings):
     """主配置类"""
     # 基本配置
@@ -132,6 +145,7 @@ class Settings(BaseSettings):
     security: SecuritySettings = SecuritySettings()
     email: EmailSettings = EmailSettings()
     cors: CORSSettings = CORSSettings()
+    logging: LoggingSettings = LoggingSettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True

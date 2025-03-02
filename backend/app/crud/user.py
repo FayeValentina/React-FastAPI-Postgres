@@ -6,14 +6,20 @@ from typing import Optional
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.core.security import get_password_hash
+from app.core.exceptions import (
+    EmailAlreadyRegisteredError, 
+    UsernameTakenError,
+    DatabaseError,
+    ResourceNotFoundError
+)
 
 
-# Error messages
-ERROR_EMAIL_REGISTERED = "Email already registered"
-ERROR_USERNAME_TAKEN = "Username already taken"
-ERROR_CREATE_USER = "Error creating user"
-ERROR_UPDATE_USER = "Error updating user"
-ERROR_DELETE_USER = "Error deleting user"
+# 错误常量
+ERROR_EMAIL_REGISTERED = "该邮箱已被注册"
+ERROR_USERNAME_TAKEN = "该用户名已被使用"
+ERROR_CREATE_USER = "创建用户时出错"
+ERROR_UPDATE_USER = "更新用户时出错"
+ERROR_DELETE_USER = "删除用户时出错"
 
 
 class CRUDUser:
@@ -33,12 +39,30 @@ class CRUDUser:
         return result.scalar_one_or_none()
 
     async def create(self, db: AsyncSession, obj_in: UserCreate) -> User:
-        """创建新用户"""
-        # Check if email or username already exists
-        if await self.get_by_email(db, obj_in.email):
-            raise ValueError(ERROR_EMAIL_REGISTERED)
-        if await self.get_by_username(db, obj_in.username):
-            raise ValueError(ERROR_USERNAME_TAKEN)
+        """
+        创建新用户
+        
+        参数:
+            db: 数据库会话
+            obj_in: 用户创建数据
+            
+        返回:
+            创建的用户对象
+            
+        抛出:
+            EmailAlreadyRegisteredError: 如果邮箱已存在
+            UsernameTakenError: 如果用户名已存在
+            DatabaseError: 如果数据库操作失败
+        """
+        # 检查邮箱是否已存在
+        existing_email = await self.get_by_email(db, email=obj_in.email)
+        if existing_email:
+            raise EmailAlreadyRegisteredError()
+        
+        # 检查用户名是否已存在
+        existing_username = await self.get_by_username(db, username=obj_in.username)
+        if existing_username:
+            raise UsernameTakenError()
 
         try:
             db_obj = User(
@@ -55,7 +79,7 @@ class CRUDUser:
             return db_obj
         except IntegrityError:
             await db.rollback()
-            raise ValueError(ERROR_CREATE_USER)
+            raise DatabaseError(detail=ERROR_CREATE_USER)
 
     async def update(self, db: AsyncSession, db_obj: User, obj_in: UserUpdate) -> User:
         """更新用户信息"""
@@ -74,20 +98,22 @@ class CRUDUser:
             return db_obj
         except IntegrityError:
             await db.rollback()
-            raise ValueError(ERROR_UPDATE_USER)
+            raise DatabaseError(detail=ERROR_UPDATE_USER)
 
     async def delete(self, db: AsyncSession, id: int) -> Optional[User]:
         """删除用户"""
         obj = await self.get(db, id)
-        if obj:
-            try:
-                await db.delete(obj)
-                await db.commit()
-            except IntegrityError:
-                await db.rollback()
-                raise ValueError(ERROR_DELETE_USER)
-        return obj
+        if not obj:
+            raise ResourceNotFoundError(detail="用户不存在")
+            
+        try:
+            await db.delete(obj)
+            await db.commit()
+            return obj
+        except IntegrityError:
+            await db.rollback()
+            raise DatabaseError(detail=ERROR_DELETE_USER)
 
 
-# Create a single instance of CRUDUser
+# 创建CRUDUser的单例实例
 user = CRUDUser() 

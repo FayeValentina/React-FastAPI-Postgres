@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Tuple
 from jose import jwt, JWTError # type: ignore
 from passlib.context import CryptContext # type: ignore
 from app.core.config import settings
+from app.utils.common import get_current_time   
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -24,16 +25,16 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
     """
     try:
         if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
+            expire = get_current_time() + expires_delta
         else:
-            expire = datetime.now(timezone.utc) + timedelta(
+            expire = get_current_time() + timedelta(
                 minutes=settings.security.ACCESS_TOKEN_EXPIRE_MINUTES
             )
             
         to_encode: Dict[str, Any] = {
             "exp": expire,
             "sub": str(subject),
-            "iat": datetime.now(timezone.utc),
+            "iat": get_current_time(),
             "type": "access_token"
         }
         

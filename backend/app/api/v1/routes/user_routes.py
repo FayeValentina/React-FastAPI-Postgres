@@ -13,6 +13,11 @@ from app.api.v1.dependencies.current_user import (
     get_current_active_user,
     get_current_superuser
 )
+from app.core.exceptions import (
+    UserNotFoundError,
+    InsufficientPermissionsError
+)
+from app.utils.common import handle_error
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -28,11 +33,9 @@ async def create_user(
     需要超级管理员权限
     """
     try:
-        return await user.create(db, obj_in=user_data)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return await user.create_with_validation(db, obj_in=user_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise handle_error(e)
 
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user_full(
@@ -49,20 +52,15 @@ async def update_user_full(
     try:
         # 检查权限：只能修改自己或者超级管理员可以修改任何人
         if current_user.id != user_id and not current_user.is_superuser:
-            raise HTTPException(
-                status_code=403, 
-                detail="Not enough permissions to update other users"
-            )
+            raise InsufficientPermissionsError("没有足够权限更新其他用户")
             
         db_user = await user.get(db, id=user_id)
         if not db_user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise UserNotFoundError()
         
         return await user.update(db, db_obj=db_user, obj_in=user_update)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise handle_error(e)
 
 @router.patch("/{user_id}", response_model=UserResponse)
 async def update_user_partial(
@@ -79,20 +77,15 @@ async def update_user_partial(
     try:
         # 检查权限：只能修改自己或者超级管理员可以修改任何人
         if current_user.id != user_id and not current_user.is_superuser:
-            raise HTTPException(
-                status_code=403, 
-                detail="Not enough permissions to update other users"
-            )
+            raise InsufficientPermissionsError("没有足够权限更新其他用户")
             
         db_user = await user.get(db, id=user_id)
         if not db_user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise UserNotFoundError()
         
         return await user.update(db, db_obj=db_user, obj_in=user_update)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise handle_error(e)
 
 @router.get("", response_model=List[UserResponse])
 async def get_users(
@@ -123,22 +116,22 @@ async def get_user(
     
     需要认证权限
     """
-    # 如果查看自己的信息，直接返回当前用户
-    if current_user.id == user_id:
-        return current_user
-        
-    # 非超级用户不能查看其他用户详情
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=403,
-            detail="Not enough permissions to view other user details"
-        )
-        
-    db_user = await user.get(db, id=user_id)
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    return db_user
+    try:
+        # 如果查看自己的信息，直接返回当前用户
+        if current_user.id == user_id:
+            return current_user
+            
+        # 非超级用户不能查看其他用户详情
+        if not current_user.is_superuser:
+            raise InsufficientPermissionsError("没有足够权限查看其他用户详情")
+            
+        db_user = await user.get(db, id=user_id)
+        if not db_user:
+            raise UserNotFoundError()
+            
+        return db_user
+    except Exception as e:
+        raise handle_error(e)
 
 @router.delete("/{user_id}", response_model=UserResponse)
 async def delete_user(
@@ -151,15 +144,15 @@ async def delete_user(
     
     需要超级管理员权限
     """
-    db_user = await user.get(db, id=user_id)
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    # 不能删除自己
-    if current_user.id == user_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete your own account"
-        )
-        
-    return await user.delete(db, id=user_id) 
+    try:
+        db_user = await user.get(db, id=user_id)
+        if not db_user:
+            raise UserNotFoundError()
+            
+        # 不能删除自己
+        if current_user.id == user_id:
+            raise ValueError("不能删除自己的账户")
+            
+        return await user.delete(db, id=user_id)
+    except Exception as e:
+        raise handle_api_error(e) 
