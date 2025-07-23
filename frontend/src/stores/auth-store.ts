@@ -69,31 +69,60 @@ export const useAuthStore = create<AuthStore>()(
           set({ loading: true, error: null });
           
           try {
-            const user = await api.post('/v1/auth/register', userData) as User;
+            // Clean userData to remove undefined values that might cause issues
+            const cleanedData = {
+              email: userData.email,
+              username: userData.username,
+              password: userData.password,
+              ...(userData.full_name && { full_name: userData.full_name }),
+              ...(userData.age !== undefined && userData.age !== null && { age: userData.age }),
+            };
+            
+            const user = await api.post('/v1/auth/register', cleanedData) as User;
             
             set({ loading: false, error: null });
             return user;
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+          } catch (error: any) {
+            let errorMessage = 'Registration failed';
+            
+            if (error.response?.data?.detail) {
+              // Handle FastAPI validation errors
+              if (Array.isArray(error.response.data.detail)) {
+                errorMessage = error.response.data.detail.map((err: any) => err.msg).join(', ');
+              } else {
+                errorMessage = error.response.data.detail;
+              }
+            } else if (error.response?.data?.message) {
+              errorMessage = error.response.data.message;
+            } else if (error.message) {
+              errorMessage = error.message;
+            }
+            
             set({ loading: false, error: errorMessage });
             throw error;
           }
         },
 
         logout: async () => {
-          const { accessToken } = get();
+          const { accessToken, isAuthenticated } = get();
           
-          if (accessToken) {
+          // Only attempt server logout if we have a valid token and are authenticated
+          if (accessToken && isAuthenticated) {
             try {
               // Request interceptor will automatically add Authorization header
               await api.post('/v1/auth/logout');
-            } catch (error) {
+            } catch (error: any) {
               console.error('Logout request failed:', error);
               // Continue with logout even if server request fails
+              // Don't trigger token refresh on logout failure
+              if (error.response?.status === 401) {
+                console.log('Token already expired, proceeding with local logout');
+              }
             }
           }
 
-          // Clear auth state
+          // Always clear auth state and headers regardless of server response
+          delete api.defaults.headers.common['Authorization'];
           set({
             user: null,
             accessToken: null,
@@ -216,7 +245,7 @@ api.interceptors.request.use(
     const publicEndpoints = ['/v1/auth/login', '/v1/auth/register', '/v1/auth/refresh'];
     const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
     
-    if (state.accessToken && state.isAuthenticated && !isPublicEndpoint) {
+    if (state.accessToken && !isPublicEndpoint) {
       config.headers.Authorization = `Bearer ${state.accessToken}`;
     }
     return config;
@@ -230,7 +259,10 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Don't try to refresh tokens for logout requests
+    const isLogoutRequest = originalRequest.url?.includes('/v1/auth/logout');
+    
+    if (error.response?.status === 401 && !originalRequest._retry && !isLogoutRequest) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -254,12 +286,16 @@ api.interceptors.response.use(
         } catch (refreshError) {
           processQueue(refreshError as Error);
           state.logout();
+          // Redirect to login page when refresh fails
+          window.location.href = '/login';
           return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
         }
       } else {
         state.logout();
+        // Redirect to login page when no refresh token
+        window.location.href = '/login';
       }
     }
 
