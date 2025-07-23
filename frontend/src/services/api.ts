@@ -17,13 +17,6 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor
-api.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    console.error('API Error:', error);
-    return Promise.reject(error);
-  }
-);
+// Note: Response interceptor is handled in auth-store.ts for token refresh logic
 
 export default api; 

@@ -37,7 +37,7 @@ export const useAuthStore = create<AuthStore>()(
           set({ loading: true, error: null });
           
           try {
-            const tokenData = await api.post('/api/v1/auth/login', credentials) as TokenResponse;
+            const tokenData = await api.post('/v1/auth/login', credentials) as TokenResponse;
             
             set({
               accessToken: tokenData.access_token,
@@ -47,13 +47,8 @@ export const useAuthStore = create<AuthStore>()(
               error: null,
             });
 
-            // Get user info after login
-            try {
-              const user = await get().getCurrentUser();
-              set({ user });
-            } catch (error) {
-              console.error('Failed to get user info after login:', error);
-            }
+            // Don't fetch user info here - let the Dashboard page handle it
+            // This avoids duplicate requests
 
             return tokenData;
           } catch (error) {
@@ -74,7 +69,7 @@ export const useAuthStore = create<AuthStore>()(
           set({ loading: true, error: null });
           
           try {
-            const user = await api.post('/api/v1/auth/register', userData) as User;
+            const user = await api.post('/v1/auth/register', userData) as User;
             
             set({ loading: false, error: null });
             return user;
@@ -90,17 +85,15 @@ export const useAuthStore = create<AuthStore>()(
           
           if (accessToken) {
             try {
-              // Set authorization header for logout request
-              api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-              await api.post('/api/v1/auth/logout');
+              // Request interceptor will automatically add Authorization header
+              await api.post('/v1/auth/logout');
             } catch (error) {
               console.error('Logout request failed:', error);
-            } finally {
-              // Clear authorization header
-              delete api.defaults.headers.common['Authorization'];
+              // Continue with logout even if server request fails
             }
           }
 
+          // Clear auth state
           set({
             user: null,
             accessToken: null,
@@ -121,7 +114,7 @@ export const useAuthStore = create<AuthStore>()(
           try {
             // Set authorization header
             api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-            const user = await api.get('/api/v1/auth/me') as User;
+            const user = await api.get('/v1/auth/me') as User;
             
             set({ user });
             return user;
@@ -146,7 +139,7 @@ export const useAuthStore = create<AuthStore>()(
           }
 
           try {
-            const tokenData = await api.post('/api/v1/auth/refresh', {
+            const tokenData = await api.post('/v1/auth/refresh', {
               refresh_token: currentRefreshToken,
             }) as TokenResponse;
             
@@ -217,7 +210,13 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 api.interceptors.request.use(
   (config) => {
     const state = useAuthStore.getState();
-    if (state.accessToken && state.isAuthenticated) {
+    
+    // Don't add auth header for login, register, and refresh requests
+    // logout and /me endpoints DO need auth headers
+    const publicEndpoints = ['/v1/auth/login', '/v1/auth/register', '/v1/auth/refresh'];
+    const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
+    
+    if (state.accessToken && state.isAuthenticated && !isPublicEndpoint) {
       config.headers.Authorization = `Bearer ${state.accessToken}`;
     }
     return config;

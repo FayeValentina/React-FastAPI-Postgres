@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -20,6 +20,7 @@ import MainLayout from '../components/Layout/MainLayout';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const fetchingUser = useRef(false);
   const { 
     user, 
     isAuthenticated, 
@@ -35,14 +36,19 @@ const DashboardPage: React.FC = () => {
       return;
     }
 
-    // Fetch user info if not available
-    if (!user) {
-      getCurrentUser().catch(() => {
-        // If fetch fails, redirect to login
-        navigate('/login');
-      });
+    // Fetch user info if not available and not already fetching
+    if (!user && !fetchingUser.current) {
+      fetchingUser.current = true;
+      getCurrentUser()
+        .catch(() => {
+          // If fetch fails, redirect to login
+          navigate('/login');
+        })
+        .finally(() => {
+          fetchingUser.current = false;
+        });
     }
-  }, [isAuthenticated, user, getCurrentUser, navigate]);
+  }, [isAuthenticated, user]); // Remove getCurrentUser and navigate from dependencies
 
   const handleLogout = async () => {
     try {
