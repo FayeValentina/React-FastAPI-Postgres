@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Typography, Button, CircularProgress, Alert, Box } from "@mui/material";
-import MainLayout from "./components/Layout/MainLayout";
-import useApi from "./hooks/useApi";
+import MainLayout from "../components/Layout/MainLayout";
+import useApi from "../hooks/useApi";
 
 interface HelloResponse {
   message: string;
   status: string;
 }
 
-const App: React.FC = () => {
+const DemoPage: React.FC = () => {
   const [activeResponse, setActiveResponse] = useState<'hello' | 'world'>('hello');
   const { data: helloData, loading: helloLoading, error: helloError, fetchData: fetchHello } = useApi<HelloResponse>("/hello");
   const { data: worldData, loading: worldLoading, error: worldError, fetchData: fetchWorld } = useApi<HelloResponse>("/world");
@@ -41,6 +41,10 @@ const App: React.FC = () => {
           FastAPI + React Demo
         </Typography>
         
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+          这是一个API测试页面，用于验证前后端连接
+        </Typography>
+        
         {(helloLoading || worldLoading) ? (
           <CircularProgress />
         ) : (helloError || worldError) ? (
@@ -48,10 +52,10 @@ const App: React.FC = () => {
         ) : (
           <Box sx={{ mt: 4 }}>
             <Typography variant="h5" gutterBottom>
-              Server Response:
+              服务器响应:
             </Typography>
             <Typography variant="body1" sx={{ mb: 3 }}>
-              {getCurrentMessage() || "No message received"}
+              {getCurrentMessage() || "未收到消息"}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
               <Button 
@@ -60,7 +64,7 @@ const App: React.FC = () => {
                 onClick={handleHelloClick}
                 disabled={helloLoading || worldLoading}
               >
-                Refresh Data
+                刷新 Hello 数据
               </Button>
               <Button 
                 variant="contained" 
@@ -68,7 +72,7 @@ const App: React.FC = () => {
                 onClick={handleWorldClick}
                 disabled={helloLoading || worldLoading}
               >
-                World
+                获取 World 数据
               </Button>
             </Box>
           </Box>
@@ -78,4 +82,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default DemoPage;

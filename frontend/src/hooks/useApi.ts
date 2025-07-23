@@ -1,31 +1,22 @@
-import { useState, useCallback } from 'react';
-import api from '../services/api';
-
-interface UseApiState<T> {
-  data: T | null;
-  loading: boolean;
-  error: Error | null;
-}
+import { useCallback } from 'react';
+import { useApiState } from '../stores/api-store';
 
 export function useApi<T>(url: string) {
-  const [state, setState] = useState<UseApiState<T>>({
-    data: null,
-    loading: false,
-    error: null,
-  });
+  const apiState = useApiState<T>(url);
 
   const fetchData = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true }));
     try {
-      const data = await api.get<T>(url);
-      setState({ data: data as unknown as T, loading: false, error: null });
+      await apiState.fetchData();
     } catch (error) {
-      setState({ data: null, loading: false, error: error as Error });
+      // Error is already handled in the store
+      console.error('API fetch error:', error);
     }
-  }, [url]);
+  }, [apiState]);
 
   return {
-    ...state,
+    data: apiState.data,
+    loading: apiState.loading,
+    error: apiState.error,
     fetchData,
   };
 }

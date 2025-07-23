@@ -11,6 +11,7 @@
       "@components/*": ["src/components/*"],
       "@hooks/*": ["src/hooks/*"],
       "@services/*": ["src/services/*"],
+      "@stores/*": ["src/stores/*"],
       "@types/*": ["src/types/*"],
       "@utils/*": ["src/utils/*"]
     }

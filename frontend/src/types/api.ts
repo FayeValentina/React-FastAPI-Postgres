@@ -18,4 +18,7 @@ export interface PaginatedResponse<T> {
   page: number;
   size: number;
   pages: number;
-} 
+}
+
+// Re-export auth types
+export * from './auth'; 
