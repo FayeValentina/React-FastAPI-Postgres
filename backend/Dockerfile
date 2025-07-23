@@ -10,15 +10,17 @@ RUN apt-get update && apt-get install -y \
 # Install Poetry
 RUN pip install poetry
 
-# Copy application code first
-COPY . .
+# Copy poetry files first for better caching
+COPY pyproject.toml poetry.lock* ./
 
 # Configure poetry to not create a virtual environment
 RUN poetry config virtualenvs.create false
 
-# Generate lock file and install dependencies
-RUN poetry lock && \
-    poetry install --only main --no-interaction --no-ansi
+# Install dependencies
+RUN poetry install --no-interaction --no-ansi
+
+# Copy application code
+COPY . .
 
 # Expose port
 EXPOSE 8000

@@ -43,11 +43,10 @@ services:
       postgres:
         condition: service_healthy
     command: >
-      sh -c "
-        echo '修复数据库迁移状态...' &&
-        poetry run alembic stamp head || true &&
-        echo '创建刷新令牌模型迁移...' &&
-        poetry run alembic revision --autogenerate -m 'Add refresh token model' &&
+      bash -c "
+        echo '等待数据库准备...' &&
+        echo '检查数据库模型变化...' &&
+        poetry run alembic revision --autogenerate -m 'Auto migration' 2>/dev/null || echo '没有检测到模型变化' &&
         echo '应用数据库迁移...' &&
         poetry run alembic upgrade head &&
         echo '启动应用服务器...' &&

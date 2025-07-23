@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Request
 from typing import Annotated
-from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas import (
@@ -8,7 +7,7 @@ from app.schemas import (
     UserCreate
 )
 from app.core.config import settings
-from app.core.security import create_access_token, verify_password, create_token_pair, verify_token
+from app.core.security import verify_password, create_token_pair, verify_token
 from app.crud.user import user as crud_user
 from app.crud.token import refresh_token as crud_refresh_token
 from app.db.base import get_async_session

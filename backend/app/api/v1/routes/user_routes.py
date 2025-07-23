@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, desc, asc
 
 from app.schemas.user import (
-    UserCreate, UserResponse, UserUpdateFull, UserUpdatePartial
+    UserCreate, UserResponse, UserUpdate
 )
 from app.crud.user import user
 from app.db.base import get_async_session
@@ -37,40 +37,15 @@ async def create_user(
     except Exception as e:
         raise handle_error(e)
 
-@router.put("/{user_id}", response_model=UserResponse)
-async def update_user_full(
-    user_id: int,
-    user_update: UserUpdateFull,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user)
-) -> UserResponse:
-    """
-    完整更新用户信息
-    
-    只能更新自己的信息或者超级管理员可以更新任何用户
-    """
-    try:
-        # 检查权限：只能修改自己或者超级管理员可以修改任何人
-        if current_user.id != user_id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有足够权限更新其他用户")
-            
-        db_user = await user.get(db, id=user_id)
-        if not db_user:
-            raise UserNotFoundError()
-        
-        return await user.update(db, db_obj=db_user, obj_in=user_update)
-    except Exception as e:
-        raise handle_error(e)
-
 @router.patch("/{user_id}", response_model=UserResponse)
-async def update_user_partial(
+async def update_user(
     user_id: int,
-    user_update: UserUpdatePartial,
+    user_update: UserUpdate,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user)
 ) -> UserResponse:
     """
-    部分更新用户信息
+    更新用户信息（支持部分更新）
     
     只能更新自己的信息或者超级管理员可以更新任何用户
     """

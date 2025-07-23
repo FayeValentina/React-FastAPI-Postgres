@@ -1,8 +1,8 @@
-"""Add refresh token model
+"""Initial migration
 
-Revision ID: 35d1b95206cb
-Revises: a7cf9cebeb90
-Create Date: 2025-03-02 18:46:11.896593
+Revision ID: 778ebd7880ad
+Revises: 
+Create Date: 2025-07-23 15:52:19.847662
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '35d1b95206cb'
-down_revision: Union[str, None] = 'a7cf9cebeb90'
+revision: str = '778ebd7880ad'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -38,27 +38,14 @@ def upgrade() -> None:
     op.create_index(op.f('ix_users_full_name'), 'users', ['full_name'], unique=False)
     op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
     op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
-    op.create_table('posts',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('title', sa.String(length=100), nullable=False),
-    sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('summary', sa.String(length=200), nullable=True),
-    sa.Column('published', sa.Boolean(), nullable=False),
-    sa.Column('author_id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['author_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_posts_id'), 'posts', ['id'], unique=False)
     op.create_table('refresh_tokens',
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('token', sa.String(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('is_valid', sa.Boolean(), nullable=False),
-    sa.Column('issued_at', sa.DateTime(), nullable=False),
-    sa.Column('expires_at', sa.DateTime(), nullable=False),
-    sa.Column('revoked_at', sa.DateTime(), nullable=True),
+    sa.Column('issued_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('revoked_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('user_agent', sa.String(), nullable=True),
     sa.Column('ip_address', sa.String(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
@@ -74,8 +61,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_refresh_tokens_token'), table_name='refresh_tokens')
     op.drop_index(op.f('ix_refresh_tokens_id'), table_name='refresh_tokens')
     op.drop_table('refresh_tokens')
-    op.drop_index(op.f('ix_posts_id'), table_name='posts')
-    op.drop_table('posts')
     op.drop_index(op.f('ix_users_username'), table_name='users')
     op.drop_index(op.f('ix_users_id'), table_name='users')
     op.drop_index(op.f('ix_users_full_name'), table_name='users')

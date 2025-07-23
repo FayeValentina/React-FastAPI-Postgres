@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
-    from .post import Post
     from .token import RefreshToken
 
 
@@ -28,8 +27,5 @@ class User(Base):
         server_onupdate=func.now(),
     )
 
-    # 关联到文章
-    posts: Mapped[List["Post"]] = relationship(back_populates="author", cascade="all, delete-orphan")
-    
     # 关联到刷新令牌
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")

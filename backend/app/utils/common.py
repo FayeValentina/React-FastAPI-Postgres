@@ -22,26 +22,6 @@ def get_current_time() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def validate_page_size(
-    page: int = 1,
-    size: int = 10,
-    max_size: int = 100
-) -> tuple[int, int]:
-    """
-    验证分页参数
-    :param page: 页码
-    :param size: 每页数量
-    :param max_size: 最大每页数量
-    :return: (page, size)
-    """
-    if page < 1:
-        raise ValidationError(detail="页码必须大于0")
-    if size < 1:
-        raise ValidationError(detail="每页数量必须大于0")
-    if size > max_size:
-        size = max_size
-    return page, size
-
 
 def handle_error(
     error: Exception, 
@@ -77,40 +57,6 @@ def handle_error(
     )
 
 
-def convert_exception_to_http_exception(
-    error: Exception, 
-    custom_message: Optional[str] = None
-) -> HTTPException:
-    """
-    将各种异常转换为HTTPException但不抛出
-    
-    与handle_error不同，此函数返回HTTPException而不是抛出它
-    
-    Args:
-        error: 捕获的异常
-        custom_message: 可选的自定义错误消息
-        
-    Returns:
-        HTTPException: 转换后的HTTP异常
-    """
-    # 记录错误
-    logger.error(f"错误转换: {str(error)}")
-    
-    # 如果已经是 ApiError，直接转换
-    if isinstance(error, ApiError):
-        return error.to_http_exception()
-    
-    # 根据错误类型返回适当的异常
-    if isinstance(error, ValueError):
-        detail = custom_message or str(error)
-        return ValidationError(detail=detail).to_http_exception()
-        
-    # 其他错误作为服务器内部错误处理
-    detail = custom_message or "服务器内部错误"
-    return HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=detail
-    )
 
 
 def create_exception_handlers() -> Dict[Any, Any]:
