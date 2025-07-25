@@ -40,16 +40,22 @@ export const useAuthStore = create<AuthStore>()(
           try {
             const tokenData = await api.post('/v1/auth/login', credentials) as TokenResponse;
             
+            // 设置token后立即获取用户信息
             set({
               accessToken: tokenData.access_token,
               refreshToken: tokenData.refresh_token || null,
               isAuthenticated: true,
-              loading: false,
               error: null,
             });
 
-            // Don't fetch user info here - let the Dashboard page handle it
-            // This avoids duplicate requests
+            // 设置Authorization header并获取用户信息
+            api.defaults.headers.common['Authorization'] = `Bearer ${tokenData.access_token}`;
+            const user = await api.get('/v1/auth/me') as User;
+            
+            set({ 
+              user,
+              loading: false,
+            });
 
             return tokenData;
           } catch (error: any) {

@@ -85,10 +85,8 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(formData);
-      // 登录成功后，等待一个tick确保状态更新完成
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 0);
+      // login() 已确保用户信息获取完成，可以直接导航
+      navigate('/dashboard');
     } catch (error) {
       console.error('Login failed:', error);
     }

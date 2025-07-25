@@ -34,26 +34,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
-  // 监听认证状态变化，确保登录后获取用户信息
-  useEffect(() => {
-    if (authStore.isAuthenticated && authStore.accessToken && !authStore.user) {
-      authStore.getCurrentUser().catch((error) => {
-        console.error('Failed to get user info after login:', error);
-      });
-    }
-  }, [authStore.isAuthenticated, authStore.accessToken, authStore.user]);
-
   const contextValue: AuthContextType = {
     user: authStore.user,
     isAuthenticated: authStore.isAuthenticated,
     loading: authStore.loading,
     error: authStore.error,
     login: async (credentials) => {
+      // auth-store 的 login 方法已经包含用户信息获取
       await authStore.login(credentials);
-      if (authStore.isAuthenticated) {
-        // 确保用户信息获取完成后再返回
-        await authStore.getCurrentUser();
-      }
     },
     logout: authStore.logout,
     register: authStore.register,
