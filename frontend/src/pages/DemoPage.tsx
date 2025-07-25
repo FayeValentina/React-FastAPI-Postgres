@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from 'react-router-dom';
 import { Typography, Button, CircularProgress, Alert, Box } from "@mui/material";
 import MainLayout from "../components/Layout/MainLayout";
 import useApi from "../hooks/useApi";
+import { useAuthStore } from '../stores/auth-store';
 
 interface HelloResponse {
   message: string;
@@ -9,13 +11,30 @@ interface HelloResponse {
 }
 
 const DemoPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuthStore();
   const [activeResponse, setActiveResponse] = useState<'hello' | 'world'>('hello');
   const { data: helloData, loading: helloLoading, error: helloError, fetchData: fetchHello } = useApi<HelloResponse>("/hello");
   const { data: worldData, loading: worldLoading, error: worldError, fetchData: fetchWorld } = useApi<HelloResponse>("/world");
 
+  // 认证检查
   useEffect(() => {
-    fetchHello();
-  }, [fetchHello]);
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchHello();
+    }
+  }, [fetchHello, isAuthenticated]);
+
+  // 如果未认证，不渲染内容
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const handleHelloClick = () => {
     setActiveResponse('hello');

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -15,45 +15,17 @@ import {
   Person as PersonIcon,
   ExitToApp as LogoutIcon,
 } from '@mui/icons-material';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuth } from '../contexts/AuthContext';
 import MainLayout from '../components/Layout/MainLayout';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const fetchingUser = useRef(false);
-  const { 
-    user, 
-    isAuthenticated, 
-    logout, 
-    getCurrentUser, 
-    loading, 
-    error 
-  } = useAuthStore();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-
-    // Fetch user info if not available and not already fetching
-    if (!user && !fetchingUser.current) {
-      fetchingUser.current = true;
-      getCurrentUser()
-        .catch(() => {
-          // If fetch fails, redirect to login
-          navigate('/login');
-        })
-        .finally(() => {
-          fetchingUser.current = false;
-        });
-    }
-  }, [isAuthenticated, user]); // Remove getCurrentUser and navigate from dependencies
+  const { user, logout, error } = useAuth();
 
   const handleLogout = async () => {
     try {
       await logout();
-      navigate('/login');
+      // 自动重定向由 ProtectedRoute 处理
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -69,9 +41,8 @@ const DashboardPage: React.FC = () => {
     });
   };
 
-  if (!isAuthenticated) {
-    return null; // Will redirect in useEffect
-  }
+  // 不再需要认证检查和用户信息获取
+  // ProtectedRoute 和 AuthProvider 已经处理了
 
   return (
     <MainLayout>
@@ -100,7 +71,7 @@ const DashboardPage: React.FC = () => {
                   </Typography>
                 </Box>
 
-                {user ? (
+                {user && (
                   <Box>
                     <Typography variant="body1" sx={{ mb: 1 }}>
                       <strong>用户名:</strong> {user.username}
@@ -137,10 +108,6 @@ const DashboardPage: React.FC = () => {
                       )}
                     </Box>
                   </Box>
-                ) : (
-                  <Typography variant="body1" color="text.secondary">
-                    {loading ? '加载中...' : '无法加载用户信息'}
-                  </Typography>
                 )}
               </CardContent>
             </Card>

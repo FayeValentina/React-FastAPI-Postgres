@@ -1,11 +1,7 @@
-import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
-from fastapi.responses import JSONResponse
-# 导入需要的异常类，放在函数开头
-from app.core.exceptions import AuthenticationError, ApiError
-
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from starlette import status
 
 from app.core.exceptions import (
@@ -14,6 +10,7 @@ from app.core.exceptions import (
     AuthenticationError
 )
 
+import logging
 logger = logging.getLogger(__name__)
 
 

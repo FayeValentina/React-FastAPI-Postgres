@@ -4,8 +4,10 @@
 定义应用中所有自定义异常类
 """
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from typing import Any, Dict, Optional
+
+from .constants import ErrorMessages, StatusCode
 
 
 class ApiError(Exception):
@@ -39,7 +41,7 @@ class AuthenticationError(ApiError):
         headers: Optional[Dict[str, Any]] = None
     ):
         super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=StatusCode.UNAUTHORIZED,
             detail=detail,
             headers=headers or {"WWW-Authenticate": "Bearer"}
         )
@@ -48,7 +50,7 @@ class AuthenticationError(ApiError):
 class InvalidCredentialsError(AuthenticationError):
     """当登录凭据无效时抛出"""
     def __init__(self):
-        super().__init__(detail="用户名或密码不正确")
+        super().__init__(detail=ErrorMessages.INVALID_CREDENTIALS)
 
 
 # 注册和用户管理错误
@@ -57,7 +59,7 @@ class UserError(ApiError):
     def __init__(
         self, 
         detail: str = "用户错误", 
-        status_code: int = status.HTTP_400_BAD_REQUEST
+        status_code: int = StatusCode.BAD_REQUEST
     ):
         super().__init__(status_code=status_code, detail=detail)
 
@@ -66,34 +68,43 @@ class UserNotFoundError(UserError):
     """未找到用户时抛出"""
     def __init__(self):
         super().__init__(
-            detail="用户不存在",
-            status_code=status.HTTP_404_NOT_FOUND
+            detail=ErrorMessages.USER_NOT_FOUND,
+            status_code=StatusCode.NOT_FOUND
         )
 
 
 class EmailAlreadyRegisteredError(UserError):
     """尝试使用已存在的电子邮件注册时抛出"""
     def __init__(self):
-        super().__init__(detail="该邮箱已被注册")
+        super().__init__(
+            detail=ErrorMessages.EMAIL_ALREADY_REGISTERED,
+            status_code=StatusCode.CONFLICT
+        )
 
 
 class UsernameTakenError(UserError):
     """尝试使用已存在的用户名注册时抛出"""
     def __init__(self):
-        super().__init__(detail="该用户名已被使用")
+        super().__init__(
+            detail=ErrorMessages.USERNAME_TAKEN,
+            status_code=StatusCode.CONFLICT
+        )
 
 
 class InactiveUserError(UserError):
     """尝试使用未激活的用户账户时抛出"""
     def __init__(self):
-        super().__init__(detail="用户未激活")
+        super().__init__(
+            detail=ErrorMessages.USER_INACTIVE,
+            status_code=StatusCode.FORBIDDEN
+        )
 
 
 class InsufficientPermissionsError(ApiError):
     """用户没有所需权限时抛出"""
     def __init__(self, detail: str = "权限不足"):
         super().__init__(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=StatusCode.FORBIDDEN,
             detail=detail
         )
 
@@ -102,7 +113,7 @@ class DatabaseError(ApiError):
     """数据库操作错误的基类"""
     def __init__(self, detail: str = "数据库操作失败"):
         super().__init__(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=detail
         )
 
@@ -111,7 +122,7 @@ class ResourceAlreadyExistsError(ApiError):
     """资源已存在时抛出"""
     def __init__(self, detail: str = "资源已存在"):
         super().__init__(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=StatusCode.CONFLICT,
             detail=detail
         )
 
@@ -120,7 +131,7 @@ class ResourceNotFoundError(ApiError):
     """资源不存在时抛出"""
     def __init__(self, detail: str = "资源不存在"):
         super().__init__(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=StatusCode.NOT_FOUND,
             detail=detail
         )
 
@@ -129,7 +140,7 @@ class ValidationError(ApiError):
     """数据验证错误"""
     def __init__(self, detail: str = "数据验证失败"):
         super().__init__(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=StatusCode.BAD_REQUEST,
             detail=detail
         )
 
@@ -140,9 +151,9 @@ class InvalidRefreshTokenError(ApiError):
     
     当提供的刷新令牌无效、已过期或已被吊销时抛出
     """
-    def __init__(self, detail: str = "无效的刷新令牌"):
+    def __init__(self, detail: str = ErrorMessages.INVALID_REFRESH_TOKEN):
         super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
+            status_code=StatusCode.UNAUTHORIZED, 
             detail=detail,
             headers={"WWW-Authenticate": "Bearer"}
         ) 

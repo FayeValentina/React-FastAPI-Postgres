@@ -78,23 +78,6 @@ class SecuritySettings(BaseSettings):
     )
 
 
-class EmailSettings(BaseSettings):
-    """邮件配置"""
-    SMTP_TLS: bool = True
-    SMTP_PORT: Optional[int] = None
-    SMTP_HOST: Optional[str] = None
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
-    FROM_EMAIL: Optional[EmailStr] = None
-    FROM_NAME: Optional[str] = None
-
-    model_config = SettingsConfigDict(
-        env_prefix="EMAIL_",
-        env_file=".env",
-        env_file_encoding="utf-8"
-    )
-
-
 class CORSSettings(BaseSettings):
     """CORS 配置"""
     ORIGINS: List[AnyHttpUrl] = []
@@ -144,7 +127,6 @@ class Settings(BaseSettings):
     postgres: PostgresSettings = PostgresSettings()
     pgadmin: PgAdminSettings = PgAdminSettings()
     security: SecuritySettings = SecuritySettings()
-    email: EmailSettings = EmailSettings()
     cors: CORSSettings = CORSSettings()
     logging: LoggingSettings = LoggingSettings()
 

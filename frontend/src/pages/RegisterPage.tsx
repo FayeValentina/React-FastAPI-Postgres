@@ -39,12 +39,12 @@ const RegisterPage: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Clear error when component mounts or form data changes
+  // Clear error when user starts typing (only when form data actually changes)
   useEffect(() => {
-    if (error) {
+    if (error && (formData.email || formData.username || formData.password)) {
       clearError();
     }
-  }, [formData, clearError, error]);
+  }, [formData.email, formData.username, formData.password]); // 只监听关键字段
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -116,6 +116,11 @@ const RegisterPage: React.FC = () => {
         ...prev,
         [name]: '',
       }));
+    }
+
+    // Clear auth error when user starts typing
+    if (error) {
+      clearError();
     }
   };
 

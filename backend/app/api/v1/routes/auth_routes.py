@@ -174,7 +174,7 @@ async def logout(
         raise handle_error(e)
 
 
-@router.post("/register", response_model=User)
+@router.post("/register", response_model=User, status_code=201)
 async def register(
     user_in: UserCreate,
     db: Annotated[AsyncSession, Depends(get_async_session)],

@@ -21,7 +21,7 @@ from app.utils.common import handle_error
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-@router.post("", response_model=UserResponse)
+@router.post("", response_model=UserResponse, status_code=201)
 async def create_user(
     user_data: UserCreate, 
     db: AsyncSession = Depends(get_async_session),

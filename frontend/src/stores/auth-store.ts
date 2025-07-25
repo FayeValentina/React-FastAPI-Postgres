@@ -8,6 +8,7 @@ import {
   User, 
   AuthState 
 } from '../types/auth';
+import { extractAuthErrorMessage } from '../utils/errorHandler';
 
 interface AuthStore extends AuthState {
   // Actions
@@ -51,8 +52,9 @@ export const useAuthStore = create<AuthStore>()(
             // This avoids duplicate requests
 
             return tokenData;
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Login failed';
+          } catch (error: any) {
+            const errorMessage = extractAuthErrorMessage(error);
+            
             set({
               loading: false,
               error: errorMessage,
@@ -83,20 +85,7 @@ export const useAuthStore = create<AuthStore>()(
             set({ loading: false, error: null });
             return user;
           } catch (error: any) {
-            let errorMessage = 'Registration failed';
-            
-            if (error.response?.data?.detail) {
-              // Handle FastAPI validation errors
-              if (Array.isArray(error.response.data.detail)) {
-                errorMessage = error.response.data.detail.map((err: any) => err.msg).join(', ');
-              } else {
-                errorMessage = error.response.data.detail;
-              }
-            } else if (error.response?.data?.message) {
-              errorMessage = error.response.data.message;
-            } else if (error.message) {
-              errorMessage = error.message;
-            }
+            const errorMessage = extractAuthErrorMessage(error);
             
             set({ loading: false, error: errorMessage });
             throw error;
@@ -259,10 +248,12 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Don't try to refresh tokens for logout requests
-    const isLogoutRequest = originalRequest.url?.includes('/v1/auth/logout');
+    // Don't try to refresh tokens for auth-related requests
+    const isAuthRequest = originalRequest.url?.includes('/v1/auth/login') || 
+                         originalRequest.url?.includes('/v1/auth/register') ||
+                         originalRequest.url?.includes('/v1/auth/logout');
     
-    if (error.response?.status === 401 && !originalRequest._retry && !isLogoutRequest) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
