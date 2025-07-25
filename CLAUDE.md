@@ -45,11 +45,14 @@ backend/                    # FastAPI backend
 
 frontend/                  # React frontend
 ├── src/
-│   ├── components/        # React components
-│   ├── hooks/            # Custom hooks (useApi)
+│   ├── components/        # React components (Layout, ProtectedRoute)
+│   ├── contexts/          # React contexts (AuthContext)
+│   ├── hooks/            # Custom hooks (useApi, useAuth)
 │   ├── pages/            # Page components
 │   ├── services/         # API client (axios)
-│   └── types/            # TypeScript types
+│   ├── stores/           # Zustand stores (auth-store, api-store)
+│   ├── types/            # TypeScript types
+│   └── utils/            # Utility functions (errorHandler)
 └── package.json          # npm dependencies
 ```
 
@@ -91,19 +94,26 @@ frontend/                  # React frontend
 - **LoginRequest**: Login credentials
 - **Token**: JWT token response
 
-### Frontend Architecture
+### Frontend Architecture (Refactored)
 - **React 18** with TypeScript and Vite
 - **Material-UI** for components and styling
-- **Custom useApi Hook** for API calls with loading/error states
-- **Axios** for HTTP client with interceptors
-- **React Router** for navigation
+- **Zustand** for state management (auth-store, api-store)
+- **React Context + Hooks Pattern**:
+  - `AuthContext` for application-level authentication state
+  - `useAuth` hook for unified authentication operations
+  - `useApi` hook for API calls with loading/error states
+- **Route Protection**: `ProtectedRoute` component for access control
+- **Unified Error Handling**: Centralized error processing with friendly messages
+- **Axios** with smart interceptors for token management and refresh
 
 ### Key Patterns
-- Backend uses dependency injection for request context and authentication
-- Frontend follows hooks-based state management
-- API communication through centralized axios instance
-- Database operations through CRUD pattern with SQLAlchemy models
-- Environment-based configuration with .env files
+- **Backend**: Dependency injection for request context and authentication
+- **Frontend**: Layered architecture with Context → Hooks → Components
+- **API Communication**: Centralized axios instance with automatic token refresh
+- **Route Protection**: Route-level access control with seamless redirects
+- **Error Handling**: Backend-frontend aligned error codes and messages
+- **Database**: CRUD pattern with SQLAlchemy models and auto-migrations
+- **Configuration**: Environment-based with .env files
 
 ### Automatic Database Migration
 - **On Docker Startup**: Automatically detects model changes and generates migrations
@@ -122,16 +132,59 @@ frontend/                  # React frontend
 - Database connection uses asyncpg driver for better performance
 - Code has been cleaned and simplified (removed post/article system, unused schemas)
 
-### Authentication Flow
-- Login returns access token (30min) and refresh token (7 days)
-- AuthMiddleware validates JWT tokens on protected routes
-- Tokens stored and managed by frontend API service
-- Refresh token stored in RefreshToken model with session management
-- Token rotation strategy for enhanced security
+### Authentication Flow (Improved)
+- **Login Process**: Returns access token (30min) and refresh token (7 days)
+- **Backend Validation**: AuthMiddleware validates JWT tokens on protected routes
+- **Frontend Management**: 
+  - `AuthContext` provides application-level state initialization
+  - `ProtectedRoute` handles route-level access control and redirects
+  - Automatic token refresh via axios interceptors
+- **Token Storage**: Refresh tokens stored in database with session management
+- **Security**: Token rotation strategy with automatic cleanup
+- **User Experience**: Seamless authentication with no page flashes
 
 ### Recent Optimizations
-- Removed unused schemas and models (posts, complex address, payment info, etc.)
-- Simplified user update endpoints (merged PUT/PATCH into single PATCH)
-- Cleaned up utility functions (removed pagination helpers, duplicate error handlers)
-- Streamlined API to focus on core user authentication and management
-- Improved Docker configuration for reliable startup and automatic migrations
+
+#### Backend Refactoring (Completed)
+- ✅ **Model Exports**: Fixed RefreshToken import/export in models
+- ✅ **Error Handling**: Unified error messages and HTTP status codes via constants
+- ✅ **Code Cleanup**: Removed unused imports, duplicate code, and Post model references
+- ✅ **Status Codes**: Standardized HTTP responses (201 for creation, 409 for conflicts, etc.)
+- ✅ **Configuration**: Removed unused email settings and cleaned up config structure
+
+#### Frontend Refactoring (Completed)
+- ✅ **Architecture Overhaul**: Implemented layered Context → Hooks → Components pattern
+- ✅ **Route Protection**: Added `ProtectedRoute` component with automatic redirects
+- ✅ **Authentication Context**: Created `AuthContext` for application-level state management
+- ✅ **Unified Error Handling**: Implemented `errorHandler` utility with backend-aligned messages
+- ✅ **Smart Interceptors**: Enhanced axios interceptors to exclude auth requests from token refresh
+- ✅ **Bug Fixes**: Fixed error message persistence in Login/Register pages
+- ✅ **User Experience**: Eliminated page flashes, improved loading states, seamless navigation
+
+#### Key Improvements
+- **Security**: Route-level access control with role-based permissions support
+- **Maintainability**: Centralized error handling and consistent code patterns
+- **Performance**: Optimized re-rendering and eliminated unnecessary API calls
+- **Reliability**: Proper error boundaries and graceful failure handling
+- **Developer Experience**: Clear separation of concerns and reusable components
+
+## Development Guidelines
+
+### Frontend Development
+- **Authentication**: Always use `useAuth()` hook from `AuthContext`, never directly use `useAuthStore()`
+- **Route Protection**: Wrap all routes with `ProtectedRoute` component
+- **Error Handling**: Use `extractErrorMessage()` or `extractAuthErrorMessage()` from `utils/errorHandler`
+- **State Management**: Use Zustand stores for complex state, React Context for application-level state
+- **Forms**: Clear errors only when user starts typing, not on component mount
+
+### Backend Development
+- **Constants**: Use `StatusCode` and `ErrorMessages` from `app.core.constants` instead of magic numbers/strings
+- **Error Handling**: All custom exceptions should extend `ApiError` base class
+- **HTTP Status**: Use correct status codes (201 for creation, 409 for conflicts, 403 for permissions)
+- **Imports**: Ensure all models are properly exported from `__init__.py` files
+
+### Common Patterns
+- **API Calls**: Use axios interceptors for automatic token management
+- **Redirects**: Let `ProtectedRoute` handle authentication redirects automatically
+- **Loading States**: Managed by stores and propagated through hooks
+- **Error Display**: Show errors immediately, clear only on user interaction
