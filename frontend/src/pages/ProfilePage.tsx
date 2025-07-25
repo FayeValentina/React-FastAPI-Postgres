@@ -153,21 +153,17 @@ const ProfilePage: React.FC = () => {
     } catch (error: any) {
       console.error('Profile update failed:', error);
       
-      // If 401 error, redirect to login (token expired)
-      if (error.response?.status === 401) {
-        setError('登录已过期，请重新登录');
-        // Clear auth state immediately
-        useAuthStore.getState().logout();
-        setTimeout(() => {
-          navigate('/login');
-        }, 1500);
-      } else if (error.response?.data?.detail) {
-        setError(error.response.data.detail);
-      } else if (error.response?.data?.message) {
-        setError(error.response.data.message);
-      } else {
-        setError('更新失败，请稍后重试');
+      // 401错误由axios拦截器处理，这里只处理其他错误
+      if (error.response?.status !== 401) {
+        if (error.response?.data?.detail) {
+          setError(error.response.data.detail);
+        } else if (error.response?.data?.message) {
+          setError(error.response.data.message);
+        } else {
+          setError('更新失败，请稍后重试');
+        }
       }
+      // 401错误会被axios拦截器自动处理（token刷新或重定向登录）
     } finally {
       setLoading(false);
     }

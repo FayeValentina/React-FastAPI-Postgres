@@ -14,7 +14,7 @@ interface AuthStore extends AuthState {
   // Actions
   login: (credentials: LoginRequest) => Promise<TokenResponse>;
   register: (userData: RegisterRequest) => Promise<User>;
-  logout: () => Promise<void>;
+  logout: (skipServerRequest?: boolean) => Promise<void>;
   getCurrentUser: () => Promise<User>;
   refreshAccessToken: () => Promise<TokenResponse>;
   clearError: () => void;
@@ -98,11 +98,11 @@ export const useAuthStore = create<AuthStore>()(
           }
         },
 
-        logout: async () => {
+        logout: async (skipServerRequest = false) => {
           const { accessToken, isAuthenticated } = get();
           
           // Only attempt server logout if we have a valid token and are authenticated
-          if (accessToken && isAuthenticated) {
+          if (!skipServerRequest && accessToken && isAuthenticated) {
             try {
               // Request interceptor will automatically add Authorization header
               await api.post('/v1/auth/logout');
@@ -175,12 +175,13 @@ export const useAuthStore = create<AuthStore>()(
 
             return tokenData;
           } catch (error) {
-            // If refresh fails, clear auth state
+            // If refresh fails, clear auth state and ensure loading is false
             set({
               user: null,
               accessToken: null,
               refreshToken: null,
               isAuthenticated: false,
+              loading: false,
             });
             delete api.defaults.headers.common['Authorization'];
             throw error;
@@ -257,9 +258,11 @@ api.interceptors.response.use(
     // Don't try to refresh tokens for auth-related requests
     const isAuthRequest = originalRequest.url?.includes('/v1/auth/login') || 
                          originalRequest.url?.includes('/v1/auth/register') ||
+                         originalRequest.url?.includes('/v1/auth/refresh') ||
                          originalRequest.url?.includes('/v1/auth/logout');
     
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
+      // If already refreshing, queue the request
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -275,24 +278,40 @@ api.interceptors.response.use(
 
       const state = useAuthStore.getState();
 
-      if (state.refreshToken) {
-        try {
+      try {
+        if (state.refreshToken) {
+          // Try to refresh the token
           await state.refreshAccessToken();
           processQueue(null);
           return api(originalRequest);
-        } catch (refreshError) {
-          processQueue(refreshError as Error);
-          state.logout();
-          // Redirect to login page when refresh fails
-          window.location.href = '/login';
-          return Promise.reject(refreshError);
-        } finally {
-          isRefreshing = false;
+        } else {
+          // No refresh token available
+          throw new Error('No refresh token available');
         }
-      } else {
-        state.logout();
-        // Redirect to login page when no refresh token
+      } catch (refreshError) {
+        // Token refresh failed, handle logout and redirect
+        processQueue(refreshError as Error);
+        
+        // Immediate cleanup without server requests
+        state.setLoading(false);
+        delete api.defaults.headers.common['Authorization'];
+        
+        // Clear auth state synchronously (avoiding server logout request)
+        useAuthStore.setState({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          loading: false,
+          error: null,
+        });
+        
+        // Redirect to login page
         window.location.href = '/login';
+        
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
