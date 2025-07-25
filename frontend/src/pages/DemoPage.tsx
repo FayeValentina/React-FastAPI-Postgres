@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Typography, Button, CircularProgress, Alert, Box } from "@mui/material";
 import MainLayout from "../components/Layout/MainLayout";
 import useApi from "../hooks/useApi";
-import { useAuthStore } from '../stores/auth-store';
+import { useAuth } from '../contexts/AuthContext';
 
 interface HelloResponse {
   message: string;
@@ -12,7 +12,7 @@ interface HelloResponse {
 
 const DemoPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuth();
   const [activeResponse, setActiveResponse] = useState<'hello' | 'world'>('hello');
   const { data: helloData, loading: helloLoading, error: helloError, fetchData: fetchHello } = useApi<HelloResponse>("/hello");
   const { data: worldData, loading: worldLoading, error: worldError, fetchData: fetchWorld } = useApi<HelloResponse>("/world");

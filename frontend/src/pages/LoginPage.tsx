@@ -14,12 +14,12 @@ import {
   CircularProgress,
   Container,
 } from '@mui/material';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuth } from '../contexts/AuthContext';
 import { LoginRequest } from '../types/auth';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login, loading, error, clearError, isAuthenticated } = useAuthStore();
+  const { login, loading, error, clearError, isAuthenticated } = useAuth();
   
   const [formData, setFormData] = useState<LoginRequest>({
     username: '',

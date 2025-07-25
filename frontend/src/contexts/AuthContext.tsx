@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
   register: (userData: RegisterRequest) => Promise<void>;
+  getCurrentUser: () => Promise<User>;
   clearError: () => void;
 }
 
@@ -45,6 +46,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     },
     logout: authStore.logout,
     register: authStore.register,
+    getCurrentUser: authStore.getCurrentUser,
     clearError: authStore.clearError,
   };
 

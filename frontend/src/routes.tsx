@@ -1,6 +1,8 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { TokenExpiryDialog } from './components/TokenExpiryDialog';
+import { useUIStore } from './stores/ui-store';
 import DemoPage from './pages/DemoPage';
 import UserPage from './pages/UserPage';
 import LoginPage from './pages/LoginPage';
@@ -9,55 +11,71 @@ import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 
 const AppRoutes: React.FC = () => {
+  const navigate = useNavigate();
+  const { tokenExpiryDialogOpen, hideTokenExpiryDialog } = useUIStore();
+
+  const handleTokenExpiryConfirm = () => {
+    hideTokenExpiryDialog();
+    navigate('/login');
+  };
+
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      
-      {/* 公共路由 */}
-      <Route path="/login" element={
-        <ProtectedRoute requireAuth={false}>
-          <LoginPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/register" element={
-        <ProtectedRoute requireAuth={false}>
-          <RegisterPage />
-        </ProtectedRoute>
-      } />
-      
-      {/* 受保护的路由 */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute>
-          <DashboardPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/profile" element={
-        <ProtectedRoute>
-          <ProfilePage />
-        </ProtectedRoute>
-      } />
-      <Route path="/user" element={
-        <ProtectedRoute>
-          <UserPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/demo" element={
-        <ProtectedRoute>
-          <DemoPage />
-        </ProtectedRoute>
-      } />
-      
-      {/* 管理员路由 (如果用户有is_superuser=true) */}
-      {/* <Route path="/admin" element={
-        <ProtectedRoute requiredRoles={['admin']}>
-          <AdminPage />
-        </ProtectedRoute>
-      } /> */}
-      
-      {/* 错误页面 */}
-      {/* <Route path="/unauthorized" element={<UnauthorizedPage />} />
-      <Route path="*" element={<NotFoundPage />} /> */}
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        
+        {/* 公共路由 */}
+        <Route path="/login" element={
+          <ProtectedRoute requireAuth={false}>
+            <LoginPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/register" element={
+          <ProtectedRoute requireAuth={false}>
+            <RegisterPage />
+          </ProtectedRoute>
+        } />
+        
+        {/* 受保护的路由 */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/user" element={
+          <ProtectedRoute>
+            <UserPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/demo" element={
+          <ProtectedRoute>
+            <DemoPage />
+          </ProtectedRoute>
+        } />
+        
+        {/* 管理员路由 (如果用户有is_superuser=true) */}
+        {/* <Route path="/admin" element={
+          <ProtectedRoute requiredRoles={['admin']}>
+            <AdminPage />
+          </ProtectedRoute>
+        } /> */}
+        
+        {/* 错误页面 */}
+        {/* <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        <Route path="*" element={<NotFoundPage />} /> */}
+      </Routes>
+
+      {/* Token过期确认对话框 */}
+      <TokenExpiryDialog
+        open={tokenExpiryDialogOpen}
+        onConfirm={handleTokenExpiryConfirm}
+      />
+    </>
   );
 };
 

@@ -9,6 +9,7 @@ import {
   AuthState 
 } from '../types/auth';
 import { extractAuthErrorMessage } from '../utils/errorHandler';
+import { useUIStore } from './ui-store';
 
 interface AuthStore extends AuthState {
   // Actions
@@ -306,8 +307,8 @@ api.interceptors.response.use(
           error: null,
         });
         
-        // Redirect to login page
-        window.location.href = '/login';
+        // Show token expiry dialog instead of direct redirect
+        useUIStore.getState().showTokenExpiryDialog();
         
         return Promise.reject(refreshError);
       } finally {

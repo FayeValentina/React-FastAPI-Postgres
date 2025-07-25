@@ -14,12 +14,12 @@ import {
   Add as AddIcon,
   List as ListIcon,
 } from '@mui/icons-material';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuth } from '../contexts/AuthContext';
 import MainLayout from '../components/Layout/MainLayout';
 
 const UserPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuth();
 
   useEffect(() => {
     if (!isAuthenticated) {
