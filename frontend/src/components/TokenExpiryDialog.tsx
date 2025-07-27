@@ -23,7 +23,6 @@ export const TokenExpiryDialog: React.FC<TokenExpiryDialogProps> = ({
     <Dialog
       open={open}
       disableEscapeKeyDown
-      disableBackdropClick
       maxWidth="sm"
       fullWidth
     >

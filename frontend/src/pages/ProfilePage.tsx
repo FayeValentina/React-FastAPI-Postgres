@@ -19,7 +19,7 @@ import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthStore } from '../stores/auth-store';
 import MainLayout from '../components/Layout/MainLayout';
 import api from '../services/api';
 
@@ -32,7 +32,7 @@ interface ProfileFormData {
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, getCurrentUser } = useAuth();
+  const { user, isAuthenticated, getCurrentUser } = useAuthStore();
   
   const [formData, setFormData] = useState<ProfileFormData>({
     username: '',

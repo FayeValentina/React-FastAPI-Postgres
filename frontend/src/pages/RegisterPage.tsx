@@ -13,12 +13,12 @@ import {
   Container,
   Grid,
 } from '@mui/material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthStore } from '../stores/auth-store';
 import { RegisterRequest } from '../types/auth';
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
-  const { register, loading, error, clearError, isAuthenticated } = useAuth();
+  const { register, loading, error, clearError, isAuthenticated } = useAuthStore();
   
   const [formData, setFormData] = useState<RegisterRequest>({
     email: '',

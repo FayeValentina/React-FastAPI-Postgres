@@ -15,12 +15,12 @@ import {
   Person as PersonIcon,
   ExitToApp as LogoutIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthStore } from '../stores/auth-store';
 import MainLayout from '../components/Layout/MainLayout';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout, error } = useAuth();
+  const { user, logout, error } = useAuthStore();
 
   const handleLogout = async () => {
     try {
