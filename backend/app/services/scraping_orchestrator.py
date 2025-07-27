@@ -6,9 +6,9 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.reddit_scraper_service import RedditScraperService
-from app.services.bot_config_service import BotConfigService
-from app.services.scrape_session_service import ScrapeSessionService
-from app.services.reddit_content_service import RedditContentService
+from app.crud.bot_config import BotConfigService
+from app.crud.scrape_session import ScrapeSessionService
+from app.crud.reddit_content import RedditContentService
 from app.models.bot_config import BotConfig
 
 logger = logging.getLogger(__name__)
