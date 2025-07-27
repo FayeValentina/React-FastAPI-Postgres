@@ -45,6 +45,12 @@ services:
     command: >
       bash -c "
         echo '等待数据库准备...' &&
+        echo '检查依赖同步状态...' &&
+        if ! poetry check; then
+          echo '更新poetry.lock文件...' &&
+          poetry lock &&
+          poetry install --no-interaction --no-ansi;
+        fi &&
         echo '检查数据库模型变化...' &&
         poetry run alembic revision --autogenerate -m 'Auto migration' 2>/dev/null || echo '没有检测到模型变化' &&
         echo '应用数据库迁移...' &&

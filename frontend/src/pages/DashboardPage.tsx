@@ -41,9 +41,6 @@ const DashboardPage: React.FC = () => {
     });
   };
 
-  // 不再需要认证检查和用户信息获取
-  // ProtectedRoute 和 AuthProvider 已经处理了
-
   return (
     <MainLayout>
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>

@@ -16,8 +16,12 @@ COPY pyproject.toml poetry.lock* ./
 # Configure poetry to not create a virtual environment
 RUN poetry config virtualenvs.create false
 
-# Install dependencies
-RUN poetry install --no-interaction --no-ansi
+# Generate lock file if it doesn't exist or is outdated, then install dependencies
+RUN if [ ! -f poetry.lock ] || ! poetry check; then \
+        echo "Generating/updating poetry.lock file..." && \
+        poetry lock; \
+    fi && \
+    poetry install --no-interaction --no-ansi
 
 # Copy application code
 COPY . .

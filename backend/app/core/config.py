@@ -111,6 +111,47 @@ class LoggingSettings(BaseSettings):
     )
 
 
+class RedditSettings(BaseSettings):
+    """Reddit API 配置"""
+    CLIENT_ID: str = ""
+    CLIENT_SECRET: str = ""
+    USER_AGENT: str = "Reddit-Scraper/1.0"
+    USERNAME: str = ""
+    PASSWORD: str = ""
+
+    model_config = SettingsConfigDict(
+        env_prefix="REDDIT_",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
+class TwitterSettings(BaseSettings):
+    """Twitter API 配置"""
+    API_KEY: str = ""
+    API_SECRET: str = ""
+    ACCESS_TOKEN: str = ""
+    ACCESS_TOKEN_SECRET: str = ""
+    BEARER_TOKEN: str = ""
+
+    model_config = SettingsConfigDict(
+        env_prefix="TWITTER_",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
+class AISettings(BaseSettings):
+    """AI 服务配置"""
+    GEMINI_API_KEY: str = ""
+
+    model_config = SettingsConfigDict(
+        env_prefix="AI_",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+
+
 class Settings(BaseSettings):
     """主配置类"""
     # 基本配置
@@ -129,6 +170,9 @@ class Settings(BaseSettings):
     security: SecuritySettings = SecuritySettings()
     cors: CORSSettings = CORSSettings()
     logging: LoggingSettings = LoggingSettings()
+    reddit: RedditSettings = RedditSettings()
+    twitter: TwitterSettings = TwitterSettings()
+    ai: AISettings = AISettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True

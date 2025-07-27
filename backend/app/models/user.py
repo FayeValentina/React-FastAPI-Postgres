@@ -7,7 +7,7 @@ from app.db.base_class import Base
 
 if TYPE_CHECKING:
     from .token import RefreshToken
-
+    from .bot_config import BotConfig
 
 class User(Base):
     __tablename__ = "users"
@@ -27,5 +27,6 @@ class User(Base):
         server_onupdate=func.now(),
     )
 
-    # 关联到刷新令牌
+    # 关联关系
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    bot_configs: Mapped[List["BotConfig"]] = relationship("BotConfig", back_populates="user", cascade="all, delete-orphan")

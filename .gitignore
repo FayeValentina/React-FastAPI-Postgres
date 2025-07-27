@@ -28,6 +28,8 @@ wheels/
 venv/
 ENV/
 
+# bot
+Reddit_scraper_bot/
 # Node / React
 node_modules/
 /frontend/dist
