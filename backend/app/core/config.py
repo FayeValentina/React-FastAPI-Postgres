@@ -40,7 +40,7 @@ class PostgresSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_",
-        env_file=".env",
+        env_file=[".env.local", ".env"],  # .env.local 优先级更高
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -59,8 +59,9 @@ class PgAdminSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGADMIN_",
         env_nested_delimiter="__",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -73,8 +74,9 @@ class SecuritySettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -93,8 +95,9 @@ class CORSSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="BACKEND_CORS_",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -106,8 +109,9 @@ class LoggingSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LOG_",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -121,8 +125,9 @@ class RedditSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="REDDIT_",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -136,8 +141,9 @@ class TwitterSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="TWITTER_",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -147,8 +153,9 @@ class AISettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="AI_",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
@@ -179,8 +186,9 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=".env",
-        env_file_encoding="utf-8"
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
     )
 
 
