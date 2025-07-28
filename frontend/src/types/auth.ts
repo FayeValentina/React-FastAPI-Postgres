@@ -45,6 +45,7 @@ export interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
+  lastUserFetch: number | null;
 }
 
 // 表单验证错误
