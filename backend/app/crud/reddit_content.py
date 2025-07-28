@@ -8,7 +8,7 @@ from app.models.reddit_content import RedditPost, RedditComment
 from app.models.scrape_session import ScrapeSession
 
 
-class RedditContentService:
+class CRUDRedditContent:
     """Reddit内容服务类，用于管理Reddit帖子和评论数据"""
     
     @staticmethod

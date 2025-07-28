@@ -9,7 +9,7 @@ from app.models.reddit_content import RedditPost, RedditComment
 from app.models.bot_config import BotConfig
 
 
-class ScrapeSessionService:
+class CRUDScrapeSession:
     """爬取会话服务类，用于管理爬取会话的生命周期"""
     
     @staticmethod

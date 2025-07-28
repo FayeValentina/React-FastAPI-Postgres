@@ -8,7 +8,7 @@ from app.models.scrape_session import ScrapeSession
 from app.models.user import User
 
 
-class BotConfigService:
+class CRUDBotConfig:
     """Bot配置服务类，用于管理爬虫机器人的配置"""
     
     @staticmethod

@@ -6,9 +6,9 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.reddit_scraper_service import RedditScraperService
-from app.crud.bot_config import BotConfigService
-from app.crud.scrape_session import ScrapeSessionService
-from app.crud.reddit_content import RedditContentService
+from app.crud.bot_config import CRUDBotConfig
+from app.crud.scrape_session import CRUDScrapeSession
+from app.crud.reddit_content import CRUDRedditContent
 from app.models.bot_config import BotConfig
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class ScrapingOrchestrator:
         """执行一个完整的爬取会话"""
         try:
             # 获取bot配置
-            bot_config = await BotConfigService.get_bot_config_by_id(db, bot_config_id)
+            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, bot_config_id)
             if not bot_config or not bot_config.is_active:
                 logger.error(f"Bot配置 {bot_config_id} 不存在或未激活")
                 return None
@@ -48,14 +48,14 @@ class ScrapingOrchestrator:
             }
             
             # 创建爬取会话
-            session = await ScrapeSessionService.create_scrape_session(
+            session = await CRUDScrapeSession.create_scrape_session(
                 db, bot_config_id, session_type, config_snapshot
             )
             
             logger.info(f"开始执行爬取会话 {session.id}")
             
             # 开始会话
-            await ScrapeSessionService.start_session(db, session.id)
+            await CRUDScrapeSession.start_session(db, session.id)
             
             try:
                 # 执行爬取
@@ -72,7 +72,7 @@ class ScrapingOrchestrator:
                 )
                 
                 # 完成会话
-                await ScrapeSessionService.complete_session(
+                await CRUDScrapeSession.complete_session(
                     db,
                     session.id,
                     total_posts_found=total_posts,
@@ -95,7 +95,7 @@ class ScrapingOrchestrator:
                 logger.error(f"爬取会话 {session.id} 执行失败: {e}")
                 
                 # 标记会话失败
-                await ScrapeSessionService.complete_session(
+                await CRUDScrapeSession.complete_session(
                     db,
                     session.id,
                     error_message=str(e),
@@ -150,7 +150,7 @@ class ScrapingOrchestrator:
         
         for subreddit_name, (posts_data, comments_data) in results.items():
             if posts_data or comments_data:
-                saved_posts, saved_comments = await RedditContentService.save_posts_and_comments(
+                saved_posts, saved_comments = await CRUDRedditContent.save_posts_and_comments(
                     db, session_id, posts_data, comments_data
                 )
                 total_posts += saved_posts
@@ -170,7 +170,7 @@ class ScrapingOrchestrator:
     ) -> List[Any]:
         """分析评论质量（可扩展AI分析功能）"""
         # 获取会话的评论
-        comments = await RedditContentService.get_comments_by_session(
+        comments = await CRUDRedditContent.get_comments_by_session(
             db, session_id
         )
         
@@ -232,7 +232,7 @@ class ScrapingOrchestrator:
         db: AsyncSession
     ) -> List[Dict[str, Any]]:
         """获取所有启用自动爬取的配置并执行"""
-        active_configs = await BotConfigService.get_active_configs_for_auto_scraping(db)
+        active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
         
         if not active_configs:
             logger.info("没有启用自动爬取的配置")
