@@ -7,6 +7,19 @@ import re
 from app.core.security import verify_token
 from app.core.config import settings
 
+# 默认排除认证的路径 - 集中定义避免重复
+DEFAULT_EXCLUDE_PATHS = [
+    "/api/v1/auth/login",
+    "/api/v1/auth/login/token",
+    "/api/v1/auth/register",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/verify-reset-token",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+]
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """JWT认证中间件"""
     
@@ -17,15 +30,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         exclude_path_regexes: Optional[List[str]] = None
     ):
         super().__init__(app)
-        # 默认排除认证的路径
-        self.exclude_paths = exclude_paths or [
-            "/api/v1/auth/login",
-            "/api/v1/auth/login/token",
-            "/api/v1/auth/register",
-            "/docs",
-            "/redoc",
-            "/openapi.json",
-        ]
+        # 使用默认排除认证的路径，如果没有自定义则使用默认值
+        self.exclude_paths = exclude_paths or DEFAULT_EXCLUDE_PATHS.copy()
         # 编译正则表达式用于排除路径
         self.exclude_path_regexes = []
         if exclude_path_regexes:

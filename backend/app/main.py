@@ -5,7 +5,7 @@ from app.api import router
 from app.core.config import settings
 from app.api.v1.dependencies.request_context import request_context_dependency
 from app.middleware.logging import RequestResponseLoggingMiddleware
-from app.middleware.auth import AuthMiddleware
+from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
@@ -58,14 +58,7 @@ app.add_middleware(
 # 这样可以确保在进行其他操作前验证用户身份
 app.add_middleware(
     AuthMiddleware,
-    exclude_paths=[
-        "/api/v1/auth/login",
-        "/api/v1/auth/login/token",
-        "/api/v1/auth/register",
-        "/docs",
-        "/redoc",
-        "/openapi.json",
-    ],
+    exclude_paths=DEFAULT_EXCLUDE_PATHS,  # 使用集中定义的排除路径列表
     exclude_path_regexes=[
         "^/api/v1/public/.*$",  # 所有公共API不需要认证
         "^/static/.*$"          # 静态文件不需要认证

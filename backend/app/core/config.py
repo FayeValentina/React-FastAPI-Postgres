@@ -159,6 +159,23 @@ class AISettings(BaseSettings):
     )
 
 
+class EmailSettings(BaseSettings):
+    """邮件服务配置"""
+    SMTP_SERVER: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    USERNAME: str = ""
+    PASSWORD: str = ""
+    FROM_EMAIL: str = ""
+    USE_TLS: bool = True
+
+    model_config = SettingsConfigDict(
+        env_prefix="EMAIL_",
+        env_file=[".env.local", ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
 class Settings(BaseSettings):
     """主配置类"""
     # 基本配置
@@ -180,6 +197,7 @@ class Settings(BaseSettings):
     reddit: RedditSettings = RedditSettings()
     twitter: TwitterSettings = TwitterSettings()
     ai: AISettings = AISettings()
+    email: EmailSettings = EmailSettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True

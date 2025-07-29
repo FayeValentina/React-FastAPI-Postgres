@@ -6,10 +6,17 @@ from app.schemas import (
     LoginRequest,
     UserCreate
 )
+from app.schemas.password_reset import (
+    PasswordResetRequest, 
+    PasswordResetConfirm, 
+    PasswordResetResponse
+)
 from app.core.config import settings
-from app.core.security import verify_password, create_token_pair, verify_token
+from app.core.security import verify_password, create_token_pair, verify_token, get_password_hash
 from app.crud.user import user as crud_user
 from app.crud.token import refresh_token as crud_refresh_token
+from app.crud.password_reset import password_reset as crud_password_reset
+from app.services.email_service import email_service
 from app.db.base import get_async_session
 from app.schemas.token import Token, RefreshTokenRequest, TokenRevocationRequest
 from app.schemas.user import User
@@ -203,4 +210,115 @@ async def read_users_me(
     
     此端点需要用户已通过JWT认证
     """
-    return current_user 
+    return current_user
+
+
+@router.post("/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password(
+    request_data: PasswordResetRequest,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> PasswordResetResponse:
+    """
+    发送密码重置邮件
+    
+    - **email**: 用户邮箱地址
+    """
+    try:
+        # 查找用户
+        user = await crud_user.get_by_email(db, email=request_data.email)
+        
+        # 即使用户不存在，也返回成功消息（安全考虑，不暴露用户是否存在）
+        if not user:
+            return PasswordResetResponse(
+                message="如果该邮箱地址存在于我们的系统中，您将收到密码重置邮件"
+            )
+        
+        # 创建密码重置令牌
+        reset_token = await crud_password_reset.create(db, user_id=user.id)
+        
+        # 发送邮件
+        email_sent = await email_service.send_password_reset_email(
+            to_email=user.email,
+            reset_token=reset_token.token,
+            user_name=user.full_name or user.username
+        )
+        
+        if not email_sent:
+            raise ValueError("邮件发送失败，请稍后重试")
+        
+        return PasswordResetResponse(
+            message="如果该邮箱地址存在于我们的系统中，您将收到密码重置邮件"
+        )
+        
+    except Exception as e:
+        raise handle_error(e)
+
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+async def reset_password(
+    reset_data: PasswordResetConfirm,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> PasswordResetResponse:
+    """
+    重置密码
+    
+    - **token**: 密码重置令牌
+    - **new_password**: 新密码
+    """
+    try:
+        # 验证令牌
+        reset_token = await crud_password_reset.get_by_token(db, token=reset_data.token)
+        
+        if not reset_token or not reset_token.is_valid:
+            raise ValueError("无效或已过期的重置令牌")
+        
+        # 获取用户
+        user = await crud_user.get(db, id=reset_token.user_id)
+        if not user:
+            raise ValueError("用户不存在")
+        
+        # 更新密码
+        hashed_password = get_password_hash(reset_data.new_password)
+        user.hashed_password = hashed_password
+        
+        # 标记令牌为已使用
+        await crud_password_reset.use_token(db, token=reset_data.token)
+        
+        # 吊销用户的所有刷新令牌（强制重新登录）
+        await crud_refresh_token.revoke_all_for_user(db, user_id=user.id)
+        
+        await db.commit()
+        
+        return PasswordResetResponse(
+            message="密码重置成功，请使用新密码登录"
+        )
+        
+    except Exception as e:
+        raise handle_error(e)
+
+
+@router.post("/verify-reset-token", response_model=PasswordResetResponse)
+async def verify_reset_token(
+    token: str,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> PasswordResetResponse:
+    """
+    验证密码重置令牌是否有效
+    
+    - **token**: 密码重置令牌
+    """
+    try:
+        reset_token = await crud_password_reset.get_by_token(db, token=token)
+        
+        if not reset_token or not reset_token.is_valid:
+            return PasswordResetResponse(
+                message="令牌无效或已过期",
+                success=False
+            )
+        
+        return PasswordResetResponse(
+            message="令牌有效"
+        )
+        
+    except Exception as e:
+        raise handle_error(e) 

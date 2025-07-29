@@ -10,7 +10,7 @@
 //     proxy: {
 //       '/api': {
 //         // Check if running in local development mode
-//         target: process.env.VITE_LOCAL_DEV === 'true' 
+//         target: process.env.IS_BACKEND_LOCAL_DEV === 'true' 
 //           ? `http://localhost:${process.env.BACKEND_PORT || 8000}`
 //           : `http://backend:${process.env.BACKEND_PORT || 8000}`,
 //         changeOrigin: true,
@@ -31,9 +31,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         // Check if running in local development mode
-        target: process.env.VITE_LOCAL_DEV === 'true' 
-          ? `http://localhost:${process.env.BACKEND_PORT || 8000}`
-          : `http://host.docker.internal:${process.env.BACKEND_PORT || 8000}`,
+        target: process.env.IS_BACKEND_LOCAL_DEV === 'true' 
+          ? `http://host.docker.internal:${process.env.BACKEND_PORT || 8000}`
+          : `http://backend:${process.env.BACKEND_PORT || 8000}`,
         changeOrigin: true,
         // Don't rewrite the path, keep /api prefix
       }

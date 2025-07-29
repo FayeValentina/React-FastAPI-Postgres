@@ -8,6 +8,7 @@ from app.db.base_class import Base
 if TYPE_CHECKING:
     from .token import RefreshToken
     from .bot_config import BotConfig
+    from .password_reset import PasswordReset
 
 class User(Base):
     __tablename__ = "users"
@@ -30,3 +31,6 @@ class User(Base):
     # 关联关系
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     bot_configs: Mapped[List["BotConfig"]] = relationship("BotConfig", back_populates="user", cascade="all, delete-orphan")
+    password_resets: Mapped[List["PasswordReset"]] = relationship(
+        "PasswordReset", back_populates="user", cascade="all, delete-orphan"
+    )

@@ -6,6 +6,7 @@ from app.db.base_class import Base
 # Import all models here for Alembic
 from app.models.user import User
 from app.models.token import RefreshToken
+from app.models.password_reset import PasswordReset
 
 # 创建异步数据库引擎
 engine = create_async_engine(
@@ -37,4 +38,4 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 # Re-export Base and all models for Alembic
-__all__ = ["Base", "User", "RefreshToken"]
+__all__ = ["Base", "User", "RefreshToken", "PasswordReset"]
