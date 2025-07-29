@@ -9,7 +9,49 @@ import {
   AuthState 
 } from '../types/auth';
 import { extractAuthErrorMessage } from '../utils/errorHandler';
-import { useUIStore } from './ui-store';
+
+// ==================== JWT TOKEN UTILITIES ====================
+
+/**
+ * Check if a JWT token has expired
+ * @param {string} token - JWT access token
+ * @returns {boolean} True if token is expired or invalid
+ */
+const isTokenExpired = (token: string): boolean => {
+  if (!token) return true;
+  try {
+    // Validate JWT format (should have 3 parts separated by dots)
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    
+    // Decode the payload (middle part of JWT)
+    const payload = JSON.parse(atob(parts[1]));
+    if (!payload.exp) return true;
+    
+    // Check if token has expired (exp is in seconds, Date.now() is in milliseconds)
+    return payload.exp * 1000 <= Date.now();
+  } catch {
+    // If any parsing fails, consider token invalid
+    return true;
+  }
+};
+
+/**
+ * Extract expiration time from a JWT token
+ * @param {string} token - JWT access token
+ * @returns {number | null} Expiration timestamp in milliseconds, or null if invalid
+ */
+const getTokenExpiryTime = (token: string): number | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.exp ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Extended AuthStore interface that includes both state and actions
@@ -78,7 +120,7 @@ export const useAuthStore = create<AuthStore>()(
          */
         isTokenValid: () => {
           const { accessToken } = get();
-          return accessToken && !isTokenExpired(accessToken);
+          return !!accessToken && !isTokenExpired(accessToken);
         },
 
         /**
@@ -205,43 +247,29 @@ export const useAuthStore = create<AuthStore>()(
         },
 
         /**
-         * Fetches current user data with intelligent caching
-         * Implements caching strategy to reduce unnecessary API calls
+         * Fetches current user data from server
+         * Always fetches fresh data to ensure consistency after updates
          * @returns {Promise<User>} Current user data
          */
         getCurrentUser: async () => {
-          const { accessToken, user: cachedUser, lastUserFetch } = get();
+          const { accessToken } = get();
           
           if (!accessToken) {
             throw new Error('No access token available');
           }
 
-          // Fix: Validate both token validity and cache freshness
-          // Issue: Original code only checked cache time, ignoring token expiration
-          const isTokenStillValid = get().isTokenValid();
-          const isCacheValid = cachedUser && 
-            lastUserFetch && 
-            Date.now() - lastUserFetch < 5 * 60 * 1000;  // 5-minute cache window
-
-          // Only return cached data if both token and cache are valid
-          // This prevents returning stale data with an expired token
-          if (isTokenStillValid && isCacheValid) {
-            return cachedUser;
-          }
-
           try {
-            // Fetch fresh user data from server
+            // Always fetch fresh user data from server
             const user = await api.get('/v1/auth/me') as User;
             
-            // Update cache with fresh data and timestamp
+            // Update stored user data
             set({ 
               user,
               lastUserFetch: Date.now()
             });
             return user;
           } catch (error) {
-            // Fix: Only clear state on confirmed authentication errors
-            // Issue: Any error would log out user, including network issues
+            // Only clear state on confirmed authentication errors
             if ((error as any)?.response?.status === 401) {
               get().clearAuthState();
             }
@@ -322,205 +350,3 @@ export const useAuthStore = create<AuthStore>()(
   )
 );
 
-// ==================== TOKEN REFRESH COORDINATION ====================
-
-/**
- * Global state for managing concurrent token refresh operations
- * Prevents multiple simultaneous refresh requests that could cause race conditions
- */
-// Fix: Simplified and unified refresh state management using only refreshPromise
-let refreshPromise: Promise<TokenResponse> | null = null;
-
-/**
- * Queue for requests that need to wait for token refresh completion
- * Stores resolve/reject functions to be called after refresh completes
- */
-let failedQueue: Array<{
-  resolve: (value?: unknown) => void;
-  reject: (error?: unknown) => void;
-}> = [];
-
-/**
- * Processes all queued requests after token refresh completes
- * Either resolves them with the new token or rejects them with the error
- * @param {Error | null} error - Refresh error, if any
- * @param {string | null} token - New access token, if successful
- */
-const processQueue = (error: Error | null, token: string | null = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(token);
-    }
-  });
-  
-  // Clear the queue after processing
-  failedQueue = [];
-};
-
-// ==================== JWT TOKEN UTILITIES ====================
-
-/**
- * Fix: Enhanced JWT token expiration checking with format validation
- * Safely checks if a JWT token has expired
- * @param {string} token - JWT access token
- * @returns {boolean} True if token is expired or invalid
- */
-const isTokenExpired = (token: string): boolean => {
-  if (!token) return true;
-  try {
-    // Validate JWT format (should have 3 parts separated by dots)
-    const parts = token.split('.');
-    if (parts.length !== 3) return true;
-    
-    // Decode the payload (middle part of JWT)
-    const payload = JSON.parse(atob(parts[1]));
-    if (!payload.exp) return true;
-    
-    // Check if token has expired (exp is in seconds, Date.now() is in milliseconds)
-    return payload.exp * 1000 <= Date.now();
-  } catch {
-    // If any parsing fails, consider token invalid
-    return true;
-  }
-};
-
-/**
- * Extracts the expiration time from a JWT token
- * @param {string} token - JWT access token
- * @returns {number | null} Expiration timestamp in milliseconds, or null if invalid
- */
-const getTokenExpiryTime = (token: string): number | null => {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    
-    const payload = JSON.parse(atob(parts[1]));
-    return payload.exp ? payload.exp * 1000 : null;
-  } catch {
-    return null;
-  }
-};
-
-// ==================== AXIOS INTERCEPTORS ====================
-
-/**
- * Fix: Enhanced request interceptor with proactive token refresh
- * Automatically adds Authorization headers and handles proactive token refresh
- */
-api.interceptors.request.use(
-  async (config) => {
-    const state = useAuthStore.getState();
-    
-    // Define endpoints that don't require authentication
-    const publicEndpoints = ['/v1/auth/login', '/v1/auth/register', '/v1/auth/refresh'];
-    const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
-    
-    // Only add auth headers for protected endpoints
-    if (!isPublicEndpoint && state.accessToken) {
-      // Fix: More accurate token expiration checking for proactive refresh
-      const timeRemaining = state.getTokenTimeRemaining();
-      
-      // Proactively refresh token if it expires within 5 minutes
-      // This prevents requests from failing due to token expiration
-      const shouldRefresh = timeRemaining > 0 && 
-                           timeRemaining < 5 * 60 * 1000 && 
-                           state.refreshToken && 
-                           !refreshPromise; // Prevent multiple concurrent refreshes
-      
-      if (shouldRefresh) {
-        try {
-          console.log('Token expiring soon, refreshing...');
-          refreshPromise = state.refreshAccessToken();
-          await refreshPromise;
-          refreshPromise = null;
-        } catch (error) {
-          console.error('Proactive token refresh failed:', error);
-          refreshPromise = null;
-          // Let the response interceptor handle the failure
-        }
-      }
-      
-      // Add current access token to request headers
-      config.headers.Authorization = `Bearer ${state.accessToken}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-/**
- * Fix: Enhanced response interceptor with better error handling and queue management
- * Handles 401 errors by attempting token refresh and retrying failed requests
- */
-api.interceptors.response.use(
-  // Success response handler - just return the data
-  (response) => response.data,
-  
-  // Error response handler
-  async (error) => {
-    const originalRequest = error.config;
-
-    // Don't attempt token refresh for authentication endpoints
-    // This prevents infinite loops when auth endpoints themselves fail
-    const isAuthRequest = originalRequest.url?.includes('/v1/auth/login') || 
-                         originalRequest.url?.includes('/v1/auth/register') ||
-                         originalRequest.url?.includes('/v1/auth/refresh') ||
-                         originalRequest.url?.includes('/v1/auth/logout');
-    
-    // Handle 401 Unauthorized errors for protected endpoints
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
-      // Fix: Unified refresh state management using refreshPromise
-      
-      // If a refresh is already in progress, queue this request
-      if (refreshPromise) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then(() => {
-          // Retry the original request with new token
-          return api(originalRequest);
-        }).catch((err: Error) => {
-          return Promise.reject(err);
-        });
-      }
-
-      // Mark this request as retried to prevent infinite loops
-      originalRequest._retry = true;
-      const state = useAuthStore.getState();
-
-      try {
-        if (state.refreshToken) {
-          // Start token refresh process
-          refreshPromise = state.refreshAccessToken();
-          await refreshPromise;
-          refreshPromise = null;
-          
-          // Process all queued requests with success
-          processQueue(null);
-          
-          // Retry the original request with new token
-          return api(originalRequest);
-        } else {
-          throw new Error('No refresh token available');
-        }
-      } catch (refreshError) {
-        // Token refresh failed - handle cleanup and user notification
-        refreshPromise = null;
-        processQueue(refreshError as Error);
-        
-        // Clear authentication state
-        state.clearAuthState();
-        
-        // Show user-friendly token expiry dialog instead of abrupt redirect
-        useUIStore.getState().showTokenExpiryDialog();
-        
-        return Promise.reject(refreshError);
-      }
-    }
-
-    // Log all API errors for debugging
-    console.error('API Error:', error);
-    return Promise.reject(error);
-  }
-);

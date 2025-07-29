@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -20,7 +20,20 @@ import MainLayout from '../components/Layout/MainLayout';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout, error } = useAuthStore();
+  const { user, logout, error, getCurrentUser } = useAuthStore();
+
+  // Fetch fresh user data when component mounts
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        await getCurrentUser();
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, [getCurrentUser]);
 
   const handleLogout = async () => {
     try {

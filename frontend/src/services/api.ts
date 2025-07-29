@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { setupInterceptors } from './interceptors';
 
 const api = axios.create({
   baseURL: '/api',
@@ -6,5 +7,8 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Setup interceptors for automatic token management
+setupInterceptors(api);
 
 export default api; 

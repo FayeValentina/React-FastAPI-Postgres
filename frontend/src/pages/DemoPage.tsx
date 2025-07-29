@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { Typography, Button, CircularProgress, Alert, Box } from "@mui/material";
 import MainLayout from "../components/Layout/MainLayout";
-import { useApiState } from '../stores/api-store';
+import { useApiStore } from '../stores/api-store';
 import { useAuthStore } from '../stores/auth-store';
 
 interface HelloResponse {
@@ -14,8 +14,19 @@ const DemoPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
   const [activeResponse, setActiveResponse] = useState<'hello' | 'world'>('hello');
-  const { data: helloData, loading: helloLoading, error: helloError, fetchData: fetchHello } = useApiState<HelloResponse>("/hello");
-  const { data: worldData, loading: worldLoading, error: worldError, fetchData: fetchWorld } = useApiState<HelloResponse>("/world");
+  
+  // Use useApiStore directly with selectors
+  const helloState = useApiStore(state => 
+    state.apiStates['/hello'] || { data: null, loading: false, error: null }
+  );
+  const worldState = useApiStore(state => 
+    state.apiStates['/world'] || { data: null, loading: false, error: null }
+  );
+  const fetchData = useApiStore(state => state.fetchData);
+  
+  // Extract data for easier usage
+  const { data: helloData, loading: helloLoading, error: helloError } = helloState;
+  const { data: worldData, loading: worldLoading, error: worldError } = worldState;
 
   // 认证检查
   useEffect(() => {
@@ -27,9 +38,9 @@ const DemoPage: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchHello();
+      fetchData<HelloResponse>('/hello');
     }
-  }, [fetchHello, isAuthenticated]);
+  }, [isAuthenticated, fetchData]);
 
   // 如果未认证，不渲染内容
   if (!isAuthenticated) {
@@ -38,19 +49,19 @@ const DemoPage: React.FC = () => {
 
   const handleHelloClick = () => {
     setActiveResponse('hello');
-    fetchHello();
+    fetchData<HelloResponse>('/hello');
   };
 
   const handleWorldClick = () => {
     setActiveResponse('world');
-    fetchWorld();
+    fetchData<HelloResponse>('/world');
   };
 
   const getCurrentMessage = () => {
     if (activeResponse === 'hello') {
-      return helloData?.message;
+      return (helloData as HelloResponse)?.message;
     }
-    return worldData?.message;
+    return (worldData as HelloResponse)?.message;
   };
 
   return (

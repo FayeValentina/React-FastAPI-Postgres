@@ -34,15 +34,20 @@ async def get_current_user_from_request(
         raise AuthenticationError("未认证")
     
     payload = request.state.user_payload
-    username = payload.get("sub")
-    if not username:
+    user_id_str = payload.get("sub")
+    if not user_id_str:
         raise AuthenticationError("无效的令牌载荷")
     
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        raise AuthenticationError("无效的用户ID格式")
+    
     # 获取用户信息
-    user = await crud_user.get_by_email(db, email=username)
+    user = await crud_user.get(db, id=user_id)
     if not user:
         # 记录这种情况，因为这意味着有效的令牌但用户不存在
-        logger.warning(f"有效令牌但找不到用户: {username}")
+        logger.warning(f"有效令牌但找不到用户ID: {user_id}")
         raise UserNotFoundError()
     
     # 将完整用户对象设置到请求状态中，以便后续使用

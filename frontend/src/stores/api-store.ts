@@ -93,15 +93,3 @@ export const useApiStore = create<ApiStore>()(
   )
 );
 
-// Helper hook to get specific API state
-export const useApiState = <T = unknown>(url: string): ApiState<T> & { fetchData: () => Promise<T> } => {
-  const store = useApiStore();
-  const apiState = store.apiStates[url] || { data: null, loading: false, error: null };
-  
-  return {
-    data: apiState.data as T | null,
-    loading: apiState.loading,
-    error: apiState.error,
-    fetchData: () => store.fetchData<T>(url),
-  };
-};

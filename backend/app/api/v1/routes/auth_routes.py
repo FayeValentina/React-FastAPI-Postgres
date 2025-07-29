@@ -45,7 +45,7 @@ async def login(
         
         # 创建令牌对
         access_token, refresh_token, expires_at = create_token_pair(
-            subject=user.email, 
+            subject=str(user.id), 
             remember_me=login_data.remember_me
         )
         
