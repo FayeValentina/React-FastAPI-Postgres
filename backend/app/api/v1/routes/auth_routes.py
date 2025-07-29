@@ -281,6 +281,9 @@ async def reset_password(
         hashed_password = get_password_hash(reset_data.new_password)
         user.hashed_password = hashed_password
         
+        # 将修改后的用户对象添加到会话中（确保 SQLAlchemy 知道对象已被修改）
+        db.add(user)
+        
         # 标记令牌为已使用
         await crud_password_reset.use_token(db, token=reset_data.token)
         
@@ -288,6 +291,7 @@ async def reset_password(
         await crud_refresh_token.revoke_all_for_user(db, user_id=user.id)
         
         await db.commit()
+        await db.refresh(user)
         
         return PasswordResetResponse(
             message="密码重置成功，请使用新密码登录"
