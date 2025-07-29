@@ -52,3 +52,20 @@ export interface AuthState {
 export interface FormErrors {
   [key: string]: string[];
 }
+
+// 忘记密码请求
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+// 重置密码请求
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
+}
+
+// 密码重置响应
+export interface PasswordResetResponse {
+  message: string;
+  success?: boolean;
+}

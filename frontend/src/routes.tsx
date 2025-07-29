@@ -9,6 +9,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +35,18 @@ const AppRoutes: React.FC = () => {
         <Route path="/register" element={
           <ProtectedRoute requireAuth={false}>
             <RegisterPage />
+          </ProtectedRoute>
+        } />
+        
+        {/* 密码重置相关路由 */}
+        <Route path="/forgot-password" element={
+          <ProtectedRoute requireAuth={false}>
+            <ForgotPasswordPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/reset-password" element={
+          <ProtectedRoute requireAuth={false}>
+            <ResetPasswordPage />
           </ProtectedRoute>
         } />
         

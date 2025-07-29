@@ -183,6 +183,12 @@ const LoginPage: React.FC = () => {
                     立即注册
                   </Link>
                 </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  忘记密码？{' '}
+                  <Link component={RouterLink} to="/forgot-password" underline="hover">
+                    点击重置
+                  </Link>
+                </Typography>
               </Box>
             </Box>
           </CardContent>
