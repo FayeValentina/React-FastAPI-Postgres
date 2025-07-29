@@ -2,7 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { TokenExpiryDialog } from './components/TokenExpiryDialog';
-import { useUIStore } from './stores/ui-store';
+import { useUIStore } from './stores/index';
 import DemoPage from './pages/DemoPage';
 import UserPage from './pages/UserPage';
 import LoginPage from './pages/LoginPage';
