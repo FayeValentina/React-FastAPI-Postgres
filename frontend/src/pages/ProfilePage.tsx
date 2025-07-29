@@ -20,8 +20,8 @@ import {
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../stores/auth-store';
+import { useApiStore } from '../stores/api-store';
 import MainLayout from '../components/Layout/MainLayout';
-import api from '../services/api';
 
 interface ProfileFormData {
   username: string;
@@ -33,6 +33,7 @@ interface ProfileFormData {
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, getCurrentUser } = useAuthStore();
+  const { updateData, getApiState } = useApiStore();
   
   const [formData, setFormData] = useState<ProfileFormData>({
     username: '',
@@ -41,10 +42,12 @@ const ProfilePage: React.FC = () => {
     age: '',
   });
   
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  
+  // Get API state for profile updates
+  const updateApiUrl = user ? `/v1/users/${user.id}` : '';
+  const { loading, error: apiError } = getApiState(updateApiUrl);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -115,8 +118,7 @@ const ProfilePage: React.FC = () => {
       }));
     }
 
-    // Clear messages
-    setError(null);
+    // Clear success message
     setSuccess(null);
   };
 
@@ -127,45 +129,35 @@ const ProfilePage: React.FC = () => {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (!user) {
+      return;
+    }
+
     setSuccess(null);
 
     try {
       // Prepare update data
-      const updateData: any = {
+      const updatePayload: Record<string, unknown> = {
         username: formData.username,
         email: formData.email,
         full_name: formData.full_name || null,
       };
 
       if (formData.age !== '') {
-        updateData.age = formData.age;
+        updatePayload.age = formData.age;
       }
 
-      // Update user profile
-      await api.patch(`/v1/users/${user?.id}`, updateData);
+      // Update user profile using api-store
+      await updateData(`/v1/users/${user.id}`, updatePayload);
       
       // Refresh user data
       await getCurrentUser();
       
       setSuccess('个人资料更新成功！');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Profile update failed:', error);
-      
-      // 401错误由axios拦截器处理，这里只处理其他错误
-      if (error.response?.status !== 401) {
-        if (error.response?.data?.detail) {
-          setError(error.response.data.detail);
-        } else if (error.response?.data?.message) {
-          setError(error.response.data.message);
-        } else {
-          setError('更新失败，请稍后重试');
-        }
-      }
+      // Error is already handled by api-store, no need to set local error state
       // 401错误会被axios拦截器自动处理（token刷新或重定向登录）
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -222,9 +214,9 @@ const ProfilePage: React.FC = () => {
                   
                   <Divider sx={{ mb: 3 }} />
 
-                  {error && (
+                  {apiError && (
                     <Alert severity="error" sx={{ mb: 2 }}>
-                      {error}
+                      {apiError.message || '更新失败，请稍后重试'}
                     </Alert>
                   )}
 

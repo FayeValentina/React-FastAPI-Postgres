@@ -18,8 +18,15 @@ interface ApiStore {
   setError: (url: string, error: Error | null) => void;
   clearState: (url: string) => void;
   
-  // API call wrapper
+  // API call wrappers
   fetchData: <T>(url: string) => Promise<T>;
+  postData: <T>(url: string, data: unknown) => Promise<T>;
+  patchData: <T>(url: string, data: unknown) => Promise<T>;
+  deleteData: <T>(url: string) => Promise<T>;
+  
+  // Convenience methods
+  updateData: <T>(url: string, data: unknown) => Promise<T>;
+  getApiState: (url: string) => ApiState;
 }
 
 export const useApiStore = create<ApiStore>()(
@@ -85,6 +92,63 @@ export const useApiStore = create<ApiStore>()(
           setError(url, apiError);
           throw apiError;
         }
+      },
+      
+      postData: async <T>(url: string, data: unknown): Promise<T> => {
+        const { setLoading, setData, setError } = get();
+        
+        setLoading(url, true);
+        
+        try {
+          const response = await api.post<T>(url, data);
+          setData(url, response);
+          return response as T;
+        } catch (error) {
+          const apiError = error as Error;
+          setError(url, apiError);
+          throw apiError;
+        }
+      },
+      
+      patchData: async <T>(url: string, data: unknown): Promise<T> => {
+        const { setLoading, setData, setError } = get();
+        
+        setLoading(url, true);
+        
+        try {
+          const response = await api.patch<T>(url, data);
+          setData(url, response);
+          return response as T;
+        } catch (error) {
+          const apiError = error as Error;
+          setError(url, apiError);
+          throw apiError;
+        }
+      },
+      
+      deleteData: async <T>(url: string): Promise<T> => {
+        const { setLoading, setData, setError } = get();
+        
+        setLoading(url, true);
+        
+        try {
+          const response = await api.delete<T>(url);
+          setData(url, response);
+          return response as T;
+        } catch (error) {
+          const apiError = error as Error;
+          setError(url, apiError);
+          throw apiError;
+        }
+      },
+      
+      updateData: async <T>(url: string, data: unknown): Promise<T> => {
+        return get().patchData<T>(url, data);
+      },
+      
+      getApiState: (url: string): ApiState => {
+        const state = get().apiStates[url];
+        return state || { data: null, loading: false, error: null };
       },
     }),
     {
