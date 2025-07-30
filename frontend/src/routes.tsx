@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import BotManagementPage from './pages/BotManagementPage';
+import SessionManagementPage from './pages/SessionManagementPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -78,6 +79,11 @@ const AppRoutes: React.FC = () => {
         <Route path="/scraper/bots" element={
           <ProtectedRoute>
             <BotManagementPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/scraper/sessions" element={
+          <ProtectedRoute>
+            <SessionManagementPage />
           </ProtectedRoute>
         } />
         

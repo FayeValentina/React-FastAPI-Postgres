@@ -113,13 +113,49 @@ class CRUDScrapeSession:
         db: AsyncSession,
         bot_config_id: int,
         limit: int = 50,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        session_type: Optional[str] = None
     ) -> List[ScrapeSession]:
         """获取指定配置的爬取会话列表"""
         query = select(ScrapeSession).where(ScrapeSession.bot_config_id == bot_config_id)
         
         if status:
             query = query.where(ScrapeSession.status == status)
+            
+        if session_type:
+            query = query.where(ScrapeSession.session_type == session_type)
+        
+        query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
+        
+        result = await db.execute(query)
+        return result.scalars().all()
+    
+    @staticmethod
+    async def get_sessions_by_user(
+        db: AsyncSession,
+        user_id: int,
+        limit: int = 50,
+        status: Optional[str] = None,
+        session_type: Optional[str] = None
+    ) -> List[ScrapeSession]:
+        """获取指定用户的所有爬取会话列表"""
+        # 先获取用户的bot配置IDs
+        config_result = await db.execute(
+            select(BotConfig.id).where(BotConfig.user_id == user_id)
+        )
+        config_ids = [row[0] for row in config_result.all()]
+        
+        if not config_ids:
+            return []
+        
+        # 构建查询
+        query = select(ScrapeSession).where(ScrapeSession.bot_config_id.in_(config_ids))
+        
+        if status:
+            query = query.where(ScrapeSession.status == status)
+            
+        if session_type:
+            query = query.where(ScrapeSession.session_type == session_type)
         
         query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
         

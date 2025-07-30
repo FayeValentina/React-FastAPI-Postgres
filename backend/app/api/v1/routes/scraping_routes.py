@@ -113,33 +113,23 @@ async def get_scrape_sessions(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     status: str = None,
+    session_type: str = None,
     limit: int = 50
 ) -> List[ScrapeSessionResponse]:
     """
     获取当前用户的爬取会话列表
     
     - status: 可选，按状态过滤
+    - session_type: 可选，按会话类型过滤
     - limit: 结果数量限制
     """
     try:
-        # 获取用户的所有bot配置
-        user_configs = await CRUDBotConfig.get_user_bot_configs(db, current_user.id)
+        # 直接获取用户的所有会话
+        sessions = await CRUDScrapeSession.get_sessions_by_user(
+            db, current_user.id, limit=limit, status=status, session_type=session_type
+        )
         
-        if not user_configs:
-            return []
-        
-        # 获取所有配置的会话
-        all_sessions = []
-        for config in user_configs:
-            sessions = await CRUDScrapeSession.get_sessions_by_config(
-                db, config.id, limit=limit, status=status
-            )
-            all_sessions.extend(sessions)
-        
-        # 按创建时间降序排序
-        all_sessions.sort(key=lambda x: x.created_at, reverse=True)
-        
-        return all_sessions[:limit]
+        return sessions
         
     except Exception as e:
         raise handle_error(e)

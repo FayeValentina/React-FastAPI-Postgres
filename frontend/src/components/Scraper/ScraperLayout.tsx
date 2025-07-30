@@ -38,7 +38,7 @@ const menuItems = [
     text: '会话管理',
     icon: <SessionIcon />,
     path: '/scraper/sessions',
-    implemented: false,
+    implemented: true,
   },
   {
     text: '内容管理',
