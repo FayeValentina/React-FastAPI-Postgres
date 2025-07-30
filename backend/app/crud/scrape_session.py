@@ -91,32 +91,6 @@ class CRUDScrapeSession:
         return session
     
     @staticmethod
-    async def cancel_session(
-        db: AsyncSession,
-        session_id: int,
-        error_message: str = "Session cancelled"
-    ) -> Optional[ScrapeSession]:
-        """取消爬取会话"""
-        result = await db.execute(
-            select(ScrapeSession).where(ScrapeSession.id == session_id)
-        )
-        session = result.scalar_one_or_none()
-        
-        if not session:
-            return None
-        
-        session.status = 'cancelled'
-        session.completed_at = datetime.utcnow()
-        session.error_message = error_message
-        
-        if session.started_at:
-            session.duration_seconds = int((datetime.utcnow() - session.started_at).total_seconds())
-        
-        await db.commit()
-        await db.refresh(session)
-        return session
-    
-    @staticmethod
     async def get_session_by_id(
         db: AsyncSession,
         session_id: int,

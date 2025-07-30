@@ -19,6 +19,71 @@ class ScrapingOrchestrator:
     
     def __init__(self):
         self.reddit_scraper = RedditScraperService()
+    
+    async def execute_scraping_session_with_existing(
+        self,
+        db: AsyncSession,
+        session_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """使用现有会话执行爬取流程"""
+        try:
+            # 获取现有会话
+            session = await CRUDScrapeSession.get_session_by_id(db, session_id)
+            if not session:
+                logger.error(f"爬取会话 {session_id} 不存在")
+                return None
+            
+            # 获取bot配置
+            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
+            if not bot_config or not bot_config.is_active:
+                logger.error(f"Bot配置 {session.bot_config_id} 不存在或未激活")
+                return None
+            
+            logger.info(f"开始执行爬取会话 {session.id}")
+            
+            # 开始会话
+            await CRUDScrapeSession.start_session(db, session.id)
+            
+            try:
+                # 执行爬取
+                results = await self._execute_scraping(bot_config)
+                
+                # 保存结果到数据库
+                total_posts, total_comments = await self._save_scraping_results(
+                    db, session.id, results
+                )
+                
+                # 分析质量评论
+                quality_comments_list = await self._analyze_comment_quality(
+                    db, session.id, bot_config
+                )
+                quality_comments_count = len(quality_comments_list) if quality_comments_list else 0
+                
+                # 完成会话
+                await CRUDScrapeSession.complete_session(
+                    db, session.id, total_posts, total_comments, quality_comments_count
+                )
+                
+                logger.info(f"爬取会话 {session.id} 完成")
+                
+                return {
+                    'session_id': session.id,
+                    'total_posts': total_posts,
+                    'total_comments': total_comments,
+                    'quality_comments': quality_comments_count
+                }
+                
+            except Exception as e:
+                # 标记会话失败
+                await CRUDScrapeSession.complete_session(
+                    db, session.id, error_message=f"爬取失败: {str(e)}"
+                )
+                logger.error(f"爬取会话 {session.id} 失败: {e}")
+                raise e
+                
+        except Exception as e:
+            logger.error(f"执行爬取会话失败: {e}")
+            return None
         
     async def execute_scraping_session(
         self,
@@ -42,7 +107,7 @@ class ScrapingOrchestrator:
                 'sort_method': bot_config.sort_method,
                 'time_filter': bot_config.time_filter,
                 'enable_ai_filter': bot_config.enable_ai_filter,
-                'ai_confidence_threshold': bot_config.ai_confidence_threshold,
+                'ai_confidence_threshold': float(bot_config.ai_confidence_threshold),
                 'min_comment_length': bot_config.min_comment_length,
                 'max_comment_length': bot_config.max_comment_length
             }

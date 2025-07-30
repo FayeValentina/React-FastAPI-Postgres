@@ -54,27 +54,42 @@ async def trigger_scraping(
                 detail="该配置已有正在运行的爬取会话"
             )
         
+        # 先创建初始会话记录（包含config_snapshot）
+        # 获取bot配置来创建config_snapshot
+        config_snapshot = {
+            'target_subreddits': bot_config.target_subreddits,
+            'posts_per_subreddit': bot_config.posts_per_subreddit,
+            'comments_per_post': bot_config.comments_per_post,
+            'sort_method': bot_config.sort_method,
+            'time_filter': bot_config.time_filter,
+            'enable_ai_filter': bot_config.enable_ai_filter,
+            'ai_confidence_threshold': float(bot_config.ai_confidence_threshold),
+            'min_comment_length': bot_config.min_comment_length,
+            'max_comment_length': bot_config.max_comment_length
+        }
+        
+        session = await CRUDScrapeSession.create_scrape_session(
+            db, config_id, 'manual', config_snapshot
+        )
+        
         # 创建爬取编排器并在后台执行
         orchestrator = ScrapingOrchestrator()
         
         # 在后台任务中执行爬取
-        def execute_scraping_task():
-            import asyncio
+        async def execute_scraping_task():
             try:
-                # 创建新的事件循环来运行异步任务
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # 在新的数据库会话中执行爬取
-                async def run_scraping():
-                    async with get_async_session() as session:
-                        return await orchestrator.execute_scraping_session(
-                            session, config_id, 'manual'
+                # 直接使用数据库会话创建器，而不是依赖注入的生成器
+                from app.db.base import AsyncSessionLocal
+                async with AsyncSessionLocal() as session_db:
+                    try:
+                        result = await orchestrator.execute_scraping_session_with_existing(
+                            session_db, session.id
                         )
-                
-                result = loop.run_until_complete(run_scraping())
-                loop.close()
-                return result
+                        await session_db.commit()
+                        return result
+                    except Exception as e:
+                        await session_db.rollback()
+                        raise e
             except Exception as e:
                 # 记录错误但不影响响应
                 import logging
@@ -82,11 +97,6 @@ async def trigger_scraping(
                 logger.error(f"后台爬取任务失败: {e}")
         
         background_tasks.add_task(execute_scraping_task)
-        
-        # 创建初始会话记录
-        session = await CRUDScrapeSession.create_scrape_session(
-            db, config_id, 'manual'
-        )
         
         return ScrapeTriggerResponse(
             session_id=session.id,
@@ -167,53 +177,6 @@ async def get_scrape_session(
     except Exception as e:
         raise handle_error(e)
 
-
-@router.post("/scrape-sessions/{session_id}/cancel", response_model=ScrapeSessionResponse)
-async def cancel_scrape_session(
-    session_id: int,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)]
-) -> ScrapeSessionResponse:
-    """
-    取消正在运行的爬取会话
-    
-    只能取消自己配置的会话，除非是超级用户
-    """
-    try:
-        session = await CRUDScrapeSession.get_session_by_id(db, session_id)
-        
-        if not session:
-            raise HTTPException(status_code=404, detail="爬取会话不存在")
-        
-        # 获取关联的bot配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="关联的Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限操作此会话")
-        
-        # 只能取消运行中的会话
-        if session.status != 'running':
-            raise HTTPException(
-                status_code=400, 
-                detail=f"无法取消状态为'{session.status}'的会话"
-            )
-        
-        # 取消会话
-        cancelled_session = await CRUDScrapeSession.cancel_session(
-            db, session_id, "用户手动取消"
-        )
-        
-        if not cancelled_session:
-            raise HTTPException(status_code=500, detail="取消会话失败")
-        
-        return cancelled_session
-        
-    except Exception as e:
-        raise handle_error(e)
 
 
 @router.get("/scrape-sessions/stats", response_model=ScrapeSessionStats)

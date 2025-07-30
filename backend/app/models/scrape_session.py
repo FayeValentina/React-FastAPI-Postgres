@@ -23,7 +23,7 @@ class ScrapeSession(Base):
     
     # 会话信息
     session_type: Mapped[str] = mapped_column(String(20), default='manual')  # manual, scheduled, auto
-    status: Mapped[str] = mapped_column(String(20), default='pending')  # pending, running, completed, failed, cancelled
+    status: Mapped[str] = mapped_column(String(20), default='pending')  # pending, running, completed, failed
     
     # 执行时间
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
