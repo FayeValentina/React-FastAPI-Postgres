@@ -21,6 +21,53 @@ class ScrapingOrchestrator:
     def __init__(self):
         self.reddit_scraper = RedditScraperService()
     
+    async def execute_auto_scraping(self, db: AsyncSession) -> List[Dict[str, Any]]:
+        """执行自动爬取任务"""
+        active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
+        
+        if not active_configs:
+            logger.info("没有启用自动爬取的配置")
+            return []
+        
+        config_ids = [config.id for config in active_configs]
+        logger.info(f"找到 {len(config_ids)} 个启用自动爬取的配置")
+        
+        return await self.execute_multiple_configs(db, config_ids, 'auto')
+
+    async def execute_multiple_configs(
+        self,
+        db: AsyncSession,
+        config_ids: List[int],
+        session_type: str = 'batch'
+    ) -> List[Dict[str, Any]]:
+        """并发执行多个配置的爬取"""
+        tasks = []
+        semaphore = asyncio.Semaphore(3)  # 限制并发数
+        
+        async def execute_with_semaphore(config_id: int):
+            async with semaphore:
+                return await self.execute_scraping_session(db, config_id, session_type)
+        
+        for config_id in config_ids:
+            task = execute_with_semaphore(config_id)
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 整理结果
+        formatted_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                formatted_results.append({
+                    'config_id': config_ids[i],
+                    'status': 'error',
+                    'error': str(result)
+                })
+            else:
+                formatted_results.append(result)
+        
+        return formatted_results
+    
     async def execute_scraping_session(
         self,
         db: AsyncSession,
@@ -245,53 +292,6 @@ class ScrapingOrchestrator:
         #     quality_comments = await self._ai_filter_comments(quality_comments, bot_config)
         
         return quality_comments
-    
-    async def execute_multiple_configs(
-        self,
-        db: AsyncSession,
-        config_ids: List[int],
-        session_type: str = 'batch'
-    ) -> List[Dict[str, Any]]:
-        """并发执行多个配置的爬取"""
-        tasks = []
-        semaphore = asyncio.Semaphore(3)  # 限制并发数
-        
-        async def execute_with_semaphore(config_id: int):
-            async with semaphore:
-                return await self.execute_scraping_session(db, config_id, session_type)
-        
-        for config_id in config_ids:
-            task = execute_with_semaphore(config_id)
-            tasks.append(task)
-        
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # 整理结果
-        formatted_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                formatted_results.append({
-                    'config_id': config_ids[i],
-                    'status': 'error',
-                    'error': str(result)
-                })
-            else:
-                formatted_results.append(result)
-        
-        return formatted_results
-    
-    async def execute_auto_scraping(self, db: AsyncSession) -> List[Dict[str, Any]]:
-        """执行自动爬取任务"""
-        active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
-        
-        if not active_configs:
-            logger.info("没有启用自动爬取的配置")
-            return []
-        
-        config_ids = [config.id for config in active_configs]
-        logger.info(f"找到 {len(config_ids)} 个启用自动爬取的配置")
-        
-        return await self.execute_multiple_configs(db, config_ids, 'auto')
     
     async def cleanup_resources(self):
         """清理资源"""

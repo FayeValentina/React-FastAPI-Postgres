@@ -19,6 +19,63 @@ class RedditScraperService:
         self.reddit = None
         self._session_lock = asyncio.Lock()
         
+    async def scrape_multiple_subreddits_concurrent(
+        self, 
+        subreddit_configs: List[Dict[str, Any]]
+    ) -> Dict[str, Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
+        """
+        并发爬取多个subreddit
+        
+        Args:
+            subreddit_configs: 包含subreddit配置的列表
+                每个配置包含: {
+                    'name': 'subreddit名称',
+                    'limit': 帖子数量,
+                    'sort_by': 排序方式,
+                    'comments_limit': 评论数量,
+                    'time_filter': 时间筛选
+                }
+        
+        Returns:
+            Dict[subreddit_name: (posts_data, comments_data)]
+        """
+        logger.info(f"开始并发爬取 {len(subreddit_configs)} 个subreddit")
+        
+        # 创建并发任务
+        tasks = []
+        semaphore = asyncio.Semaphore(5)  # 限制同时爬取的subreddit数量
+        
+        async def scrape_with_semaphore(config: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+            async with semaphore:
+                return await self.scrape_posts_with_details(
+                    subreddit_name=config['name'],
+                    limit=config.get('limit', 50),
+                    sort_by=config.get('sort_by', 'hot'),
+                    comments_limit=config.get('comments_limit', 20),
+                    time_filter=config.get('time_filter', 'all')
+                )
+        
+        for config in subreddit_configs:
+            task = scrape_with_semaphore(config)
+            tasks.append(task)
+        
+        # 并发执行
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 整理结果
+        scraped_data = {}
+        for i, result in enumerate(results):
+            subreddit_name = subreddit_configs[i]['name']
+            
+            if isinstance(result, Exception):
+                logger.error(f"爬取 r/{subreddit_name} 时出错: {result}")
+                scraped_data[subreddit_name] = ([], [])
+            else:
+                scraped_data[subreddit_name] = result
+        
+        logger.info("完成所有subreddit的并发爬取")
+        return scraped_data
+    
     async def _get_reddit_instance(self):
         """获取Reddit实例，使用单例模式"""
         if self.reddit is None:
@@ -247,63 +304,6 @@ class RedditScraperService:
         except Exception as e:
             logger.error(f"爬取帖子 {post_id} 的评论时出错: {e}")
             return []
-    
-    async def scrape_multiple_subreddits_concurrent(
-        self, 
-        subreddit_configs: List[Dict[str, Any]]
-    ) -> Dict[str, Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
-        """
-        并发爬取多个subreddit
-        
-        Args:
-            subreddit_configs: 包含subreddit配置的列表
-                每个配置包含: {
-                    'name': 'subreddit名称',
-                    'limit': 帖子数量,
-                    'sort_by': 排序方式,
-                    'comments_limit': 评论数量,
-                    'time_filter': 时间筛选
-                }
-        
-        Returns:
-            Dict[subreddit_name: (posts_data, comments_data)]
-        """
-        logger.info(f"开始并发爬取 {len(subreddit_configs)} 个subreddit")
-        
-        # 创建并发任务
-        tasks = []
-        semaphore = asyncio.Semaphore(5)  # 限制同时爬取的subreddit数量
-        
-        async def scrape_with_semaphore(config: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-            async with semaphore:
-                return await self.scrape_posts_with_details(
-                    subreddit_name=config['name'],
-                    limit=config.get('limit', 50),
-                    sort_by=config.get('sort_by', 'hot'),
-                    comments_limit=config.get('comments_limit', 20),
-                    time_filter=config.get('time_filter', 'all')
-                )
-        
-        for config in subreddit_configs:
-            task = scrape_with_semaphore(config)
-            tasks.append(task)
-        
-        # 并发执行
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # 整理结果
-        scraped_data = {}
-        for i, result in enumerate(results):
-            subreddit_name = subreddit_configs[i]['name']
-            
-            if isinstance(result, Exception):
-                logger.error(f"爬取 r/{subreddit_name} 时出错: {result}")
-                scraped_data[subreddit_name] = ([], [])
-            else:
-                scraped_data[subreddit_name] = result
-        
-        logger.info("完成所有subreddit的并发爬取")
-        return scraped_data
     
     async def close(self):
         """关闭Reddit连接"""
