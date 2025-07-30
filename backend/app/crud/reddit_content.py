@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, or_
+from sqlalchemy import select, and_, func, or_, delete
 from sqlalchemy.orm import selectinload
 
 from app.models.reddit_content import RedditPost, RedditComment
@@ -126,28 +126,6 @@ class CRUDRedditContent:
         )
         return result.scalars().all()
     
-    @staticmethod
-    async def get_top_comments_by_subreddit(
-        db: AsyncSession,
-        subreddit: str,
-        days: int = 7,
-        limit: int = 50
-    ) -> List[RedditComment]:
-        """获取指定subreddit最近N天的热门评论"""
-        start_date = datetime.utcnow() - timedelta(days=days)
-        
-        result = await db.execute(
-            select(RedditComment)
-            .where(
-                and_(
-                    RedditComment.subreddit == subreddit,
-                    RedditComment.scraped_at >= start_date
-                )
-            )
-            .order_by(RedditComment.score.desc())
-            .limit(limit)
-        )
-        return result.scalars().all()
     
     @staticmethod
     async def search_comments(
@@ -265,41 +243,6 @@ class CRUDRedditContent:
             ]
         }
     
-    @staticmethod
-    async def get_content_by_score_range(
-        db: AsyncSession,
-        min_score: int,
-        max_score: Optional[int] = None,
-        content_type: str = 'comment',  # 'comment' or 'post'
-        subreddits: Optional[List[str]] = None,
-        limit: int = 100
-    ) -> List:
-        """根据分数范围获取内容"""
-        if content_type == 'post':
-            model = RedditPost
-            score_field = RedditPost.score
-        else:
-            model = RedditComment
-            score_field = RedditComment.score
-        
-        conditions = [score_field >= min_score]
-        
-        if max_score is not None:
-            conditions.append(score_field <= max_score)
-        
-        if subreddits:
-            if content_type == 'post':
-                conditions.append(RedditPost.subreddit.in_(subreddits))
-            else:
-                conditions.append(RedditComment.subreddit.in_(subreddits))
-        
-        result = await db.execute(
-            select(model)
-            .where(and_(*conditions))
-            .order_by(score_field.desc())
-            .limit(limit)
-        )
-        return result.scalars().all()
     
     @staticmethod
     async def delete_old_content(
@@ -318,7 +261,7 @@ class CRUDRedditContent:
         
         if comment_ids:
             await db.execute(
-                select(RedditComment)
+                delete(RedditComment)
                 .where(RedditComment.id.in_(comment_ids))
             )
         
@@ -331,7 +274,7 @@ class CRUDRedditContent:
         
         if post_ids:
             await db.execute(
-                select(RedditPost)
+                delete(RedditPost)
                 .where(RedditPost.id.in_(post_ids))
             )
         

@@ -10,6 +10,7 @@ from app.crud.bot_config import CRUDBotConfig
 from app.crud.scrape_session import CRUDScrapeSession
 from app.crud.reddit_content import CRUDRedditContent
 from app.models.bot_config import BotConfig
+from app.models.scrape_session import ScrapeSession
 
 logger = logging.getLogger(__name__)
 
@@ -20,83 +21,68 @@ class ScrapingOrchestrator:
     def __init__(self):
         self.reddit_scraper = RedditScraperService()
     
-    async def execute_scraping_session_with_existing(
-        self,
-        db: AsyncSession,
-        session_id: int
-    ) -> Optional[Dict[str, Any]]:
-        """使用现有会话执行爬取流程"""
-        try:
-            # 获取现有会话
-            session = await CRUDScrapeSession.get_session_by_id(db, session_id)
-            if not session:
-                logger.error(f"爬取会话 {session_id} 不存在")
-                return None
-            
-            # 获取bot配置
-            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
-            if not bot_config or not bot_config.is_active:
-                logger.error(f"Bot配置 {session.bot_config_id} 不存在或未激活")
-                return None
-            
-            logger.info(f"开始执行爬取会话 {session.id}")
-            
-            # 开始会话
-            await CRUDScrapeSession.start_session(db, session.id)
-            
-            try:
-                # 执行爬取
-                results = await self._execute_scraping(bot_config)
-                
-                # 保存结果到数据库
-                total_posts, total_comments = await self._save_scraping_results(
-                    db, session.id, results
-                )
-                
-                # 分析质量评论
-                quality_comments_list = await self._analyze_comment_quality(
-                    db, session.id, bot_config
-                )
-                quality_comments_count = len(quality_comments_list) if quality_comments_list else 0
-                
-                # 完成会话
-                await CRUDScrapeSession.complete_session(
-                    db, session.id, total_posts, total_comments, quality_comments_count
-                )
-                
-                logger.info(f"爬取会话 {session.id} 完成")
-                
-                return {
-                    'session_id': session.id,
-                    'total_posts': total_posts,
-                    'total_comments': total_comments,
-                    'quality_comments': quality_comments_count
-                }
-                
-            except Exception as e:
-                # 标记会话失败
-                await CRUDScrapeSession.complete_session(
-                    db, session.id, error_message=f"爬取失败: {str(e)}"
-                )
-                logger.error(f"爬取会话 {session.id} 失败: {e}")
-                raise e
-                
-        except Exception as e:
-            logger.error(f"执行爬取会话失败: {e}")
-            return None
-        
     async def execute_scraping_session(
         self,
         db: AsyncSession,
-        bot_config_id: int,
+        bot_config_id: Optional[int] = None,
+        session_id: Optional[int] = None,
         session_type: str = 'manual'
     ) -> Optional[Dict[str, Any]]:
-        """执行一个完整的爬取会话"""
+        """统一的爬取会话执行方法
+        
+        Args:
+            db: 数据库会话
+            bot_config_id: Bot配置ID (创建新会话时使用)
+            session_id: 现有会话ID (使用现有会话时使用)
+            session_type: 会话类型
+            
+        Returns:
+            执行结果字典或None
+        """
         try:
+            session = None
+            bot_config = None
+            
+            # 如果提供session_id，使用现有会话
+            if session_id:
+                session = await CRUDScrapeSession.get_session_by_id(db, session_id)
+                if not session:
+                    logger.error(f"爬取会话 {session_id} 不存在")
+                    return None
+                bot_config_id = session.bot_config_id
+            
+            # 如果没有session_id但有bot_config_id，创建新会话
+            elif bot_config_id:
+                session = await self._create_new_session(db, bot_config_id, session_type)
+                if not session:
+                    return None
+            else:
+                raise ValueError("必须提供 session_id 或 bot_config_id")
+            
             # 获取bot配置
             bot_config = await CRUDBotConfig.get_bot_config_by_id(db, bot_config_id)
             if not bot_config or not bot_config.is_active:
                 logger.error(f"Bot配置 {bot_config_id} 不存在或未激活")
+                return None
+            
+            # 执行核心爬取逻辑
+            return await self._execute_session_core(db, session, bot_config)
+            
+        except Exception as e:
+            logger.error(f"执行爬取会话失败: {e}")
+            return None
+    
+    async def _create_new_session(
+        self,
+        db: AsyncSession,
+        bot_config_id: int,
+        session_type: str
+    ) -> Optional[ScrapeSession]:
+        """创建新的爬取会话"""
+        try:
+            # 获取bot配置以创建快照
+            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, bot_config_id)
+            if not bot_config:
                 return None
             
             # 创建配置快照
@@ -113,69 +99,76 @@ class ScrapingOrchestrator:
             }
             
             # 创建爬取会话
-            session = await CRUDScrapeSession.create_scrape_session(
+            return await CRUDScrapeSession.create_scrape_session(
                 db, bot_config_id, session_type, config_snapshot
             )
-            
+        except Exception as e:
+            logger.error(f"创建新会话失败: {e}")
+            return None
+    
+    async def _execute_session_core(
+        self,
+        db: AsyncSession,
+        session: ScrapeSession,
+        bot_config: BotConfig
+    ) -> Dict[str, Any]:
+        """执行爬取会话的核心逻辑"""
+        try:
             logger.info(f"开始执行爬取会话 {session.id}")
             
             # 开始会话
             await CRUDScrapeSession.start_session(db, session.id)
             
-            try:
-                # 执行爬取
-                results = await self._execute_scraping(bot_config)
-                
-                # 保存结果到数据库
-                total_posts, total_comments = await self._save_scraping_results(
-                    db, session.id, results
-                )
-                
-                # 分析质量评论
-                quality_comments = await self._analyze_comment_quality(
-                    db, session.id, bot_config
-                )
-                
-                # 完成会话
-                await CRUDScrapeSession.complete_session(
-                    db,
-                    session.id,
-                    total_posts_found=total_posts,
-                    total_comments_found=total_comments,
-                    quality_comments_count=len(quality_comments)
-                )
-                
-                logger.info(f"爬取会话 {session.id} 完成")
-                
-                return {
-                    'session_id': session.id,
-                    'status': 'completed',
-                    'total_posts': total_posts,
-                    'total_comments': total_comments,
-                    'quality_comments': len(quality_comments),
-                    'subreddits_scraped': list(results.keys())
-                }
-                
-            except Exception as e:
-                logger.error(f"爬取会话 {session.id} 执行失败: {e}")
-                
-                # 标记会话失败
-                await CRUDScrapeSession.complete_session(
-                    db,
-                    session.id,
-                    error_message=str(e),
-                    error_details={'exception_type': type(e).__name__}
-                )
-                
-                return {
-                    'session_id': session.id,
-                    'status': 'failed',
-                    'error': str(e)
-                }
-                
+            # 执行爬取
+            results = await self._execute_scraping(bot_config)
+            
+            # 保存结果到数据库
+            total_posts, total_comments = await self._save_scraping_results(
+                db, session.id, results
+            )
+            
+            # 分析质量评论
+            quality_comments = await self._analyze_comment_quality(
+                db, session.id, bot_config
+            )
+            quality_comments_count = len(quality_comments) if quality_comments else 0
+            
+            # 完成会话
+            await CRUDScrapeSession.complete_session(
+                db,
+                session.id,
+                total_posts_found=total_posts,
+                total_comments_found=total_comments,
+                quality_comments_count=quality_comments_count
+            )
+            
+            logger.info(f"爬取会话 {session.id} 完成")
+            
+            return {
+                'session_id': session.id,
+                'status': 'completed',
+                'total_posts': total_posts,
+                'total_comments': total_comments,
+                'quality_comments': quality_comments_count,
+                'subreddits_scraped': list(results.keys())
+            }
+            
         except Exception as e:
-            logger.error(f"创建爬取会话失败: {e}")
-            return None
+            logger.error(f"爬取会话 {session.id} 执行失败: {e}")
+            
+            # 标记会话失败
+            await CRUDScrapeSession.complete_session(
+                db,
+                session.id,
+                error_message=str(e),
+                error_details={'exception_type': type(e).__name__}
+            )
+            
+            return {
+                'session_id': session.id,
+                'status': 'failed',
+                'error': str(e)
+            }
     
     async def _execute_scraping(
         self,
@@ -233,21 +226,16 @@ class ScrapingOrchestrator:
         session_id: int,
         bot_config: BotConfig
     ) -> List[Any]:
-        """分析评论质量（可扩展AI分析功能）"""
+        """分析评论质量，应用基础和AI过滤"""
         # 获取会话的评论
-        comments = await CRUDRedditContent.get_comments_by_session(
-            db, session_id
-        )
+        comments = await CRUDRedditContent.get_comments_by_session(db, session_id)
         
-        # 基础质量过滤
-        quality_comments = []
-        for comment in comments:
-            if (
-                len(comment.body) >= bot_config.min_comment_length and
-                len(comment.body) <= bot_config.max_comment_length and
-                comment.score > 0
-            ):
-                quality_comments.append(comment)
+        # 基础质量过滤：长度和分数
+        quality_comments = [
+            comment for comment in comments
+            if (bot_config.min_comment_length <= len(comment.body) <= bot_config.max_comment_length
+                and comment.score > 0)
+        ]
         
         # 按分数排序
         quality_comments.sort(key=lambda x: x.score, reverse=True)
@@ -292,11 +280,8 @@ class ScrapingOrchestrator:
         
         return formatted_results
     
-    async def get_active_configs_and_execute(
-        self,
-        db: AsyncSession
-    ) -> List[Dict[str, Any]]:
-        """获取所有启用自动爬取的配置并执行"""
+    async def execute_auto_scraping(self, db: AsyncSession) -> List[Dict[str, Any]]:
+        """执行自动爬取任务"""
         active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
         
         if not active_configs:

@@ -1,12 +1,11 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.models.scrape_session import ScrapeSession
 from app.models.reddit_content import RedditPost, RedditComment
-from app.models.bot_config import BotConfig
 
 
 class CRUDScrapeSession:
@@ -131,6 +130,58 @@ class CRUDScrapeSession:
         return result.scalars().all()
     
     @staticmethod
+    async def get_sessions(
+        db: AsyncSession,
+        bot_config_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        limit: int = 50,
+        status: Optional[str] = None,
+        session_type: Optional[str] = None
+    ) -> List[ScrapeSession]:
+        """通用的会话查询方法
+        
+        Args:
+            db: 数据库会话
+            bot_config_id: Bot配置ID (按配置查询)
+            user_id: 用户ID (按用户查询)
+            limit: 查询限制
+            status: 状态过滤
+            session_type: 类型过滤
+            
+        Returns:
+            会话列表
+        """
+        query = select(ScrapeSession)
+        
+        if bot_config_id:
+            # 按配置查询
+            query = query.where(ScrapeSession.bot_config_id == bot_config_id)
+        elif user_id:
+            # 按用户查询 - 先获取用户的配置IDs
+            from app.models.bot_config import BotConfig
+            config_result = await db.execute(
+                select(BotConfig.id).where(BotConfig.user_id == user_id)
+            )
+            config_ids = [row[0] for row in config_result.all()]
+            if config_ids:
+                query = query.where(ScrapeSession.bot_config_id.in_(config_ids))
+            else:
+                return []
+        
+        # 应用过滤条件
+        if status:
+            query = query.where(ScrapeSession.status == status)
+        if session_type:
+            query = query.where(ScrapeSession.session_type == session_type)
+        
+        # 排序和限制
+        query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
+        
+        result = await db.execute(query)
+        return result.scalars().all()
+    
+    # 保留向后兼容的方法
+    @staticmethod
     async def get_sessions_by_user(
         db: AsyncSession,
         user_id: int,
@@ -138,29 +189,11 @@ class CRUDScrapeSession:
         status: Optional[str] = None,
         session_type: Optional[str] = None
     ) -> List[ScrapeSession]:
-        """获取指定用户的所有爬取会话列表"""
-        # 先获取用户的bot配置IDs
-        config_result = await db.execute(
-            select(BotConfig.id).where(BotConfig.user_id == user_id)
+        """获取指定用户的所有爬取会话列表（兼容方法）"""
+        return await CRUDScrapeSession.get_sessions(
+            db, user_id=user_id, limit=limit,
+            status=status, session_type=session_type
         )
-        config_ids = [row[0] for row in config_result.all()]
-        
-        if not config_ids:
-            return []
-        
-        # 构建查询
-        query = select(ScrapeSession).where(ScrapeSession.bot_config_id.in_(config_ids))
-        
-        if status:
-            query = query.where(ScrapeSession.status == status)
-            
-        if session_type:
-            query = query.where(ScrapeSession.session_type == session_type)
-        
-        query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
-        
-        result = await db.execute(query)
-        return result.scalars().all()
     
     @staticmethod
     async def get_recent_sessions_stats(
@@ -245,18 +278,18 @@ class CRUDScrapeSession:
         
         # 删除相关的Reddit内容
         await db.execute(
-            select(RedditPost)
+            delete(RedditPost)
             .where(RedditPost.scrape_session_id.in_(session_ids))
         )
         await db.execute(
-            select(RedditComment)
+            delete(RedditComment)
             .where(RedditComment.scrape_session_id.in_(session_ids))
         )
         
         # 删除会话
         deleted_count = len(session_ids)
         await db.execute(
-            select(ScrapeSession)
+            delete(ScrapeSession)
             .where(ScrapeSession.id.in_(session_ids))
         )
         

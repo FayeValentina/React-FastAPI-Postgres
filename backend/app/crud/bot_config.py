@@ -162,29 +162,3 @@ class CRUDBotConfig:
         )
         return result.scalars().all()
     
-    @staticmethod
-    async def get_config_with_recent_sessions(
-        db: AsyncSession, 
-        config_id: int, 
-        limit: int = 10
-    ) -> Optional[BotConfig]:
-        """获取配置及其最近的爬取会话"""
-        result = await db.execute(
-            select(BotConfig)
-            .options(
-                selectinload(BotConfig.scrape_sessions)
-                .selectinload(ScrapeSession.reddit_posts)
-            )
-            .where(BotConfig.id == config_id)
-        )
-        bot_config = result.scalar_one_or_none()
-        
-        if bot_config and bot_config.scrape_sessions:
-            # 只保留最近的会话
-            bot_config.scrape_sessions = sorted(
-                bot_config.scrape_sessions, 
-                key=lambda x: x.created_at, 
-                reverse=True
-            )[:limit]
-        
-        return bot_config

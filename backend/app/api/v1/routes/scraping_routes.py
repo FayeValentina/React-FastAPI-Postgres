@@ -13,6 +13,7 @@ from app.models.user import User
 from app.api.v1.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InsufficientPermissionsError
 from app.utils.common import handle_error
+from app.utils.permissions import check_bot_config_permission
 
 router = APIRouter(tags=["scraping"])
 
@@ -31,21 +32,14 @@ async def trigger_scraping(
     """
     try:
         # 检查配置是否存在和权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限操作此配置")
+        bot_config = await check_bot_config_permission(db, config_id, current_user)
         
         if not bot_config.is_active:
             raise HTTPException(status_code=400, detail="Bot配置未激活")
         
         # 检查是否有正在运行的会话
-        running_sessions = await CRUDScrapeSession.get_sessions_by_config(
-            db, config_id, status='running'
+        running_sessions = await CRUDScrapeSession.get_sessions(
+            db, bot_config_id=config_id, status='running'
         )
         
         if running_sessions:
@@ -82,8 +76,8 @@ async def trigger_scraping(
                 from app.db.base import AsyncSessionLocal
                 async with AsyncSessionLocal() as session_db:
                     try:
-                        result = await orchestrator.execute_scraping_session_with_existing(
-                            session_db, session.id
+                        result = await orchestrator.execute_scraping_session(
+                            session_db, session_id=session.id
                         )
                         await session_db.commit()
                         return result
@@ -125,8 +119,8 @@ async def get_scrape_sessions(
     """
     try:
         # 直接获取用户的所有会话
-        sessions = await CRUDScrapeSession.get_sessions_by_user(
-            db, current_user.id, limit=limit, status=status, session_type=session_type
+        sessions = await CRUDScrapeSession.get_sessions(
+            db, user_id=current_user.id, limit=limit, status=status, session_type=session_type
         )
         
         return sessions
@@ -175,15 +169,8 @@ async def get_scrape_session(
         if not session:
             raise HTTPException(status_code=404, detail="爬取会话不存在")
         
-        # 获取关联的bot配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="关联的Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限查看此会话")
+        # 通过关联的bot配置检查权限
+        await check_bot_config_permission(db, session.bot_config_id, current_user)
         
         return session
         

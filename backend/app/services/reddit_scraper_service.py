@@ -171,10 +171,12 @@ class RedditScraperService:
         tasks = []
         semaphore = asyncio.Semaphore(10)  # 限制并发数为10，避免过载
         
+        async def scrape_with_semaphore(post_id: str) -> List[Dict[str, Any]]:
+            async with semaphore:
+                return await self._scrape_post_comments_async(post_id, comments_limit, subreddit_name)
+        
         for post in posts_data:
-            task = self._scrape_post_comments_with_semaphore(
-                semaphore, post['id'], comments_limit, subreddit_name
-            )
+            task = scrape_with_semaphore(post['id'])
             tasks.append(task)
         
         # 并发执行所有评论爬取任务
@@ -195,17 +197,6 @@ class RedditScraperService:
         
         logger.info(f"成功爬取了 {successful_scrapes}/{len(posts_data)} 个帖子的评论")
         return all_comments
-    
-    async def _scrape_post_comments_with_semaphore(
-        self, 
-        semaphore: asyncio.Semaphore, 
-        post_id: str, 
-        limit: int, 
-        subreddit_name: str
-    ) -> List[Dict[str, Any]]:
-        """使用信号量限制并发的评论爬取"""
-        async with semaphore:
-            return await self._scrape_post_comments_async(post_id, limit, subreddit_name)
     
     async def _scrape_post_comments_async(
         self, 
@@ -283,8 +274,18 @@ class RedditScraperService:
         tasks = []
         semaphore = asyncio.Semaphore(5)  # 限制同时爬取的subreddit数量
         
+        async def scrape_with_semaphore(config: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+            async with semaphore:
+                return await self.scrape_posts_with_details(
+                    subreddit_name=config['name'],
+                    limit=config.get('limit', 50),
+                    sort_by=config.get('sort_by', 'hot'),
+                    comments_limit=config.get('comments_limit', 20),
+                    time_filter=config.get('time_filter', 'all')
+                )
+        
         for config in subreddit_configs:
-            task = self._scrape_subreddit_with_semaphore(semaphore, config)
+            task = scrape_with_semaphore(config)
             tasks.append(task)
         
         # 并发执行
@@ -303,21 +304,6 @@ class RedditScraperService:
         
         logger.info("完成所有subreddit的并发爬取")
         return scraped_data
-    
-    async def _scrape_subreddit_with_semaphore(
-        self, 
-        semaphore: asyncio.Semaphore, 
-        config: Dict[str, Any]
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """使用信号量限制并发的subreddit爬取"""
-        async with semaphore:
-            return await self.scrape_posts_with_details(
-                subreddit_name=config['name'],
-                limit=config.get('limit', 50),
-                sort_by=config.get('sort_by', 'hot'),
-                comments_limit=config.get('comments_limit', 20),
-                time_filter=config.get('time_filter', 'all')
-            )
     
     async def close(self):
         """关闭Reddit连接"""
