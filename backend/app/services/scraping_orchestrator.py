@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.db.base import AsyncSessionLocal
 from app.services.reddit_scraper_service import RedditScraperService
 from app.crud.bot_config import CRUDBotConfig
 from app.crud.scrape_session import CRUDScrapeSession
@@ -47,7 +47,6 @@ class ScrapingOrchestrator:
         async def execute_with_semaphore(config_id: int):
             async with semaphore:
                 # 每个并发任务使用独立的数据库会话
-                from app.db.base import AsyncSessionLocal
                 async with AsyncSessionLocal() as task_db:
                     return await self.execute_scraping_session(task_db, config_id, session_type)
         
