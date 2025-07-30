@@ -76,36 +76,6 @@ class RedditScraperService:
         logger.info("完成所有subreddit的并发爬取")
         return scraped_data
     
-    async def _get_reddit_instance(self):
-        """获取Reddit实例，使用单例模式"""
-        if self.reddit is None:
-            async with self._session_lock:
-                if self.reddit is None:
-                    # 从设置中获取Reddit配置
-                    reddit_config = {
-                        'client_id': settings.reddit.CLIENT_ID,
-                        'client_secret': settings.reddit.CLIENT_SECRET,
-                        'user_agent': settings.reddit.USER_AGENT,
-                        'username': settings.reddit.USERNAME,
-                        'password': settings.reddit.PASSWORD
-                    }
-                    
-                    if reddit_config['username'] and reddit_config['password']:
-                        self.reddit = asyncpraw.Reddit(
-                            client_id=reddit_config['client_id'],
-                            client_secret=reddit_config['client_secret'],
-                            user_agent=reddit_config['user_agent'],
-                            username=reddit_config['username'],
-                            password=reddit_config['password']
-                        )
-                    else:
-                        self.reddit = asyncpraw.Reddit(
-                            client_id=reddit_config['client_id'],
-                            client_secret=reddit_config['client_secret'],
-                            user_agent=reddit_config['user_agent']
-                        )
-        return self.reddit
-    
     async def scrape_posts_with_details(
         self, 
         subreddit_name: str, 
@@ -147,6 +117,36 @@ class RedditScraperService:
         
         logger.info(f"完成爬取：{len(posts_data)} 个帖子，{len(all_comments)} 条评论")
         return posts_data, all_comments
+    
+    async def _get_reddit_instance(self):
+        """获取Reddit实例，使用单例模式"""
+        if self.reddit is None:
+            async with self._session_lock:
+                if self.reddit is None:
+                    # 从设置中获取Reddit配置
+                    reddit_config = {
+                        'client_id': settings.reddit.CLIENT_ID,
+                        'client_secret': settings.reddit.CLIENT_SECRET,
+                        'user_agent': settings.reddit.USER_AGENT,
+                        'username': settings.reddit.USERNAME,
+                        'password': settings.reddit.PASSWORD
+                    }
+                    
+                    if reddit_config['username'] and reddit_config['password']:
+                        self.reddit = asyncpraw.Reddit(
+                            client_id=reddit_config['client_id'],
+                            client_secret=reddit_config['client_secret'],
+                            user_agent=reddit_config['user_agent'],
+                            username=reddit_config['username'],
+                            password=reddit_config['password']
+                        )
+                    else:
+                        self.reddit = asyncpraw.Reddit(
+                            client_id=reddit_config['client_id'],
+                            client_secret=reddit_config['client_secret'],
+                            user_agent=reddit_config['user_agent']
+                        )
+        return self.reddit
     
     async def _scrape_subreddit_async(
         self, 

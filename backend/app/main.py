@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,9 +10,23 @@ from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
+from app.tasks import task_scheduler
 
 # 配置日志系统
 setup_logging()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时
+    task_scheduler.start()
+    
+    yield
+    
+    # 关闭时
+    task_scheduler.shutdown()
+
 
 app = FastAPI(
     title="FastAPI Demo",
@@ -21,7 +36,8 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     dependencies=[Depends(request_context_dependency)],
-    exception_handlers=create_exception_handlers()  # 使用工厂函数创建异常处理器
+    exception_handlers=create_exception_handlers(),  # 使用工厂函数创建异常处理器
+    lifespan=lifespan  # 添加生命周期管理
 )
 
 # 设置中间件（注意顺序很重要）

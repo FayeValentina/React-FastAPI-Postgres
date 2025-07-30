@@ -325,4 +325,21 @@ async def verify_reset_token(
         )
         
     except Exception as e:
-        raise handle_error(e) 
+        raise handle_error(e)
+
+
+# 测试端点 - 用于验证定时任务功能
+@router.get("/test/cleanup-tokens")
+async def test_cleanup_tokens():
+    """测试令牌清理任务"""
+    from app.tasks import task_scheduler
+    await task_scheduler.cleanup_expired_tokens()
+    return {"message": "令牌清理任务执行完成"}
+
+
+@router.get("/test/auto-scraping")
+async def test_auto_scraping():
+    """测试自动爬取任务"""
+    from app.tasks import task_scheduler
+    await task_scheduler.auto_scraping_task()
+    return {"message": "自动爬取任务执行完成"} 
