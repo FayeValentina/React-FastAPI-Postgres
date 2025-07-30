@@ -148,6 +148,14 @@ const DashboardPage: React.FC = () => {
                   >
                     用户管理
                   </Button>
+
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate('/scraper/bots')}
+                    fullWidth
+                  >
+                    爬虫管理
+                  </Button>
                   
                   <Button
                     variant="contained"
