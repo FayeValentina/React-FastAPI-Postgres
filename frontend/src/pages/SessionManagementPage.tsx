@@ -30,7 +30,7 @@ const SessionManagementPage: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // API states
-  const sessionsApiUrl = '/v1/scrape-sessions';
+  const sessionsApiUrl = '/v1/scraping/scrape-sessions';
   const { loading: sessionsLoading, error: sessionsError } = getApiState(sessionsApiUrl);
 
   const loadSessions = useCallback(async () => {

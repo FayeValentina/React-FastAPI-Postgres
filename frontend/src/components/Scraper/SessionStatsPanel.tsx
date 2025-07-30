@@ -21,7 +21,7 @@ const SessionStatsPanel: React.FC = () => {
   const { fetchData, getApiState } = useApiStore();
   const [stats, setStats] = useState<ScrapeSessionStats | null>(null);
 
-  const statsApiUrl = '/v1/scrape-sessions/stats';
+  const statsApiUrl = '/v1/scraping/scrape-sessions/stats';
   const { loading, error } = getApiState(statsApiUrl);
 
   useEffect(() => {
