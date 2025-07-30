@@ -145,6 +145,29 @@ async def get_scrape_sessions(
         raise handle_error(e)
 
 
+@router.get("/scrape-sessions/stats", response_model=ScrapeSessionStats)
+async def get_session_stats(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    days: int = 7
+) -> ScrapeSessionStats:
+    """
+    获取爬取会话统计信息
+    
+    - days: 统计最近N天的数据
+    """
+    try:
+        # 这里需要扩展CRUD方法来支持按用户过滤的统计
+        # 暂时返回全局统计（后续可以优化为用户特定统计）
+        stats = await CRUDScrapeSession.get_recent_sessions_stats(db, days)
+        
+        return ScrapeSessionStats(**stats)
+        
+    except Exception as e:
+        raise handle_error(e)
+
+
+
 @router.get("/scrape-sessions/{session_id}", response_model=ScrapeSessionResponse)
 async def get_scrape_session(
     session_id: int,
@@ -173,60 +196,6 @@ async def get_scrape_session(
             raise InsufficientPermissionsError("没有权限查看此会话")
         
         return session
-        
-    except Exception as e:
-        raise handle_error(e)
-
-
-
-@router.get("/scrape-sessions/stats", response_model=ScrapeSessionStats)
-async def get_session_stats(
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    days: int = 7
-) -> ScrapeSessionStats:
-    """
-    获取爬取会话统计信息
-    
-    - days: 统计最近N天的数据
-    """
-    try:
-        # 这里需要扩展CRUD方法来支持按用户过滤的统计
-        # 暂时返回全局统计（后续可以优化为用户特定统计）
-        stats = await CRUDScrapeSession.get_recent_sessions_stats(db, days)
-        
-        return ScrapeSessionStats(**stats)
-        
-    except Exception as e:
-        raise handle_error(e)
-
-
-@router.get("/scrape-sessions/running", response_model=List[ScrapeSessionResponse])
-async def get_running_sessions(
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)]
-) -> List[ScrapeSessionResponse]:
-    """
-    获取正在运行的会话
-    
-    只显示当前用户的会话，除非是超级用户
-    """
-    try:
-        running_sessions = await CRUDScrapeSession.get_running_sessions(db)
-        
-        # 如果不是超级用户，只返回自己的会话
-        if not current_user.is_superuser:
-            # 获取用户的配置ID列表
-            user_configs = await CRUDBotConfig.get_user_bot_configs(db, current_user.id)
-            user_config_ids = {config.id for config in user_configs}
-            
-            # 过滤出属于当前用户的会话
-            running_sessions = [
-                session for session in running_sessions 
-                if session.bot_config_id in user_config_ids
-            ]
-        
-        return running_sessions
         
     except Exception as e:
         raise handle_error(e)

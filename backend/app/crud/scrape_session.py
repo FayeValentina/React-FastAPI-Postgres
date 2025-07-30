@@ -127,16 +127,6 @@ class CRUDScrapeSession:
         return result.scalars().all()
     
     @staticmethod
-    async def get_running_sessions(db: AsyncSession) -> List[ScrapeSession]:
-        """获取所有正在运行的会话"""
-        result = await db.execute(
-            select(ScrapeSession)
-            .where(ScrapeSession.status == 'running')
-            .order_by(ScrapeSession.started_at)
-        )
-        return result.scalars().all()
-    
-    @staticmethod
     async def get_recent_sessions_stats(
         db: AsyncSession,
         days: int = 7
