@@ -10,12 +10,14 @@ import {
   Tooltip,
   Switch,
   FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   PlayArrow as PlayIcon,
   Stop as StopIcon,
+  Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { BotConfigResponse } from '../../types/bot';
 
@@ -24,8 +26,13 @@ interface BotConfigCardProps {
   onEdit: (config: BotConfigResponse) => void;
   onDelete: (config: BotConfigResponse) => void;
   onToggle: (config: BotConfigResponse) => void;
+  onToggleAutoScrape?: (config: BotConfigResponse) => void;
   onTriggerScraping?: (config: BotConfigResponse) => void;
   loading?: boolean;
+  // 多选相关
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (config: BotConfigResponse, selected: boolean) => void;
 }
 
 const BotConfigCard: React.FC<BotConfigCardProps> = ({
@@ -33,8 +40,12 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
   onEdit,
   onDelete,
   onToggle,
+  onToggleAutoScrape,
   onTriggerScraping,
   loading = false,
+  selectable = false,
+  selected = false,
+  onSelect,
 }) => {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('zh-CN', {
@@ -46,13 +57,36 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
     });
   };
 
+  const handleSelectChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (onSelect) {
+      onSelect(config, event.target.checked);
+    }
+  };
+
   return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Card sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      border: selected ? '2px solid' : '1px solid',
+      borderColor: selected ? 'primary.main' : 'divider',
+      bgcolor: selected ? 'action.selected' : 'background.paper'
+    }}>
       <CardContent sx={{ flexGrow: 1 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Typography variant="h6" component="h2" gutterBottom>
-            {config.name}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexGrow: 1 }}>
+            {selectable && (
+              <Checkbox
+                checked={selected}
+                onChange={handleSelectChange}
+                size="small"
+                sx={{ mt: -0.5 }}
+              />
+            )}
+            <Typography variant="h6" component="h2" gutterBottom sx={{ flexGrow: 1, mt: selectable ? 0.5 : 0 }}>
+              {config.name}
+            </Typography>
+          </Box>
           <Chip
             label={config.is_active ? '运行中' : '已停止'}
             color={config.is_active ? 'success' : 'default'}
@@ -109,9 +143,12 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
           {config.enable_ai_filter && (
             <Chip label="AI过滤" size="small" color="primary" />
           )}
-          {config.auto_publish_enabled && (
-            <Chip label="自动发布" size="small" color="secondary" />
-          )}
+          <Chip 
+            label={config.auto_scrape_enabled ? "定时爬取已启用" : "定时爬取已禁用"} 
+            size="small" 
+            color={config.auto_scrape_enabled ? "secondary" : "default"}
+            icon={config.auto_scrape_enabled ? <ScheduleIcon /> : undefined}
+          />
         </Box>
 
         <Typography variant="caption" display="block" color="text.secondary">
@@ -123,7 +160,7 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
       </CardContent>
 
       <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
-        <Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <FormControlLabel
             control={
               <Switch
@@ -136,6 +173,20 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
             label={config.is_active ? '启用' : '禁用'}
             sx={{ mr: 1 }}
           />
+          {onToggleAutoScrape && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={config.auto_scrape_enabled}
+                  onChange={() => onToggleAutoScrape(config)}
+                  disabled={loading}
+                  size="small"
+                />
+              }
+              label={config.auto_scrape_enabled ? '自动化' : '手动'}
+              sx={{ mr: 1 }}
+            />
+          )}
         </Box>
 
         <Box>

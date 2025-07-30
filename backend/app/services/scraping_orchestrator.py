@@ -46,7 +46,10 @@ class ScrapingOrchestrator:
         
         async def execute_with_semaphore(config_id: int):
             async with semaphore:
-                return await self.execute_scraping_session(db, config_id, session_type)
+                # 每个并发任务使用独立的数据库会话
+                from app.db.base import AsyncSessionLocal
+                async with AsyncSessionLocal() as task_db:
+                    return await self.execute_scraping_session(task_db, config_id, session_type)
         
         for config_id in config_ids:
             task = execute_with_semaphore(config_id)
@@ -63,53 +66,45 @@ class ScrapingOrchestrator:
                     'status': 'error',
                     'error': str(result)
                 })
-            else:
+            elif result:
+                # 确保结果中包含config_id
+                result['config_id'] = config_ids[i]
                 formatted_results.append(result)
+            else:
+                formatted_results.append({
+                    'config_id': config_ids[i],
+                    'status': 'failed',
+                    'error': '爬取执行失败'
+                })
         
         return formatted_results
     
     async def execute_scraping_session(
         self,
         db: AsyncSession,
-        bot_config_id: Optional[int] = None,
-        session_id: Optional[int] = None,
+        bot_config_id: int,
         session_type: str = 'manual'
     ) -> Optional[Dict[str, Any]]:
-        """统一的爬取会话执行方法
+        """执行爬取会话
         
         Args:
             db: 数据库会话
-            bot_config_id: Bot配置ID (创建新会话时使用)
-            session_id: 现有会话ID (使用现有会话时使用)
+            bot_config_id: Bot配置ID
             session_type: 会话类型
             
         Returns:
             执行结果字典或None
         """
         try:
-            session = None
-            bot_config = None
-            
-            # 如果提供session_id，使用现有会话
-            if session_id:
-                session = await CRUDScrapeSession.get_session_by_id(db, session_id)
-                if not session:
-                    logger.error(f"爬取会话 {session_id} 不存在")
-                    return None
-                bot_config_id = session.bot_config_id
-            
-            # 如果没有session_id但有bot_config_id，创建新会话
-            elif bot_config_id:
-                session = await self._create_new_session(db, bot_config_id, session_type)
-                if not session:
-                    return None
-            else:
-                raise ValueError("必须提供 session_id 或 bot_config_id")
-            
-            # 获取bot配置
+            # 获取bot配置并验证
             bot_config = await CRUDBotConfig.get_bot_config_by_id(db, bot_config_id)
             if not bot_config or not bot_config.is_active:
                 logger.error(f"Bot配置 {bot_config_id} 不存在或未激活")
+                return None
+            
+            # 创建新会话
+            session = await self._create_new_session(db, bot_config_id, session_type)
+            if not session:
                 return None
             
             # 执行核心爬取逻辑

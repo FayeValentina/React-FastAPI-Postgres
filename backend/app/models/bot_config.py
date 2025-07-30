@@ -33,8 +33,8 @@ class BotConfig(Base):
     max_comment_length: Mapped[int] = mapped_column(Integer, default=280)
     
     # 自动化配置
-    auto_publish_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    publish_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
+    auto_scrape_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    scrape_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
     max_daily_posts: Mapped[int] = mapped_column(Integer, default=5)
     
     # 状态

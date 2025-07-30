@@ -26,8 +26,8 @@ class CRUDBotConfig:
         ai_confidence_threshold: float = 0.8,
         min_comment_length: int = 10,
         max_comment_length: int = 280,
-        auto_publish_enabled: bool = False,
-        publish_interval_hours: int = 24,
+        auto_scrape_enabled: bool = False,
+        scrape_interval_hours: int = 24,
         max_daily_posts: int = 5
     ) -> BotConfig:
         """创建新的bot配置"""
@@ -47,8 +47,8 @@ class CRUDBotConfig:
             ai_confidence_threshold=ai_confidence_threshold,
             min_comment_length=min_comment_length,
             max_comment_length=max_comment_length,
-            auto_publish_enabled=auto_publish_enabled,
-            publish_interval_hours=publish_interval_hours,
+            auto_scrape_enabled=auto_scrape_enabled,
+            scrape_interval_hours=scrape_interval_hours,
             max_daily_posts=max_daily_posts
         )
         
@@ -156,9 +156,9 @@ class CRUDBotConfig:
             select(BotConfig)
             .where(
                 BotConfig.is_active == True,
-                BotConfig.auto_publish_enabled == True
+                BotConfig.auto_scrape_enabled == True
             )
-            .order_by(BotConfig.publish_interval_hours)
+            .order_by(BotConfig.scrape_interval_hours)
         )
         return result.scalars().all()
     

@@ -50,7 +50,23 @@ class ScrapeSessionListResponse(BaseModel):
     page_size: int
 
 
-class ScrapeTriggerResponse(BaseModel):
-    session_id: int
-    status: str
+class BatchScrapeRequest(BaseModel):
+    config_ids: List[int] = Field(..., description="Bot配置ID列表", min_items=1)
+    session_type: str = Field("manual", description="会话类型")
+
+
+class BatchScrapeResult(BaseModel):
+    config_id: int
+    session_id: Optional[int] = None
+    status: str  # 'success', 'error', 'completed', 'failed'
+    message: str
+    total_posts: Optional[int] = None
+    total_comments: Optional[int] = None
+    error: Optional[str] = None
+
+
+class BatchScrapeResponse(BaseModel):
+    total_configs: int
+    successful_configs: int
+    results: List[BatchScrapeResult]
     message: str

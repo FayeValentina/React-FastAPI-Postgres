@@ -11,7 +11,8 @@ from .bot_config import (
 )
 from .scrape_session import (
     ScrapeSessionBase, ScrapeSessionCreate, ScrapeSessionResponse, ScrapeSessionStats,
-    ScrapeSessionListResponse, ScrapeTriggerResponse
+    ScrapeSessionListResponse, BatchScrapeRequest, 
+    BatchScrapeResponse, BatchScrapeResult
 )
 from .reddit_content import (
     RedditPostBase, RedditPostResponse, RedditCommentBase, RedditCommentResponse,
@@ -33,7 +34,8 @@ __all__ = [
     
     # Scrape session models
     "ScrapeSessionBase", "ScrapeSessionCreate", "ScrapeSessionResponse", "ScrapeSessionStats",
-    "ScrapeSessionListResponse", "ScrapeTriggerResponse",
+    "ScrapeSessionListResponse", "BatchScrapeRequest", 
+    "BatchScrapeResponse", "BatchScrapeResult",
     
     # Reddit content models
     "RedditPostBase", "RedditPostResponse", "RedditCommentBase", "RedditCommentResponse",

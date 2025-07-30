@@ -15,8 +15,8 @@ class BotConfigBase(BaseModel):
     ai_confidence_threshold: float = Field(0.8, ge=0.0, le=1.0, description="AI置信度阈值")
     min_comment_length: int = Field(10, ge=1, description="最小评论长度")
     max_comment_length: int = Field(280, ge=1, description="最大评论长度")
-    auto_publish_enabled: bool = Field(False, description="是否启用自动发布")
-    publish_interval_hours: int = Field(24, ge=1, description="发布间隔小时数")
+    auto_scrape_enabled: bool = Field(False, description="是否启用自动发布")
+    scrape_interval_hours: int = Field(24, ge=1, description="发布间隔小时数")
     max_daily_posts: int = Field(5, ge=1, description="每日最大发布数量")
 
 
@@ -36,8 +36,8 @@ class BotConfigUpdate(BaseModel):
     ai_confidence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
     min_comment_length: Optional[int] = Field(None, ge=1)
     max_comment_length: Optional[int] = Field(None, ge=1)
-    auto_publish_enabled: Optional[bool] = None
-    publish_interval_hours: Optional[int] = Field(None, ge=1)
+    auto_scrape_enabled: Optional[bool] = None
+    scrape_interval_hours: Optional[int] = Field(None, ge=1)
     max_daily_posts: Optional[int] = Field(None, ge=1)
 
 

@@ -12,8 +12,8 @@ export interface BotConfigBase {
   ai_confidence_threshold: number;
   min_comment_length: number;
   max_comment_length: number;
-  auto_publish_enabled: boolean;
-  publish_interval_hours: number;
+  auto_scrape_enabled: boolean;
+  scrape_interval_hours: number;
   max_daily_posts: number;
 }
 
@@ -32,6 +32,29 @@ export interface BotConfigResponse extends BotConfigBase {
 export interface BotConfigToggleResponse {
   id: number;
   is_active: boolean;
+  message: string;
+}
+
+// 批量爬取相关类型
+export interface BatchScrapeRequest {
+  config_ids: number[];
+  session_type?: string;
+}
+
+export interface BatchScrapeResult {
+  config_id: number;
+  session_id?: number;
+  status: string; // 'success', 'error', 'completed', 'failed'
+  message: string;
+  total_posts?: number;
+  total_comments?: number;
+  error?: string;
+}
+
+export interface BatchScrapeResponse {
+  total_configs: number;
+  successful_configs: number;
+  results: BatchScrapeResult[];
   message: string;
 }
 

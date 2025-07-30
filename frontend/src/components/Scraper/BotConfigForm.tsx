@@ -46,8 +46,8 @@ interface FormData {
   ai_confidence_threshold: number;
   min_comment_length: number | '';
   max_comment_length: number | '';
-  auto_publish_enabled: boolean;
-  publish_interval_hours: number | '';
+  auto_scrape_enabled: boolean;
+  scrape_interval_hours: number | '';
   max_daily_posts: number | '';
 }
 
@@ -74,8 +74,8 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
     ai_confidence_threshold: 0.8,
     min_comment_length: 10,
     max_comment_length: 280,
-    auto_publish_enabled: false,
-    publish_interval_hours: 24,
+    auto_scrape_enabled: false,
+    scrape_interval_hours: 24,
     max_daily_posts: 5,
   });
 
@@ -97,8 +97,8 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
         ai_confidence_threshold: config.ai_confidence_threshold,
         min_comment_length: config.min_comment_length,
         max_comment_length: config.max_comment_length,
-        auto_publish_enabled: config.auto_publish_enabled,
-        publish_interval_hours: config.publish_interval_hours,
+        auto_scrape_enabled: config.auto_scrape_enabled,
+        scrape_interval_hours: config.scrape_interval_hours,
         max_daily_posts: config.max_daily_posts,
       });
     }
@@ -139,12 +139,12 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
       errors.max_comment_length = formData.max_comment_length === '' ? '最大评论长度必须大于0' : '最大评论长度不能小于最小长度';
     }
 
-    if (formData.publish_interval_hours === '' || formData.publish_interval_hours < 1) {
-      errors.publish_interval_hours = '发布间隔必须大于0小时';
+    if (formData.scrape_interval_hours === '' || formData.scrape_interval_hours < 1) {
+      errors.scrape_interval_hours = '爬取间隔必须大于0小时';
     }
 
     if (formData.max_daily_posts === '' || formData.max_daily_posts < 1) {
-      errors.max_daily_posts = '每日最大发布数必须大于0';
+      errors.max_daily_posts = '每日最大爬取数必须大于0';
     }
 
     setFormErrors(errors);
@@ -153,7 +153,7 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
 
   const handleChange = (field: keyof FormData, value: unknown) => {
     // Handle number fields specially
-    if (['posts_per_subreddit', 'comments_per_post', 'min_comment_length', 'max_comment_length', 'publish_interval_hours', 'max_daily_posts'].includes(field)) {
+    if (['posts_per_subreddit', 'comments_per_post', 'min_comment_length', 'max_comment_length', 'scrape_interval_hours', 'max_daily_posts'].includes(field)) {
       const strValue = String(value);
       const numValue = strValue === '' ? '' : parseInt(strValue, 10);
       setFormData(prev => ({
@@ -207,7 +207,7 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
       comments_per_post: formData.comments_per_post === '' ? 20 : formData.comments_per_post,
       min_comment_length: formData.min_comment_length === '' ? 10 : formData.min_comment_length,
       max_comment_length: formData.max_comment_length === '' ? 280 : formData.max_comment_length,
-      publish_interval_hours: formData.publish_interval_hours === '' ? 24 : formData.publish_interval_hours,
+      scrape_interval_hours: formData.scrape_interval_hours === '' ? 24 : formData.scrape_interval_hours,
       max_daily_posts: formData.max_daily_posts === '' ? 5 : formData.max_daily_posts,
     };
     
@@ -466,37 +466,37 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
           </Paper>
         </Grid>
 
-        {/* 自动发布设置 */}
+        {/* 自动爬取设置 */}
         <Grid item xs={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
-              自动发布设置
+              自动爬取设置
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
             <FormControlLabel
               control={
                 <Switch
-                  checked={formData.auto_publish_enabled}
-                  onChange={(e) => handleChange('auto_publish_enabled', e.target.checked)}
+                  checked={formData.auto_scrape_enabled}
+                  onChange={(e) => handleChange('auto_scrape_enabled', e.target.checked)}
                   disabled={loading}
                 />
               }
-              label="启用自动发布"
+              label="启用自动爬取"
               sx={{ mb: 2 }}
             />
             
-            {formData.auto_publish_enabled && (
+            {formData.auto_scrape_enabled && (
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="发布间隔 (小时)"
+                    label="爬取间隔 (小时)"
                     type="number"
-                    value={formData.publish_interval_hours}
-                    onChange={(e) => handleChange('publish_interval_hours', e.target.value)}
-                    error={!!formErrors.publish_interval_hours}
-                    helperText={formErrors.publish_interval_hours}
+                    value={formData.scrape_interval_hours}
+                    onChange={(e) => handleChange('scrape_interval_hours', e.target.value)}
+                    error={!!formErrors.scrape_interval_hours}
+                    helperText={formErrors.scrape_interval_hours}
                     inputProps={{ min: 1 }}
                     disabled={loading}
                   />
@@ -505,7 +505,7 @@ const BotConfigForm: React.FC<BotConfigFormProps> = ({
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="每日最大发布数"
+                    label="每日最大爬取数"
                     type="number"
                     value={formData.max_daily_posts}
                     onChange={(e) => handleChange('max_daily_posts', e.target.value)}

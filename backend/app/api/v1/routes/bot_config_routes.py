@@ -41,8 +41,8 @@ async def create_bot_config(
             ai_confidence_threshold=config_data.ai_confidence_threshold,
             min_comment_length=config_data.min_comment_length,
             max_comment_length=config_data.max_comment_length,
-            auto_publish_enabled=config_data.auto_publish_enabled,
-            publish_interval_hours=config_data.publish_interval_hours,
+            auto_scrape_enabled=config_data.auto_scrape_enabled,
+            scrape_interval_hours=config_data.scrape_interval_hours,
             max_daily_posts=config_data.max_daily_posts
         )
         return bot_config

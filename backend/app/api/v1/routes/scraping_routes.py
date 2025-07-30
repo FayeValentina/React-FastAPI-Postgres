@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.scrape_session import (
-    ScrapeSessionResponse, ScrapeSessionStats, ScrapeTriggerResponse
+    ScrapeSessionResponse, ScrapeSessionStats,
+    BatchScrapeRequest, BatchScrapeResponse, BatchScrapeResult
 )
 from app.crud.bot_config import CRUDBotConfig
 from app.crud.scrape_session import CRUDScrapeSession
@@ -15,87 +16,80 @@ from app.core.exceptions import InsufficientPermissionsError
 from app.utils.common import handle_error
 from app.utils.permissions import check_bot_config_permission
 
-router = APIRouter(tags=["scraping"])
+router = APIRouter(prefix="/scraping", tags=["scraping"])
 
 
-@router.post("/bot-configs/{config_id}/scrape", response_model=ScrapeTriggerResponse)
-async def trigger_scraping(
-    config_id: int,
-    background_tasks: BackgroundTasks,
+@router.post("/bot-configs/batch-scrape", response_model=BatchScrapeResponse)
+async def batch_trigger_scraping(
+    request_data: BatchScrapeRequest,
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_active_user)]
-) -> ScrapeTriggerResponse:
+) -> BatchScrapeResponse:
     """
-    手动触发Bot配置的爬取会话
+    批量触发多个Bot配置的爬取会话
     
-    只能触发自己的配置，除非是超级用户
+    并行执行多个配置的爬取，只能触发自己的配置，除非是超级用户
     """
     try:
-        # 检查配置是否存在和权限
-        bot_config = await check_bot_config_permission(db, config_id, current_user)
+        config_ids = request_data.config_ids
+        session_type = request_data.session_type
         
-        if not bot_config.is_active:
-            raise HTTPException(status_code=400, detail="Bot配置未激活")
+        # 验证所有配置的权限和状态
+        valid_config_ids = []
+        results = []
         
-        # 检查是否有正在运行的会话
-        running_sessions = await CRUDScrapeSession.get_sessions(
-            db, bot_config_id=config_id, status='running'
-        )
-        
-        if running_sessions:
-            raise HTTPException(
-                status_code=409, 
-                detail="该配置已有正在运行的爬取会话"
-            )
-        
-        # 先创建初始会话记录（包含config_snapshot）
-        # 获取bot配置来创建config_snapshot
-        config_snapshot = {
-            'target_subreddits': bot_config.target_subreddits,
-            'posts_per_subreddit': bot_config.posts_per_subreddit,
-            'comments_per_post': bot_config.comments_per_post,
-            'sort_method': bot_config.sort_method,
-            'time_filter': bot_config.time_filter,
-            'enable_ai_filter': bot_config.enable_ai_filter,
-            'ai_confidence_threshold': float(bot_config.ai_confidence_threshold),
-            'min_comment_length': bot_config.min_comment_length,
-            'max_comment_length': bot_config.max_comment_length
-        }
-        
-        session = await CRUDScrapeSession.create_scrape_session(
-            db, config_id, 'manual', config_snapshot
-        )
-        
-        # 创建爬取编排器并在后台执行
-        orchestrator = ScrapingOrchestrator()
-        
-        # 在后台任务中执行爬取
-        async def execute_scraping_task():
+        for config_id in config_ids:
             try:
-                # 直接使用数据库会话创建器，而不是依赖注入的生成器
-                from app.db.base import AsyncSessionLocal
-                async with AsyncSessionLocal() as session_db:
-                    try:
-                        result = await orchestrator.execute_scraping_session(
-                            session_db, session_id=session.id
-                        )
-                        await session_db.commit()
-                        return result
-                    except Exception as e:
-                        await session_db.rollback()
-                        raise e
+                bot_config = await check_bot_config_permission(db, config_id, current_user)
+                if not bot_config.is_active:
+                    results.append(BatchScrapeResult(
+                        config_id=config_id,
+                        status="error",
+                        message="Bot配置未激活"
+                    ))
+                else:
+                    valid_config_ids.append(config_id)
             except Exception as e:
-                # 记录错误但不影响响应
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"后台爬取任务失败: {e}")
+                results.append(BatchScrapeResult(
+                    config_id=config_id,
+                    status="error",
+                    message=f"权限验证失败: {str(e)}"
+                ))
         
-        background_tasks.add_task(execute_scraping_task)
+        # 批量执行有效的配置
+        if valid_config_ids:
+            orchestrator = ScrapingOrchestrator()
+            batch_results = await orchestrator.execute_multiple_configs(
+                db, valid_config_ids, session_type
+            )
+            
+            # 转换结果格式
+            for result in batch_results:
+                if result.get('status') == 'completed':
+                    results.append(BatchScrapeResult(
+                        config_id=result.get('config_id'),
+                        session_id=result.get('session_id'),
+                        status="completed",
+                        message="爬取完成",
+                        total_posts=result.get('total_posts'),
+                        total_comments=result.get('total_comments')
+                    ))
+                else:
+                    results.append(BatchScrapeResult(
+                        config_id=result.get('config_id'),
+                        session_id=result.get('session_id'),
+                        status="failed",
+                        message="爬取失败",
+                        error=result.get('error')
+                    ))
         
-        return ScrapeTriggerResponse(
-            session_id=session.id,
-            status="initiated",
-            message="爬取任务已启动，正在后台执行"
+        successful_count = len([r for r in results if r.status == "completed"])
+        
+        return BatchScrapeResponse(
+            total_configs=len(config_ids),
+            successful_configs=successful_count,
+            results=results,
+            message=f"批量爬取完成: {successful_count}/{len(config_ids)} 个配置成功执行"
         )
         
     except Exception as e:
