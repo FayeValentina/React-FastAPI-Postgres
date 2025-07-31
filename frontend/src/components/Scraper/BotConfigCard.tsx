@@ -152,6 +152,9 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
         </Box>
 
         <Typography variant="caption" display="block" color="text.secondary">
+          创建者: {config.user.username} {config.user.full_name && `(${config.user.full_name})`}
+        </Typography>
+        <Typography variant="caption" display="block" color="text.secondary">
           创建于: {formatDate(config.created_at)}
         </Typography>
         <Typography variant="caption" display="block" color="text.secondary">

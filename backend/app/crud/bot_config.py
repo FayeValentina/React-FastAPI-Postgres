@@ -65,7 +65,7 @@ class CRUDBotConfig:
         """根据ID获取bot配置"""
         result = await db.execute(
             select(BotConfig)
-            .options(selectinload(BotConfig.scrape_sessions))
+            .options(selectinload(BotConfig.scrape_sessions), selectinload(BotConfig.user))
             .where(BotConfig.id == config_id)
         )
         return result.scalar_one_or_none()
@@ -77,7 +77,23 @@ class CRUDBotConfig:
         is_active: Optional[bool] = None
     ) -> List[BotConfig]:
         """获取用户的bot配置列表"""
-        query = select(BotConfig).where(BotConfig.user_id == user_id)
+        query = select(BotConfig).options(selectinload(BotConfig.user)).where(BotConfig.user_id == user_id)
+        
+        if is_active is not None:
+            query = query.where(BotConfig.is_active == is_active)
+        
+        query = query.order_by(BotConfig.created_at.desc())
+        
+        result = await db.execute(query)
+        return result.scalars().all()
+    
+    @staticmethod
+    async def get_all_bot_configs(
+        db: AsyncSession, 
+        is_active: Optional[bool] = None
+    ) -> List[BotConfig]:
+        """获取所有bot配置列表（超级用户使用）"""
+        query = select(BotConfig).options(selectinload(BotConfig.user))
         
         if is_active is not None:
             query = query.where(BotConfig.is_active == is_active)

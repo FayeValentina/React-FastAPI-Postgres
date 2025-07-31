@@ -58,18 +58,16 @@ async def get_bot_configs(
     is_active: bool = None
 ) -> List[BotConfigResponse]:
     """
-    获取当前用户的Bot配置列表
+    获取Bot配置列表
     
+    - 超级用户: 返回所有用户的Bot配置
+    - 普通用户: 返回当前用户的Bot配置
     - is_active: 可选，过滤激活状态
     """
     try:
-        # 普通用户只能查看自己的配置，超级用户可以查看所有配置
+        # 超级用户可以查看所有配置，普通用户只能查看自己的配置
         if current_user.is_superuser:
-            # 对于超级用户，可以扩展为获取所有用户的配置
-            # 这里暂时还是返回当前用户的配置，可以后续扩展
-            configs = await CRUDBotConfig.get_user_bot_configs(
-                db, current_user.id, is_active
-            )
+            configs = await CRUDBotConfig.get_all_bot_configs(db, is_active)
         else:
             configs = await CRUDBotConfig.get_user_bot_configs(
                 db, current_user.id, is_active
