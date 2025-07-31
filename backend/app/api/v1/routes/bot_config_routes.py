@@ -66,12 +66,10 @@ async def get_bot_configs(
     """
     try:
         # 超级用户可以查看所有配置，普通用户只能查看自己的配置
-        if current_user.is_superuser:
-            configs = await CRUDBotConfig.get_all_bot_configs(db, is_active)
-        else:
-            configs = await CRUDBotConfig.get_user_bot_configs(
-                db, current_user.id, is_active
-            )
+        user_id = None if current_user.is_superuser else current_user.id
+        configs = await CRUDBotConfig.get_bot_configs(
+            db, user_id=user_id, is_active=is_active
+        )
         return configs
     except Exception as e:
         raise handle_error(e)

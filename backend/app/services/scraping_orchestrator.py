@@ -96,7 +96,7 @@ class ScrapingOrchestrator:
         """
         try:
             # 获取bot配置并验证
-            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, bot_config_id)
+            bot_config = await CRUDBotConfig.get_bot_configs(db, config_id=bot_config_id)
             if not bot_config or not bot_config.is_active:
                 logger.error(f"Bot配置 {bot_config_id} 不存在或未激活")
                 return None
@@ -122,7 +122,7 @@ class ScrapingOrchestrator:
         """创建新的爬取会话"""
         try:
             # 获取bot配置以创建快照
-            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, bot_config_id)
+            bot_config = await CRUDBotConfig.get_bot_configs(db, config_id=bot_config_id)
             if not bot_config:
                 return None
             

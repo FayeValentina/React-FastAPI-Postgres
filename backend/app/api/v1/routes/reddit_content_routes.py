@@ -116,7 +116,7 @@ async def search_comments(
     """
     try:
         # 获取用户的配置ID列表（用于权限过滤）
-        user_configs = await CRUDBotConfig.get_user_bot_configs(db, current_user.id)
+        user_configs = await CRUDBotConfig.get_bot_configs(db, user_id=current_user.id)
         
         if not user_configs and not current_user.is_superuser:
             return []

@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -58,46 +58,56 @@ class CRUDBotConfig:
         return bot_config
     
     @staticmethod
-    async def get_bot_config_by_id(
-        db: AsyncSession, 
-        config_id: int
-    ) -> Optional[BotConfig]:
-        """根据ID获取bot配置"""
-        result = await db.execute(
-            select(BotConfig)
-            .options(selectinload(BotConfig.scrape_sessions), selectinload(BotConfig.user))
-            .where(BotConfig.id == config_id)
-        )
-        return result.scalar_one_or_none()
-    
-    @staticmethod
-    async def get_user_bot_configs(
-        db: AsyncSession, 
-        user_id: int, 
-        is_active: Optional[bool] = None
-    ) -> List[BotConfig]:
-        """获取用户的bot配置列表"""
-        query = select(BotConfig).options(selectinload(BotConfig.user)).where(BotConfig.user_id == user_id)
+    async def get_bot_configs(
+        db: AsyncSession,
+        config_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        is_active: Optional[bool] = None,
+        include_relations: bool = True
+    ) -> Union[Optional[BotConfig], List[BotConfig]]:
+        """
+        统一的配置获取方法
         
+        Args:
+            db: 数据库会话
+            config_id: 配置ID，如果提供则返回单个配置
+            user_id: 用户ID，如果提供则过滤该用户的配置
+            is_active: 活跃状态过滤
+            include_relations: 是否包含关联数据（用户、会话等）
+            
+        Returns:
+            如果提供config_id，返回单个BotConfig或None
+            否则返回BotConfig列表
+        """
+        query = select(BotConfig)
+        
+        # 添加关联数据加载
+        if include_relations:
+            if config_id is not None:
+                # 单个配置需要加载会话关联
+                query = query.options(
+                    selectinload(BotConfig.scrape_sessions), 
+                    selectinload(BotConfig.user)
+                )
+            else:
+                # 列表查询只加载用户关联
+                query = query.options(selectinload(BotConfig.user))
+        
+        # 根据config_id筛选（返回单个结果）
+        if config_id is not None:
+            query = query.where(BotConfig.id == config_id)
+            result = await db.execute(query)
+            return result.scalar_one_or_none()
+        
+        # 根据user_id筛选
+        if user_id is not None:
+            query = query.where(BotConfig.user_id == user_id)
+        
+        # 根据is_active筛选
         if is_active is not None:
             query = query.where(BotConfig.is_active == is_active)
         
-        query = query.order_by(BotConfig.created_at.desc())
-        
-        result = await db.execute(query)
-        return result.scalars().all()
-    
-    @staticmethod
-    async def get_all_bot_configs(
-        db: AsyncSession, 
-        is_active: Optional[bool] = None
-    ) -> List[BotConfig]:
-        """获取所有bot配置列表（超级用户使用）"""
-        query = select(BotConfig).options(selectinload(BotConfig.user))
-        
-        if is_active is not None:
-            query = query.where(BotConfig.is_active == is_active)
-        
+        # 按创建时间倒序排列
         query = query.order_by(BotConfig.created_at.desc())
         
         result = await db.execute(query)

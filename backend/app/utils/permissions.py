@@ -23,7 +23,7 @@ async def get_accessible_bot_config(
     - 超级用户可以访问所有配置
     - 普通用户只能访问自己的配置
     """
-    bot_config = await CRUDBotConfig.get_bot_config_by_id(db, config_id)
+    bot_config = await CRUDBotConfig.get_bot_configs(db, config_id=config_id)
     if not bot_config:
         raise HTTPException(status_code=404, detail="Bot配置不存在")
     
@@ -46,7 +46,7 @@ async def get_accessible_session(
         raise HTTPException(status_code=404, detail="爬取会话不存在")
     
     # 通过关联的Bot配置检查权限
-    bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
+    bot_config = await CRUDBotConfig.get_bot_configs(db, config_id=session.bot_config_id)
     if not bot_config:
         raise HTTPException(status_code=404, detail="关联的Bot配置不存在")
     
