@@ -89,7 +89,7 @@ async def get_post_comments(
         
         # 通过第一个评论的会话ID检查权限
         first_comment = comments[0]
-        session = await CRUDScrapeSession.get_session_by_id(db, first_comment.scrape_session_id)
+        session = await CRUDScrapeSession.get_sessions(db, session_id=first_comment.scrape_session_id)
         
         if session:
             try:
@@ -136,7 +136,7 @@ async def search_comments(
             # 获取所有用户会话的ID
             user_session_ids = set()
             for config in user_configs:
-                sessions = await CRUDScrapeSession.get_sessions_by_config(db, config.id, limit=1000)
+                sessions = await CRUDScrapeSession.get_sessions(db, bot_config_id=config.id, limit=1000)
                 user_session_ids.update(session.id for session in sessions)
             
             # 过滤评论

@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
@@ -91,90 +91,31 @@ class CRUDScrapeSession:
         return session
     
     @staticmethod
-    async def get_session_by_id(
-        db: AsyncSession,
-        session_id: int,
-        include_content: bool = False
-    ) -> Optional[ScrapeSession]:
-        """根据ID获取爬取会话"""
-        query = select(ScrapeSession).where(ScrapeSession.id == session_id)
-        
-        # 联表查询bot_config和user信息
-        query = query.options(
-            joinedload(ScrapeSession.bot_config).joinedload(BotConfig.user)
-        )
-        
-        if include_content:
-            query = query.options(
-                selectinload(ScrapeSession.reddit_posts),
-                selectinload(ScrapeSession.reddit_comments)
-            )
-        
-        result = await db.execute(query)
-        session = result.scalar_one_or_none()
-        
-        # 添加计算字段
-        if session:
-            session.bot_config_name = session.bot_config.name if session.bot_config else None
-            session.user_username = session.bot_config.user.username if session.bot_config and session.bot_config.user else None
-        
-        return session
-    
-    @staticmethod
-    async def get_sessions_by_config(
-        db: AsyncSession,
-        bot_config_id: int,
-        limit: int = 50,
-        status: Optional[str] = None,
-        session_type: Optional[str] = None
-    ) -> List[ScrapeSession]:
-        """获取指定配置的爬取会话列表"""
-        query = select(ScrapeSession).where(ScrapeSession.bot_config_id == bot_config_id)
-        
-        # 联表查询bot_config和user信息
-        query = query.options(
-            joinedload(ScrapeSession.bot_config).joinedload(BotConfig.user)
-        )
-        
-        if status:
-            query = query.where(ScrapeSession.status == status)
-            
-        if session_type:
-            query = query.where(ScrapeSession.session_type == session_type)
-        
-        query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
-        
-        result = await db.execute(query)
-        sessions = result.scalars().all()
-        
-        # 添加计算字段
-        for session in sessions:
-            session.bot_config_name = session.bot_config.name if session.bot_config else None
-            session.user_username = session.bot_config.user.username if session.bot_config and session.bot_config.user else None
-        
-        return sessions
-    
-    @staticmethod
     async def get_sessions(
         db: AsyncSession,
+        session_id: Optional[int] = None,
         bot_config_id: Optional[int] = None,
         user_id: Optional[int] = None,
         limit: int = 50,
         status: Optional[str] = None,
-        session_type: Optional[str] = None
-    ) -> List[ScrapeSession]:
-        """通用的会话查询方法
+        session_type: Optional[str] = None,
+        include_content: bool = False
+    ) -> Union[Optional[ScrapeSession], List[ScrapeSession]]:
+        """统一的会话查询方法
         
         Args:
             db: 数据库会话
+            session_id: 会话ID，如果提供则返回单个会话
             bot_config_id: Bot配置ID (按配置查询)
             user_id: 用户ID (按用户查询)
             limit: 查询限制
             status: 状态过滤
             session_type: 类型过滤
+            include_content: 是否包含Reddit内容数据
             
         Returns:
-            会话列表
+            如果提供session_id，返回单个ScrapeSession或None
+            否则返回ScrapeSession列表
         """
         query = select(ScrapeSession)
         
@@ -183,8 +124,28 @@ class CRUDScrapeSession:
             joinedload(ScrapeSession.bot_config).joinedload(BotConfig.user)
         )
         
+        # 如果需要包含内容数据
+        if include_content:
+            query = query.options(
+                selectinload(ScrapeSession.reddit_posts),
+                selectinload(ScrapeSession.reddit_comments)
+            )
+        
+        # 根据session_id筛选（返回单个结果）
+        if session_id is not None:
+            query = query.where(ScrapeSession.id == session_id)
+            result = await db.execute(query)
+            session = result.scalar_one_or_none()
+            
+            # 添加计算字段
+            if session:
+                session.bot_config_name = session.bot_config.name if session.bot_config else None
+                session.user_username = session.bot_config.user.username if session.bot_config and session.bot_config.user else None
+            
+            return session
+        
+        # 根据bot_config_id筛选
         if bot_config_id:
-            # 按配置查询
             query = query.where(ScrapeSession.bot_config_id == bot_config_id)
         elif user_id:
             # 按用户查询 - 先获取用户的配置IDs

@@ -41,7 +41,7 @@ async def get_accessible_session(
     - 超级用户可以访问所有会话
     - 普通用户只能访问自己Bot配置关联的会话
     """
-    session = await CRUDScrapeSession.get_session_by_id(db, session_id)
+    session = await CRUDScrapeSession.get_sessions(db, session_id=session_id)
     if not session:
         raise HTTPException(status_code=404, detail="爬取会话不存在")
     
