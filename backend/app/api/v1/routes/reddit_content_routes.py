@@ -12,9 +12,10 @@ from app.crud.reddit_content import CRUDRedditContent
 from app.services.scraping_orchestrator import ScrapingOrchestrator
 from app.db.base import get_async_session
 from app.models.user import User
-from app.api.v1.dependencies.current_user import get_current_active_user
+from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InsufficientPermissionsError
 from app.utils.common import handle_error
+from app.utils.permissions import get_accessible_session
 
 router = APIRouter(tags=["reddit-content"])
 
@@ -32,21 +33,7 @@ async def get_session_posts(
     只能查看自己配置的会话数据，除非是超级用户
     """
     try:
-        # 检查会话权限
-        session = await CRUDScrapeSession.get_session_by_id(db, session_id)
-        
-        if not session:
-            raise HTTPException(status_code=404, detail="爬取会话不存在")
-        
-        # 获取关联的bot配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="关联的Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限查看此会话数据")
+        await get_accessible_session(db, session_id, current_user)
         
         # 获取帖子列表
         posts = await CRUDRedditContent.get_posts_by_session(db, session_id, limit)
@@ -70,21 +57,7 @@ async def get_session_comments(
     只能查看自己配置的会话数据，除非是超级用户
     """
     try:
-        # 检查会话权限
-        session = await CRUDScrapeSession.get_session_by_id(db, session_id)
-        
-        if not session:
-            raise HTTPException(status_code=404, detail="爬取会话不存在")
-        
-        # 获取关联的bot配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="关联的Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限查看此会话数据")
+        await get_accessible_session(db, session_id, current_user)
         
         # 获取评论列表
         comments = await CRUDRedditContent.get_comments_by_session(db, session_id, limit)
@@ -119,9 +92,9 @@ async def get_post_comments(
         session = await CRUDScrapeSession.get_session_by_id(db, first_comment.scrape_session_id)
         
         if session:
-            bot_config = await CRUDBotConfig.get_bot_config_by_id(db, session.bot_config_id)
-            
-            if bot_config and bot_config.user_id != current_user.id and not current_user.is_superuser:
+            try:
+                await get_accessible_session(db, first_comment.scrape_session_id, current_user)
+            except HTTPException:
                 raise InsufficientPermissionsError("没有权限查看此帖子数据")
         
         return comments

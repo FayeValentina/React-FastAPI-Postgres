@@ -128,24 +128,6 @@ class CRUDBotConfig:
         await db.commit()
         return True
     
-    @staticmethod
-    async def toggle_bot_config_status(
-        db: AsyncSession, 
-        config_id: int
-    ) -> Optional[BotConfig]:
-        """切换bot配置的激活状态"""
-        result = await db.execute(
-            select(BotConfig).where(BotConfig.id == config_id)
-        )
-        bot_config = result.scalar_one_or_none()
-        
-        if not bot_config:
-            return None
-        
-        bot_config.is_active = not bot_config.is_active
-        await db.commit()
-        await db.refresh(bot_config)
-        return bot_config
     
     @staticmethod
     async def get_active_configs_for_auto_scraping(

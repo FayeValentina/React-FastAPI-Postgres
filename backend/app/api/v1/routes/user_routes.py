@@ -9,7 +9,7 @@ from app.schemas.user import (
 from app.crud.user import user
 from app.db.base import get_async_session
 from app.models.user import User
-from app.api.v1.dependencies.current_user import (
+from app.dependencies.current_user import (
     get_current_active_user,
     get_current_superuser
 )

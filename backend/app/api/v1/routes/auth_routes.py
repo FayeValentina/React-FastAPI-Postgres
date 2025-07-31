@@ -20,7 +20,7 @@ from app.services.email_service import email_service
 from app.db.base import get_async_session
 from app.schemas.token import Token, RefreshTokenRequest, TokenRevocationRequest
 from app.schemas.user import User
-from app.api.v1.dependencies.current_user import get_current_active_user
+from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InvalidCredentialsError, InvalidRefreshTokenError
 from app.utils.common import handle_error
 

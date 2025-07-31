@@ -1,11 +1,12 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from app.models.scrape_session import SessionType, SessionStatus
 
 
 class ScrapeSessionBase(BaseModel):
-    session_type: str = Field("manual", description="会话类型")
-    status: str = Field("pending", description="会话状态")
+    session_type: SessionType = Field(SessionType.MANUAL, description="会话类型")
+    status: SessionStatus = Field(SessionStatus.PENDING, description="会话状态")
 
 
 class ScrapeSessionCreate(ScrapeSessionBase):
@@ -52,7 +53,7 @@ class ScrapeSessionListResponse(BaseModel):
 
 class BatchScrapeRequest(BaseModel):
     config_ids: List[int] = Field(..., description="Bot配置ID列表", min_items=1)
-    session_type: str = Field("manual", description="会话类型")
+    session_type: SessionType = Field(SessionType.MANUAL, description="会话类型")
 
 
 class BatchScrapeResult(BaseModel):

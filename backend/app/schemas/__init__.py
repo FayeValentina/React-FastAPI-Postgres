@@ -7,7 +7,7 @@ from .password_reset import (
     PasswordResetRequest, PasswordResetConfirm, PasswordResetResponse
 )
 from .bot_config import (
-    BotConfigBase, BotConfigCreate, BotConfigUpdate, BotConfigResponse, BotConfigToggleResponse
+    BotConfigBase, BotConfigCreate, BotConfigUpdate, BotConfigResponse
 )
 from .scrape_session import (
     ScrapeSessionBase, ScrapeSessionCreate, ScrapeSessionResponse, ScrapeSessionStats,
@@ -30,7 +30,7 @@ __all__ = [
     "PasswordResetRequest", "PasswordResetConfirm", "PasswordResetResponse",
     
     # Bot config models
-    "BotConfigBase", "BotConfigCreate", "BotConfigUpdate", "BotConfigResponse", "BotConfigToggleResponse",
+    "BotConfigBase", "BotConfigCreate", "BotConfigUpdate", "BotConfigResponse",
     
     # Scrape session models
     "ScrapeSessionBase", "ScrapeSessionCreate", "ScrapeSessionResponse", "ScrapeSessionStats",

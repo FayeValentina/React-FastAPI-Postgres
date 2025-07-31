@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api import router
 from app.core.config import settings
-from app.api.v1.dependencies.request_context import request_context_dependency
+from app.dependencies.request_context import request_context_dependency
 from app.middleware.logging import RequestResponseLoggingMiddleware
 from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging

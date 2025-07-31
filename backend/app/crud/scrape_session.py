@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.models.scrape_session import ScrapeSession
+from app.models.scrape_session import ScrapeSession, SessionStatus, SessionType
 from app.models.reddit_content import RedditPost, RedditComment
 
 
@@ -15,14 +15,14 @@ class CRUDScrapeSession:
     async def create_scrape_session(
         db: AsyncSession,
         bot_config_id: int,
-        session_type: str = 'manual',
+        session_type: SessionType = SessionType.MANUAL,
         config_snapshot: Optional[Dict[str, Any]] = None
     ) -> ScrapeSession:
         """创建新的爬取会话"""
         session = ScrapeSession(
             bot_config_id=bot_config_id,
             session_type=session_type,
-            status='pending',
+            status=SessionStatus.PENDING,
             config_snapshot=config_snapshot or {}
         )
         
@@ -45,7 +45,7 @@ class CRUDScrapeSession:
         if not session:
             return None
         
-        session.status = 'running'
+        session.status = SessionStatus.RUNNING
         session.started_at = datetime.utcnow()
         
         await db.commit()
@@ -74,7 +74,7 @@ class CRUDScrapeSession:
         
         current_time = datetime.utcnow()
         session.completed_at = current_time
-        session.status = 'failed' if error_message else 'completed'
+        session.status = SessionStatus.FAILED if error_message else SessionStatus.COMPLETED
         session.total_posts_found = total_posts_found
         session.total_comments_found = total_comments_found
         session.quality_comments_count = quality_comments_count
@@ -181,20 +181,6 @@ class CRUDScrapeSession:
         return result.scalars().all()
     
     # 保留向后兼容的方法
-    @staticmethod
-    async def get_sessions_by_user(
-        db: AsyncSession,
-        user_id: int,
-        limit: int = 50,
-        status: Optional[str] = None,
-        session_type: Optional[str] = None
-    ) -> List[ScrapeSession]:
-        """获取指定用户的所有爬取会话列表（兼容方法）"""
-        return await CRUDScrapeSession.get_sessions(
-            db, user_id=user_id, limit=limit,
-            status=status, session_type=session_type
-        )
-    
     @staticmethod
     async def get_recent_sessions_stats(
         db: AsyncSession,

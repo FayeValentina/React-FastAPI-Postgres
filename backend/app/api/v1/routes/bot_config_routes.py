@@ -3,14 +3,15 @@ from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.bot_config import (
-    BotConfigCreate, BotConfigUpdate, BotConfigResponse, BotConfigToggleResponse
+    BotConfigCreate, BotConfigUpdate, BotConfigResponse
 )
 from app.crud.bot_config import CRUDBotConfig
 from app.db.base import get_async_session
 from app.models.user import User
-from app.api.v1.dependencies.current_user import get_current_active_user
+from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import UserNotFoundError, InsufficientPermissionsError
 from app.utils.common import handle_error
+from app.utils.permissions import get_accessible_bot_config
 
 router = APIRouter(prefix="/bot-configs", tags=["bot-configs"])
 
@@ -90,14 +91,7 @@ async def get_bot_config(
     只能获取自己的配置，除非是超级用户
     """
     try:
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="Bot配置不存在")
-        
-        # 权限检查：只能查看自己的配置或超级用户可以查看所有配置
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限查看此配置")
+        bot_config = await get_accessible_bot_config(db, config_id, current_user)
             
         return bot_config
     except Exception as e:
@@ -117,15 +111,7 @@ async def update_bot_config(
     只能更新自己的配置，除非是超级用户
     """
     try:
-        # 先获取配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限修改此配置")
+        await get_accessible_bot_config(db, config_id, current_user)
         
         # 只更新提供的字段
         update_data = config_update.model_dump(exclude_unset=True)
@@ -153,15 +139,7 @@ async def delete_bot_config(
     只能删除自己的配置，除非是超级用户
     """
     try:
-        # 先获取配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限删除此配置")
+        await get_accessible_bot_config(db, config_id, current_user)
         
         success = await CRUDBotConfig.delete_bot_config(db, config_id)
         
@@ -171,39 +149,3 @@ async def delete_bot_config(
         raise handle_error(e)
 
 
-@router.post("/{config_id}/toggle", response_model=BotConfigToggleResponse)
-async def toggle_bot_config(
-    config_id: int,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)]
-) -> BotConfigToggleResponse:
-    """
-    启用/禁用Bot配置
-    
-    只能切换自己的配置，除非是超级用户
-    """
-    try:
-        # 先获取配置检查权限
-        bot_config = await CRUDBotConfig.get_bot_config_by_id(db, config_id)
-        
-        if not bot_config:
-            raise HTTPException(status_code=404, detail="Bot配置不存在")
-        
-        # 权限检查
-        if bot_config.user_id != current_user.id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有权限修改此配置")
-        
-        updated_config = await CRUDBotConfig.toggle_bot_config_status(db, config_id)
-        
-        if not updated_config:
-            raise HTTPException(status_code=404, detail="切换状态失败")
-        
-        status_text = "启用" if updated_config.is_active else "禁用"
-        
-        return BotConfigToggleResponse(
-            id=updated_config.id,
-            is_active=updated_config.is_active,
-            message=f"Bot配置已{status_text}"
-        )
-    except Exception as e:
-        raise handle_error(e)

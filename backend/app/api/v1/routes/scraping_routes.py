@@ -11,10 +11,11 @@ from app.crud.scrape_session import CRUDScrapeSession
 from app.services.scraping_orchestrator import ScrapingOrchestrator
 from app.db.base import get_async_session
 from app.models.user import User
-from app.api.v1.dependencies.current_user import get_current_active_user
+from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InsufficientPermissionsError
 from app.utils.common import handle_error
-from app.utils.permissions import check_bot_config_permission
+from app.utils.permissions import get_accessible_bot_config, get_accessible_session
+from app.models.scrape_session import SessionStatus, SessionType
 
 router = APIRouter(prefix="/scraping", tags=["scraping"])
 
@@ -40,7 +41,7 @@ async def batch_trigger_scraping(
         
         for config_id in config_ids:
             try:
-                bot_config = await check_bot_config_permission(db, config_id, current_user)
+                bot_config = await get_accessible_bot_config(db, config_id, current_user)
                 if not bot_config.is_active:
                     results.append(BatchScrapeResult(
                         config_id=config_id,
@@ -100,8 +101,8 @@ async def batch_trigger_scraping(
 async def get_scrape_sessions(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
-    status: str = None,
-    session_type: str = None,
+    status: SessionStatus = None,
+    session_type: SessionType = None,
     limit: int = 50
 ) -> List[ScrapeSessionResponse]:
     """
@@ -158,13 +159,7 @@ async def get_scrape_session(
     只能查看自己配置的会话，除非是超级用户
     """
     try:
-        session = await CRUDScrapeSession.get_session_by_id(db, session_id)
-        
-        if not session:
-            raise HTTPException(status_code=404, detail="爬取会话不存在")
-        
-        # 通过关联的bot配置检查权限
-        await check_bot_config_permission(db, session.bot_config_id, current_user)
+        session = await get_accessible_session(db, session_id, current_user)
         
         return session
         

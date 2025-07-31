@@ -10,7 +10,7 @@ from app.crud.bot_config import CRUDBotConfig
 from app.crud.scrape_session import CRUDScrapeSession
 from app.crud.reddit_content import CRUDRedditContent
 from app.models.bot_config import BotConfig
-from app.models.scrape_session import ScrapeSession
+from app.models.scrape_session import ScrapeSession, SessionType
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +32,13 @@ class ScrapingOrchestrator:
         config_ids = [config.id for config in active_configs]
         logger.info(f"找到 {len(config_ids)} 个启用自动爬取的配置")
         
-        return await self.execute_multiple_configs(db, config_ids, 'auto')
+        return await self.execute_multiple_configs(db, config_ids, SessionType.AUTO)
 
     async def execute_multiple_configs(
         self,
         db: AsyncSession,
         config_ids: List[int],
-        session_type: str = 'batch'
+        session_type: SessionType = SessionType.MANUAL
     ) -> List[Dict[str, Any]]:
         """并发执行多个配置的爬取"""
         tasks = []
@@ -82,7 +82,7 @@ class ScrapingOrchestrator:
         self,
         db: AsyncSession,
         bot_config_id: int,
-        session_type: str = 'manual'
+        session_type: SessionType = SessionType.MANUAL
     ) -> Optional[Dict[str, Any]]:
         """执行爬取会话
         

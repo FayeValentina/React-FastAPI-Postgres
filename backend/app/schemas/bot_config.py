@@ -52,7 +52,3 @@ class BotConfigResponse(BotConfigBase):
         from_attributes = True
 
 
-class BotConfigToggleResponse(BaseModel):
-    id: int
-    is_active: bool
-    message: str

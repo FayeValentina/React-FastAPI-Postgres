@@ -1,10 +1,26 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
-from sqlalchemy import String, DateTime, func, Integer, Text, ForeignKey
+from sqlalchemy import String, DateTime, func, Integer, Text, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from enum import Enum as PyEnum
 
 from app.db.base_class import Base
+
+
+class SessionType(str, PyEnum):
+    """会话类型枚举"""
+    MANUAL = "manual"  # 手动触发
+    AUTO = "auto"      # 定时任务自动触发
+
+
+class SessionStatus(str, PyEnum):
+    """会话状态枚举"""
+    PENDING = "pending"      # 等待执行
+    RUNNING = "running"      # 执行中
+    COMPLETED = "completed"  # 执行成功
+    FAILED = "failed"        # 执行失败
+
 
 if TYPE_CHECKING:
     from .bot_config import BotConfig
@@ -22,8 +38,8 @@ class ScrapeSession(Base):
     )
     
     # 会话信息
-    session_type: Mapped[str] = mapped_column(String(20), default='manual')  # manual, scheduled, auto
-    status: Mapped[str] = mapped_column(String(20), default='pending')  # pending, running, completed, failed
+    session_type: Mapped[SessionType] = mapped_column(Enum(SessionType), default=SessionType.MANUAL)
+    status: Mapped[SessionStatus] = mapped_column(Enum(SessionStatus), default=SessionStatus.PENDING)
     
     # 执行时间
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
