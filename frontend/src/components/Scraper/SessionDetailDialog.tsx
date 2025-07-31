@@ -97,6 +97,18 @@ const SessionDetailDialog: React.FC<SessionDetailDialogProps> = ({
             <Typography variant="body2" color="text.secondary">Bot配置ID</Typography>
             <Typography variant="body1">{session.bot_config_id}</Typography>
           </Grid>
+          {session.bot_config_name && (
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">配置名称</Typography>
+              <Typography variant="body1">{session.bot_config_name}</Typography>
+            </Grid>
+          )}
+          {session.user_username && (
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">归属用户</Typography>
+              <Typography variant="body1">{session.user_username}</Typography>
+            </Grid>
+          )}
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" color="text.secondary">会话类型</Typography>
             <Typography variant="body1">{session.session_type}</Typography>

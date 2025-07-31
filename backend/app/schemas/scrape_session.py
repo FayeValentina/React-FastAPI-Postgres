@@ -16,6 +16,8 @@ class ScrapeSessionCreate(ScrapeSessionBase):
 class ScrapeSessionResponse(ScrapeSessionBase):
     id: int
     bot_config_id: int
+    bot_config_name: Optional[str] = None
+    user_username: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None

@@ -90,6 +90,18 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onClick }) => {
           类型: {session.session_type}
         </Typography>
 
+        {session.bot_config_name && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            配置: {session.bot_config_name}
+          </Typography>
+        )}
+
+        {session.user_username && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            用户: {session.user_username}
+          </Typography>
+        )}
+
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           开始时间: {formatDateTime(session.started_at)}
         </Typography>

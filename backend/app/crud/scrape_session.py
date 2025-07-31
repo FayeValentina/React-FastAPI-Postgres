@@ -2,10 +2,11 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from app.models.bot_config import BotConfig
 from app.models.scrape_session import ScrapeSession, SessionStatus, SessionType
 from app.models.reddit_content import RedditPost, RedditComment
+from app.models.user import User
 
 
 class CRUDScrapeSession:
@@ -98,6 +99,11 @@ class CRUDScrapeSession:
         """根据ID获取爬取会话"""
         query = select(ScrapeSession).where(ScrapeSession.id == session_id)
         
+        # 联表查询bot_config和user信息
+        query = query.options(
+            joinedload(ScrapeSession.bot_config).joinedload(BotConfig.user)
+        )
+        
         if include_content:
             query = query.options(
                 selectinload(ScrapeSession.reddit_posts),
@@ -105,7 +111,14 @@ class CRUDScrapeSession:
             )
         
         result = await db.execute(query)
-        return result.scalar_one_or_none()
+        session = result.scalar_one_or_none()
+        
+        # 添加计算字段
+        if session:
+            session.bot_config_name = session.bot_config.name if session.bot_config else None
+            session.user_username = session.bot_config.user.username if session.bot_config and session.bot_config.user else None
+        
+        return session
     
     @staticmethod
     async def get_sessions_by_config(
@@ -118,6 +131,11 @@ class CRUDScrapeSession:
         """获取指定配置的爬取会话列表"""
         query = select(ScrapeSession).where(ScrapeSession.bot_config_id == bot_config_id)
         
+        # 联表查询bot_config和user信息
+        query = query.options(
+            joinedload(ScrapeSession.bot_config).joinedload(BotConfig.user)
+        )
+        
         if status:
             query = query.where(ScrapeSession.status == status)
             
@@ -127,7 +145,14 @@ class CRUDScrapeSession:
         query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
         
         result = await db.execute(query)
-        return result.scalars().all()
+        sessions = result.scalars().all()
+        
+        # 添加计算字段
+        for session in sessions:
+            session.bot_config_name = session.bot_config.name if session.bot_config else None
+            session.user_username = session.bot_config.user.username if session.bot_config and session.bot_config.user else None
+        
+        return sessions
     
     @staticmethod
     async def get_sessions(
@@ -153,6 +178,11 @@ class CRUDScrapeSession:
         """
         query = select(ScrapeSession)
         
+        # 联表查询bot_config和user信息
+        query = query.options(
+            joinedload(ScrapeSession.bot_config).joinedload(BotConfig.user)
+        )
+        
         if bot_config_id:
             # 按配置查询
             query = query.where(ScrapeSession.bot_config_id == bot_config_id)
@@ -177,7 +207,14 @@ class CRUDScrapeSession:
         query = query.order_by(ScrapeSession.created_at.desc()).limit(limit)
         
         result = await db.execute(query)
-        return result.scalars().all()
+        sessions = result.scalars().all()
+        
+        # 添加计算字段
+        for session in sessions:
+            session.bot_config_name = session.bot_config.name if session.bot_config else None
+            session.user_username = session.bot_config.user.username if session.bot_config and session.bot_config.user else None
+        
+        return sessions
     
     # 保留向后兼容的方法
     @staticmethod

@@ -12,6 +12,8 @@ export interface ScrapeSessionBase {
 export interface ScrapeSessionResponse extends ScrapeSessionBase {
   id: number;
   bot_config_id: number;
+  bot_config_name?: string | null;
+  user_username?: string | null;
   started_at: string | null;
   completed_at: string | null;
   duration_seconds: number | null;
