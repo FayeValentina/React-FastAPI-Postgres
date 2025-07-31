@@ -39,6 +39,7 @@ class BotConfigUpdate(BaseModel):
     auto_scrape_enabled: Optional[bool] = None
     scrape_interval_hours: Optional[int] = Field(None, ge=1)
     max_daily_posts: Optional[int] = Field(None, ge=1)
+    is_active: Optional[bool] = Field(None, description="是否启用配置")
 
 
 class BotConfigResponse(BotConfigBase):

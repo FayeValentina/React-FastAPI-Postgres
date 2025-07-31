@@ -86,7 +86,6 @@ const SessionFilterBar: React.FC<SessionFilterBarProps> = ({
               >
                 <MenuItem value="">全部</MenuItem>
                 <MenuItem value="manual">手动</MenuItem>
-                <MenuItem value="scheduled">定时</MenuItem>
                 <MenuItem value="auto">自动</MenuItem>
               </Select>
             </FormControl>

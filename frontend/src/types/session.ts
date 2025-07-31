@@ -1,6 +1,12 @@
+// 会话状态类型 - 与后端SessionStatus枚举匹配
+export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+// 会话类型 - 与后端SessionType枚举匹配  
+export type SessionType = 'manual' | 'auto';
+
 export interface ScrapeSessionBase {
-  session_type: string;
-  status: string;
+  session_type: SessionType;
+  status: SessionStatus;
 }
 
 export interface ScrapeSessionResponse extends ScrapeSessionBase {
@@ -36,12 +42,6 @@ export interface ScrapeTriggerResponse {
   status: string;
   message: string;
 }
-
-// 会话状态类型
-export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-// 会话类型
-export type SessionType = 'manual' | 'scheduled' | 'auto';
 
 // 过滤条件
 export interface SessionFilters {

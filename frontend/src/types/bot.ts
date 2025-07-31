@@ -1,4 +1,5 @@
 // Bot配置相关的类型定义
+import { SessionType } from './session';
 
 export interface BotConfigBase {
   name: string;
@@ -29,16 +30,10 @@ export interface BotConfigResponse extends BotConfigBase {
   updated_at: string;
 }
 
-export interface BotConfigToggleResponse {
-  id: number;
-  is_active: boolean;
-  message: string;
-}
-
 // 批量爬取相关类型
 export interface BatchScrapeRequest {
   config_ids: number[];
-  session_type?: string;
+  session_type?: SessionType;
 }
 
 export interface BatchScrapeResult {

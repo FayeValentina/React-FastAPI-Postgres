@@ -100,7 +100,9 @@ const BotManagementPage: React.FC = () => {
 
   const handleToggleConfig = async (config: BotConfigResponse) => {
     try {
-      await postData(`/v1/bot-configs/${config.id}/toggle`, {});
+      await patchData(`/v1/bot-configs/${config.id}`, {
+        is_active: !config.is_active
+      });
       await loadConfigs(); // Reload the list
     } catch (error) {
       console.error('Failed to toggle config:', error);
