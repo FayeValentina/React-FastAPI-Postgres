@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 
@@ -50,6 +50,6 @@ class BotConfigResponse(BotConfigBase):
     updated_at: datetime
 
     class Config:
-        from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
 
 

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
 from sqlalchemy.orm import selectinload
-
+from app.models.bot_config import BotConfig
 from app.models.scrape_session import ScrapeSession, SessionStatus, SessionType
 from app.models.reddit_content import RedditPost, RedditComment
 
@@ -158,7 +158,6 @@ class CRUDScrapeSession:
             query = query.where(ScrapeSession.bot_config_id == bot_config_id)
         elif user_id:
             # 按用户查询 - 先获取用户的配置IDs
-            from app.models.bot_config import BotConfig
             config_result = await db.execute(
                 select(BotConfig.id).where(BotConfig.user_id == user_id)
             )
