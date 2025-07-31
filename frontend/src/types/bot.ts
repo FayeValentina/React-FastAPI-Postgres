@@ -1,12 +1,6 @@
 // Bot配置相关的类型定义
 import { SessionType } from './session';
 
-export interface UserInfo {
-  id: number;
-  username: string;
-  full_name?: string;
-}
-
 export interface BotConfigBase {
   name: string;
   description?: string;
@@ -31,7 +25,8 @@ export type BotConfigUpdate = Partial<BotConfigBase>;
 export interface BotConfigResponse extends BotConfigBase {
   id: number;
   user_id: number;
-  user: UserInfo;
+  user_username?: string | null;
+  user_fullname?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

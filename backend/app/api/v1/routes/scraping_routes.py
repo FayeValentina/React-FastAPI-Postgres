@@ -106,16 +106,19 @@ async def get_scrape_sessions(
     limit: int = 50
 ) -> List[ScrapeSessionResponse]:
     """
-    获取当前用户的爬取会话列表
+    获取爬取会话列表
     
+    - 超级用户: 返回所有用户的爬取会话
+    - 普通用户: 返回当前用户配置关联的爬取会话
     - status: 可选，按状态过滤
     - session_type: 可选，按会话类型过滤
     - limit: 结果数量限制
     """
     try:
-        # 直接获取用户的所有会话
+        # 超级用户可以查看所有会话，普通用户只能查看自己配置的会话
+        user_id = None if current_user.is_superuser else current_user.id
         sessions = await CRUDScrapeSession.get_sessions(
-            db, user_id=current_user.id, limit=limit, status=status, session_type=session_type
+            db, user_id=user_id, limit=limit, status=status, session_type=session_type
         )
         
         return sessions

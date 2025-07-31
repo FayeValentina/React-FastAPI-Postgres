@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.bot_config import BotConfig
 from app.models.scrape_session import ScrapeSession
@@ -87,17 +87,24 @@ class CRUDBotConfig:
                 # 单个配置需要加载会话关联
                 query = query.options(
                     selectinload(BotConfig.scrape_sessions), 
-                    selectinload(BotConfig.user)
+                    joinedload(BotConfig.user)
                 )
             else:
                 # 列表查询只加载用户关联
-                query = query.options(selectinload(BotConfig.user))
+                query = query.options(joinedload(BotConfig.user))
         
         # 根据config_id筛选（返回单个结果）
         if config_id is not None:
             query = query.where(BotConfig.id == config_id)
             result = await db.execute(query)
-            return result.scalar_one_or_none()
+            config = result.scalar_one_or_none()
+            
+            # 添加计算字段
+            if config and include_relations:
+                config.user_username = config.user.username if config.user else None
+                config.user_fullname = config.user.full_name if config.user else None
+            
+            return config
         
         # 根据user_id筛选
         if user_id is not None:
@@ -111,7 +118,15 @@ class CRUDBotConfig:
         query = query.order_by(BotConfig.created_at.desc())
         
         result = await db.execute(query)
-        return result.scalars().all()
+        configs = result.scalars().all()
+        
+        # 添加计算字段
+        if include_relations:
+            for config in configs:
+                config.user_username = config.user.username if config.user else None
+                config.user_fullname = config.user.full_name if config.user else None
+        
+        return configs
     
     @staticmethod
     async def update_bot_config(

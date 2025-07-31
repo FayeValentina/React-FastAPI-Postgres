@@ -3,16 +3,6 @@ from typing import List, Optional
 from datetime import datetime
 
 
-class UserInfo(BaseModel):
-    """用户信息子模型"""
-    id: int
-    username: str
-    full_name: Optional[str] = None
-    
-    class Config:
-        model_config = ConfigDict(from_attributes=True)
-
-
 class BotConfigBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Bot配置名称")
     description: Optional[str] = Field(None, description="Bot配置描述")
@@ -55,7 +45,8 @@ class BotConfigUpdate(BaseModel):
 class BotConfigResponse(BotConfigBase):
     id: int
     user_id: int
-    user: UserInfo
+    user_username: Optional[str] = None
+    user_fullname: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
