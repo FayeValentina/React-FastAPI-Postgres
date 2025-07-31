@@ -32,32 +32,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 backend/                    # FastAPI backend
 ├── app/
-│   ├── api/v1/            # API routes (auth, users)
-│   ├── core/              # Configuration, security, logging
-│   ├── crud/              # Database operations (user, token, password_reset)
+│   ├── api/v1/            # API routes (auth, users, bot_config, scraping, reddit_content)
+│   ├── core/              # Configuration, security, logging, constants, exceptions
+│   ├── crud/              # Database operations (user, token, password_reset, bot_config, scrape_session, reddit_content)
 │   ├── db/                # Database connection and base classes
+│   ├── dependencies/      # Dependency injection (current_user, request_context)
 │   ├── middleware/        # Auth and logging middleware
-│   ├── models/            # SQLAlchemy models (user, token, password_reset)
-│   ├── schemas/           # Pydantic schemas (auth, user, password_reset)
-│   ├── services/          # Email service for password reset
-│   └── utils/             # Common utilities
+│   ├── models/            # SQLAlchemy models (user, token, password_reset, bot_config, scrape_session, reddit_content)
+│   ├── schemas/           # Pydantic schemas (auth, user, password_reset, bot_config, scrape_session, reddit_content)
+│   ├── services/          # Business logic (email_service, reddit_scraper_service, scraping_orchestrator)
+│   ├── tasks/             # Background tasks and scheduler
+│   ├── tests/             # Test files
+│   └── utils/             # Common utilities (common, permissions)
 ├── alembic/               # Database migrations
 └── pyproject.toml         # Poetry dependencies
 
 frontend/                  # React frontend
 ├── src/
-│   ├── components/        # React components (Layout, ProtectedRoute, TokenExpiryDialog)
-│   ├── pages/             # Page components (Login, Register, Dashboard, Profile, ForgotPassword, ResetPassword)
-│   ├── services/          # API client (axios)
+│   ├── components/        # React components (Layout, ProtectedRoute, TokenExpiryDialog, Scraper components)
+│   ├── pages/             # Page components (Login, Register, Dashboard, Profile, ForgotPassword, ResetPassword, BotManagementPage, SessionManagementPage, DemoPage, UserPage)
+│   ├── services/          # API client (axios, authManager, uiManager, interceptors)
 │   ├── stores/            # Zustand stores (auth-store, api-store, ui-store)
-│   ├── types/             # TypeScript types (auth, user)
+│   ├── types/             # TypeScript types (auth, user, bot, session, api)
 │   └── utils/             # Utility functions (errorHandler)
 └── package.json           # npm dependencies
 ```
 
-### Backend Architecture (Simplified)
+### Backend Architecture
 - **FastAPI** with async/await support using asyncpg for PostgreSQL
 - **JWT Authentication** with access and refresh tokens (dual-token system)
+- **Reddit Scraping System** with bot configuration and session management
 - **Middleware Stack** (order matters):
   1. AuthMiddleware - JWT validation (excludes auth endpoints)
   2. CORSMiddleware - Cross-origin requests
@@ -65,8 +69,9 @@ frontend/                  # React frontend
 - **Configuration** using Pydantic Settings with nested configs (postgres, security, cors, etc.)
 - **Database**: SQLAlchemy 2.0 with automatic Alembic migrations
 - **Logging**: Loguru for structured logging
+- **Background Tasks**: APScheduler for scheduled scraping operations
 
-### API Endpoints (Updated)
+### API Endpoints
 **Authentication** (`/api/v1/auth`)
 - `POST /auth/login` - User login (username/email + password)
 - `POST /auth/refresh` - Refresh access token
@@ -85,12 +90,36 @@ frontend/                  # React frontend
 - `PATCH /users/{user_id}` - Update user (unified endpoint for partial updates)
 - `DELETE /users/{user_id}` - Delete user (admin only)
 
+**Bot Configuration** (`/api/v1/bot-configs`)
+- `GET /bot-configs` - Get bot configurations
+- `POST /bot-configs` - Create new bot configuration
+- `GET /bot-configs/{config_id}` - Get specific bot configuration
+- `PATCH /bot-configs/{config_id}` - Update bot configuration
+- `DELETE /bot-configs/{config_id}` - Delete bot configuration
+
+**Scraping Management** (`/api/v1/scraping`)
+- `POST /scraping/start` - Start scraping session
+- `POST /scraping/stop` - Stop scraping session
+- `GET /scraping/status` - Get scraping status
+- `GET /scraping/sessions` - Get scraping sessions
+- `GET /scraping/sessions/{session_id}` - Get specific session
+
+**Reddit Content** (`/api/v1/reddit`)
+- `GET /reddit/posts` - Get Reddit posts
+- `GET /reddit/posts/{post_id}` - Get specific Reddit post
+- `GET /reddit/posts/{post_id}/comments` - Get post comments
+- `GET /reddit/comments` - Get Reddit comments
+
 ### Core Models
 - **User**: Basic user information (id, email, username, full_name, age, is_active, is_superuser)
 - **RefreshToken**: JWT refresh token management with rotation
 - **PasswordReset**: Password reset tokens with expiration and usage tracking
+- **BotConfig**: Reddit bot configuration (subreddits, keywords, posting rules)
+- **ScrapeSession**: Scraping session management and tracking
+- **RedditPost**: Reddit post data and metadata
+- **RedditComment**: Reddit comment data and relationships
 
-### Schema Models (Updated)
+### Schema Models
 - **UserCreate**: User registration data
 - **UserUpdate**: Unified user update model (supports partial updates)
 - **UserResponse**: User data response
@@ -99,8 +128,12 @@ frontend/                  # React frontend
 - **PasswordResetRequest**: Forgot password request (email)
 - **PasswordResetConfirm**: Reset password with token and new password
 - **PasswordResetResponse**: Generic response for password reset operations
+- **BotConfigCreate/Update/Response**: Bot configuration schemas
+- **ScrapeSessionCreate/Update/Response**: Scraping session schemas
+- **RedditPostResponse**: Reddit post data schema
+- **RedditCommentResponse**: Reddit comment data schema
 
-### Frontend Architecture (Enhanced)
+### Frontend Architecture
 - **React 18** with TypeScript and Vite
 - **Material-UI** for components and styling
 - **Zustand** for state management (auth-store, api-store, ui-store)
@@ -111,7 +144,28 @@ frontend/                  # React frontend
 - **Route Protection**: `ProtectedRoute` component for access control
 - **Unified Error Handling**: Centralized error processing with friendly messages
 - **Axios** with smart interceptors for token management and refresh
-- **Password Reset Flow**: Complete forgot/reset password implementation
+- **Reddit Scraper Management**: Complete bot configuration and session monitoring interface
+
+### Key Features
+
+#### Reddit Scraping System
+- **Bot Configuration**: Configure Reddit bots with subreddit targets, keywords, and posting rules
+- **Session Management**: Track scraping sessions with status monitoring and detailed logs
+- **Content Storage**: Store scraped Reddit posts and comments with full metadata
+- **Real-time Monitoring**: Live status updates and session statistics
+- **Automated Scheduling**: Background task execution with APScheduler
+
+#### Authentication & Security
+- **Complete Auth Flow**: Registration, login, password reset with email verification
+- **JWT Token System**: Access and refresh token rotation with secure storage
+- **Role-based Access**: User roles and permissions system
+- **Password Security**: Bcrypt hashing with secure token generation
+
+#### User Interface
+- **Responsive Design**: Material-UI components with mobile-friendly layouts
+- **Real-time Updates**: Live data synchronization and status monitoring
+- **Multi-language Support**: Chinese language interface with i18n structure
+- **Advanced Components**: Data grids, dialogs, charts, and filtering systems
 
 ### Key Patterns
 - **Backend**: Dependency injection for request context and authentication
@@ -137,9 +191,10 @@ frontend/                  # React frontend
 - CORS is configured to allow frontend origin
 - All services run in Docker with volume mounts for hot reloading
 - Database connection uses asyncpg driver for better performance
-- Code has been cleaned and simplified (removed post/article system, unused schemas)
+- Reddit API integration using asyncpraw for asynchronous operations
+- Background task scheduling with APScheduler for automated scraping
 
-### Authentication Flow (Improved)
+### Authentication Flow
 - **Login Process**: Returns access token (30min) and refresh token (7 days)
 - **Backend Validation**: AuthMiddleware validates JWT tokens on protected routes
 - **Frontend Management**: 
@@ -149,53 +204,6 @@ frontend/                  # React frontend
 - **Token Storage**: Refresh tokens stored in database with session management
 - **Security**: Token rotation strategy with automatic cleanup
 - **User Experience**: Seamless authentication with no page flashes
-
-### Recent Updates & Features
-
-#### Password Reset System (Latest)
-- ✅ **Backend Implementation**: Complete password reset flow with email integration
-  - `POST /auth/forgot-password` - Send reset email
-  - `POST /auth/verify-reset-token` - Validate reset tokens
-  - `POST /auth/reset-password` - Reset password with token
-  - Email service integration for sending reset links
-  - Token expiration and single-use validation
-- ✅ **Frontend Implementation**: Full user interface for password reset
-  - `ForgotPasswordPage` - Email input and reset request
-  - `ResetPasswordPage` - Token validation and password reset form
-  - Updated login page with "Forgot Password" link
-  - Integrated with api-store for unified state management
-- ✅ **Security Features**:
-  - Secure token generation and validation
-  - Password hashing using bcrypt
-  - Token rotation and cleanup
-  - Database persistence with proper transaction handling
-
-#### API Store Enhancement (Completed)
-- ✅ **Extended Methods**: Added POST, PATCH, DELETE support to api-store
-- ✅ **Unified State Management**: All API calls now use centralized state management
-- ✅ **Profile Management**: Refactored ProfilePage to use api-store instead of direct API calls
-- ✅ **Error Handling**: Consistent error handling across all API operations
-
-#### Backend Architecture (Previously Completed)
-- ✅ **Model Exports**: Fixed RefreshToken import/export in models
-- ✅ **Error Handling**: Unified error messages and HTTP status codes via constants
-- ✅ **Code Cleanup**: Removed unused imports, duplicate code, and Post model references
-- ✅ **Status Codes**: Standardized HTTP responses (201 for creation, 409 for conflicts, etc.)
-- ✅ **Configuration**: Removed unused email settings and cleaned up config structure
-
-#### Frontend Architecture (Previously Completed)
-- ✅ **State Management**: Transitioned to Zustand-based architecture
-- ✅ **Route Protection**: Added `ProtectedRoute` component with automatic redirects
-- ✅ **Unified Error Handling**: Implemented `errorHandler` utility with backend-aligned messages
-- ✅ **Smart Interceptors**: Enhanced axios interceptors to exclude auth requests from token refresh
-- ✅ **User Experience**: Eliminated page flashes, improved loading states, seamless navigation
-
-#### Key System Features
-- **Security**: Complete authentication system with JWT tokens and password reset
-- **State Management**: Unified Zustand stores for auth, API calls, and UI state
-- **Error Handling**: Consistent error processing across frontend and backend
-- **Database**: SQLAlchemy 2.0 with automatic migrations and proper transaction handling
-- **Email Integration**: Password reset emails with secure token-based validation
 
 ## Development Guidelines
 
@@ -221,13 +229,8 @@ frontend/                  # React frontend
 - **Redirects**: Let `ProtectedRoute` handle authentication redirects automatically
 - **Loading States**: Managed by api-store and accessed via `getApiState(url)`
 - **Error Display**: Show errors immediately, clear only on user interaction
-- **Password Reset Flow**: 
-  1. User enters email on `/forgot-password` page
-  2. Backend sends email with reset token
-  3. User clicks email link → `/reset-password?token=xxx`
-  4. Frontend validates token and shows password reset form
-  5. User enters new password and submits
-  6. Backend updates password and invalidates all tokens
+- **Reddit Scraping**: Use services layer for business logic, CRUD for data access
+- **Background Tasks**: Implement via APScheduler with proper error handling
 
 ### Route Structure
 - `/login` - User login page
@@ -237,3 +240,12 @@ frontend/                  # React frontend
 - `/dashboard` - Main dashboard (protected)
 - `/profile` - User profile management (protected)
 - `/user` - User management page (protected)
+- `/scraper/bots` - Bot configuration management (protected)
+- `/scraper/sessions` - Scraping session monitoring (protected)
+- `/demo` - Demo page for testing features
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
