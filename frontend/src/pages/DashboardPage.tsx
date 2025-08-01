@@ -24,15 +24,23 @@ const DashboardPage: React.FC = () => {
 
   // Fetch fresh user data when component mounts
   useEffect(() => {
+    let isMounted = true;
+
     const fetchUserData = async () => {
       try {
         await getCurrentUser();
       } catch (error) {
-        console.error('Failed to fetch user data:', error);
+        if (isMounted) {
+          console.error('Failed to fetch user data:', error);
+        }
       }
     };
 
     fetchUserData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [getCurrentUser]);
 
   const handleLogout = async () => {

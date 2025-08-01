@@ -19,7 +19,7 @@ import MainLayout from '../components/Layout/MainLayout';
 
 const UserPage: React.FC = () => {
   const navigate = useNavigate();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  
   const { user } = useAuthStore();
 
   return (

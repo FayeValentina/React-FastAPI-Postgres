@@ -49,7 +49,6 @@ const ProfilePage: React.FC = () => {
   const updateApiUrl = user ? `/v1/users/${user.id}` : '';
   const { loading, error: apiError } = getApiState(updateApiUrl);
 
-  // Redirect if not authenticated
   useEffect(() => {
 
     // Initialize form with user data
@@ -166,7 +165,7 @@ const ProfilePage: React.FC = () => {
   };
 
   if (!isAuthenticated || !user) {
-    return null; // Will redirect in useEffect
+    return null; // Will redirect in ProtectedRoute
   }
 
   return (

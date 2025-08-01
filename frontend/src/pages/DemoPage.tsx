@@ -9,7 +9,7 @@ interface HelloResponse {
 }
 
 const DemoPage: React.FC = () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  
   const [activeResponse, setActiveResponse] = useState<'hello' | 'world'>('hello');
   
   // Use useApiStore directly with selectors

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -39,6 +39,9 @@ const ResetPasswordPage: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState(false);
 
+  const postDataRef = useRef(postData);
+  postDataRef.current = postData;
+
   // API states
   const verifyTokenUrl = '/v1/auth/verify-reset-token';
   const resetPasswordUrl = '/v1/auth/reset-password';
@@ -54,16 +57,24 @@ const ResetPasswordPage: React.FC = () => {
 
   // Get token from URL and verify it
   useEffect(() => {
+    // 1. 设置一个标志，表示组件当前是挂载状态
+    let isMounted = true;
+
     const verifyToken = async (tokenToVerify: string) => {
       try {
-        // Backend expects token as query parameter, not in request body
-        const response = await postData<PasswordResetResponse>(`${verifyTokenUrl}?token=${tokenToVerify}`, {});
-        setTokenValid(response.success !== false);
-        setTokenMessage(response.message);
+        const response = await postDataRef.current<PasswordResetResponse>(`${verifyTokenUrl}?token=${tokenToVerify}`, {});
+        
+        // 3. 在所有异步操作后的状态更新前检查标志
+        if (isMounted) {
+          setTokenValid(response.success !== false);
+          setTokenMessage(response.message);
+        }
       } catch (verifyError) {
-        setTokenValid(false);
-        setTokenMessage('令牌验证失败');
-        console.error('Token verification failed:', verifyError);
+        if (isMounted) {
+          setTokenValid(false);
+          setTokenMessage('令牌验证失败');
+          console.error('Token verification failed:', verifyError);
+        }
       }
     };
 
@@ -72,10 +83,16 @@ const ResetPasswordPage: React.FC = () => {
       setToken(tokenFromUrl);
       verifyToken(tokenFromUrl);
     } else {
+      // 这里的 setState 是同步的，所以不需要 isMounted 检查
       setTokenValid(false);
       setTokenMessage('重置链接无效或已过期');
     }
-  }, [searchParams, postData]);
+
+    // 2. 返回一个清理函数，在组件卸载时更新标志
+    return () => {
+      isMounted = false;
+    };
+  }, [searchParams]); // 依赖项保持不变
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};

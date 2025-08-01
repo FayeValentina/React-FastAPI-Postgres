@@ -17,7 +17,7 @@ import SessionDetailDialog from '../components/Scraper/SessionDetailDialog';
 import { ScrapeSessionResponse, SessionFilters } from '../types/session';
 
 const SessionManagementPage: React.FC = () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  
   const { fetchData, getApiState } = useApiStore();
   
   const [sessions, setSessions] = useState<ScrapeSessionResponse[]>([]);
@@ -52,15 +52,19 @@ const SessionManagementPage: React.FC = () => {
   useEffect(() => {
     if (!autoRefresh) return;
     
+    // 检查是否有运行中的会话
+    const hasRunningSessions = sessions.some(s => s.status === 'running');
+    if (!hasRunningSessions) return;
+    
     const interval = setInterval(() => {
       loadSessions();
-    }, 5000); // Refresh every 5 seconds
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [autoRefresh, loadSessions]);
+  }, [autoRefresh, sessions, loadSessions]);
 
   // Check if there are running sessions
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  
 
   const handleSessionClick = (session: ScrapeSessionResponse) => {
     setSelectedSession(session);

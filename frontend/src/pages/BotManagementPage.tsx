@@ -30,9 +30,7 @@ import BotConfigDialog from '../components/Scraper/BotConfigDialog';
 import { BotConfigResponse, BatchScrapeRequest, BatchScrapeResponse } from '../types/bot';
 
 const BotManagementPage: React.FC = () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { fetchData, postData, patchData, deleteData, getApiState } = useApiStore();
-  
   const [configs, setConfigs] = useState<BotConfigResponse[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<BotConfigResponse | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
