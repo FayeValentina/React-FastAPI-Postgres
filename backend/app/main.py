@@ -20,7 +20,7 @@ setup_logging()
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
-    task_scheduler.start()
+    await task_scheduler.start_with_bot_tasks()
     
     yield
     

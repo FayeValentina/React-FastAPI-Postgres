@@ -109,8 +109,6 @@ export const useAuthStore = create<AuthStore>()(
             error: null,
             lastUserFetch: null,
           });
-          // Remove Authorization header from all future API requests
-          delete api.defaults.headers.common['Authorization'];
         },
 
         /**

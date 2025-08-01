@@ -1,13 +1,16 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from app.db.base import AsyncSessionLocal
 from app.crud.token import refresh_token
 from app.crud.password_reset import password_reset
 from app.crud.scrape_session import CRUDScrapeSession
 from app.crud.reddit_content import CRUDRedditContent
+from app.crud.bot_config import CRUDBotConfig
+from app.models.scrape_session import SessionType
 from app.services.scraping_orchestrator import ScrapingOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -48,21 +51,105 @@ class TaskScheduler:
                 logger.info(f"内容清理完成: 删除了{deleted_posts}个帖子, {deleted_comments}条评论")
         except Exception as e:
             logger.error(f"内容清理任务失败: {e}")
-    
-    async def auto_scraping_task(self):
-        """自动爬取任务 - 每6小时执行"""
+
+    async def _execute_single_bot_scraping(self, bot_config_id: int):
+        """执行单个bot的爬取任务"""
         try:
             async with AsyncSessionLocal() as db:
                 orchestrator = ScrapingOrchestrator()
-                results = await orchestrator.execute_auto_scraping(db)
+                result = await orchestrator.execute_scraping_session(
+                    db, bot_config_id, session_type=SessionType.AUTO
+                )
                 
-                if results:
-                    successful = len([r for r in results if r.get('status') != 'error'])
-                    logger.info(f"自动爬取完成: {successful}/{len(results)}个配置成功执行")
+                if result and result.get('status') == 'completed':
+                    logger.info(f"Bot {bot_config_id} 自动爬取完成: {result.get('total_posts', 0)}个帖子, {result.get('total_comments', 0)}条评论")
+                elif result and result.get('status') == 'failed':
+                    logger.error(f"Bot {bot_config_id} 自动爬取失败: {result.get('error', 'Unknown error')}")
                 else:
-                    logger.info("自动爬取检查完成: 没有启用自动爬取的配置")
+                    logger.warning(f"Bot {bot_config_id} 自动爬取未返回有效结果")
         except Exception as e:
-            logger.error(f"自动爬取任务失败: {e}")
+            logger.error(f"Bot {bot_config_id} 自动爬取任务失败: {e}")
+    
+    async def add_bot_task(self, bot_config_id: int, interval_hours: int):
+        """为单个bot添加定时任务"""
+        try:
+            job_id = f"bot_scraping_{bot_config_id}"
+            
+            # 如果任务已存在，先删除
+            if self.scheduler.get_job(job_id):
+                self.scheduler.remove_job(job_id)
+            
+            # 添加新任务
+            self.scheduler.add_job(
+                func=self._execute_single_bot_scraping,
+                trigger=IntervalTrigger(hours=interval_hours),
+                args=[bot_config_id],
+                id=job_id,
+                name=f'Bot {bot_config_id} 自动爬取',
+                replace_existing=True
+            )
+            
+            logger.info(f"已添加Bot {bot_config_id}的定时任务，执行间隔: {interval_hours}小时")
+            return True
+        except Exception as e:
+            logger.error(f"添加Bot {bot_config_id}的定时任务失败: {e}")
+            return False
+    
+    def remove_bot_task(self, bot_config_id: int):
+        """移除单个bot的定时任务"""
+        try:
+            job_id = f"bot_scraping_{bot_config_id}"
+            
+            if self.scheduler.get_job(job_id):
+                self.scheduler.remove_job(job_id)
+                logger.info(f"已移除Bot {bot_config_id}的定时任务")
+                return True
+            else:
+                logger.warning(f"Bot {bot_config_id}的定时任务不存在")
+                return False
+        except Exception as e:
+            logger.error(f"移除Bot {bot_config_id}的定时任务失败: {e}")
+            return False
+    
+    async def update_bot_task(self, bot_config_id: int, interval_hours: int):
+        """更新单个bot的定时任务"""
+        return await self.add_bot_task(bot_config_id, interval_hours)
+    
+    async def reload_all_bot_tasks(self):
+        """重新加载所有bot的定时任务"""
+        try:
+            async with AsyncSessionLocal() as db:
+                # 获取所有启用自动爬取的bot配置
+                active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
+                
+                # 获取当前所有bot任务的job_id
+                current_bot_jobs = [
+                    job.id for job in self.scheduler.get_jobs() 
+                    if job.id.startswith('bot_scraping_')
+                ]
+                
+                # 移除所有现有的bot任务
+                for job_id in current_bot_jobs:
+                    try:
+                        self.scheduler.remove_job(job_id)
+                    except:
+                        pass
+                
+                # 为每个活跃的bot配置添加任务
+                added_tasks = 0
+                for config in active_configs:
+                    success = await self.add_bot_task(
+                        config.id, 
+                        config.scrape_interval_hours
+                    )
+                    if success:
+                        added_tasks += 1
+                
+                logger.info(f"重新加载bot任务完成: 添加了{added_tasks}个任务")
+                return added_tasks
+        except Exception as e:
+            logger.error(f"重新加载bot任务失败: {e}")
+            return 0
     
     def start(self):
         """启动所有定时任务"""
@@ -97,15 +184,6 @@ class TaskScheduler:
             replace_existing=True
         )
         
-        # 4. 每6小时检查自动爬取 (00:00, 06:00, 12:00, 18:00)
-        self.scheduler.add_job(
-            self.auto_scraping_task,
-            CronTrigger(hour='0,6,12,18', minute=0),
-            id='auto_scraping',
-            name='自动爬取检查',
-            replace_existing=True
-        )
-        
         self.scheduler.start()
         self._running = True
         logger.info("定时任务调度器已启动")
@@ -114,6 +192,59 @@ class TaskScheduler:
         jobs = self.scheduler.get_jobs()
         for job in jobs:
             logger.info(f"已注册任务: {job.name} (ID: {job.id})")
+    
+    async def start_with_bot_tasks(self):
+        """启动调度器并加载所有bot任务"""
+        # 先启动基础调度器
+        self.start()
+        
+        # 然后加载所有bot任务
+        if self._running:
+            added_tasks = await self.reload_all_bot_tasks()
+            logger.info(f"调度器启动完成，已加载{added_tasks}个bot任务")
+    
+    def get_bot_tasks_status(self):
+        """获取所有bot任务的状态"""
+        bot_tasks = []
+        for job in self.scheduler.get_jobs():
+            if job.id.startswith('bot_scraping_'):
+                bot_config_id = int(job.id.replace('bot_scraping_', ''))
+                
+                # 获取下次执行时间
+                next_run_time = job.next_run_time.isoformat() if job.next_run_time else None
+                
+                # 获取触发器信息
+                trigger_info = str(job.trigger)
+                
+                bot_tasks.append({
+                    'bot_config_id': bot_config_id,
+                    'job_id': job.id,
+                    'job_name': job.name,
+                    'next_run_time': next_run_time,
+                    'trigger_info': trigger_info,
+                    'is_running': not job.pending
+                })
+        
+        return bot_tasks
+    
+    def get_bot_task_info(self, bot_config_id: int):
+        """获取特定bot任务的信息"""
+        job_id = f"bot_scraping_{bot_config_id}"
+        job = self.scheduler.get_job(job_id)
+        
+        if not job:
+            return None
+        
+        return {
+            'bot_config_id': bot_config_id,
+            'job_id': job.id,
+            'job_name': job.name,
+            'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
+            'trigger_info': str(job.trigger),
+            'is_running': not job.pending,
+            'args': job.args,
+            'kwargs': job.kwargs
+        }
     
     def shutdown(self):
         """关闭调度器"""

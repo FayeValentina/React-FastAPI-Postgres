@@ -6,6 +6,7 @@ interface ApiState<T = unknown> {
   data: T | null;
   loading: boolean;
   error: Error | null;
+  timestamp?: number;
 }
 
 interface ApiStore {
@@ -17,6 +18,7 @@ interface ApiStore {
   setData: <T>(url: string, data: T) => void;
   setError: (url: string, error: Error | null) => void;
   clearState: (url: string) => void;
+  clearOldStates: (maxStates?: number) => void;
   
   // API call wrappers
   fetchData: <T>(url: string) => Promise<T>;
@@ -54,6 +56,7 @@ export const useApiStore = create<ApiStore>()(
               data,
               loading: false,
               error: null,
+              timestamp: Date.now(),
             },
           },
         }), false, 'setData'),
@@ -78,15 +81,39 @@ export const useApiStore = create<ApiStore>()(
           return { apiStates: newStates };
         }, false, 'clearState'),
       
+      clearOldStates: (maxStates: number = 50) => {
+        set((state) => {
+          const entries = Object.entries(state.apiStates);
+          if (entries.length <= maxStates) {
+            return state;
+          }
+          
+          // Sort by timestamp (newest first), fallback to keeping existing order
+          const sortedEntries = entries.sort((a, b) => 
+            (b[1].timestamp || 0) - (a[1].timestamp || 0)
+          );
+          
+          // Keep only the most recent maxStates entries
+          const newStates = Object.fromEntries(sortedEntries.slice(0, maxStates));
+          return { apiStates: newStates };
+        }, false, 'clearOldStates');
+      },
+      
       fetchData: async <T>(url: string): Promise<T> => {
-        const { setLoading, setData, setError } = get();
+        const { setLoading, setData, setError, clearOldStates } = get();
         
         setLoading(url, true);
         
         try {
           const response = await api.get<T>(url);
           setData(url, response);
-          return response as T;
+          
+          // Periodically clean old states to prevent memory leaks
+          if (Math.random() < 0.1) { // 10% chance to trigger cleanup
+            clearOldStates();
+          }
+          
+          return response;
         } catch (error) {
           const apiError = error as Error;
           setError(url, apiError);
@@ -102,7 +129,7 @@ export const useApiStore = create<ApiStore>()(
         try {
           const response = await api.post<T>(url, data);
           setData(url, response);
-          return response as T;
+          return response;
         } catch (error) {
           const apiError = error as Error;
           setError(url, apiError);
@@ -118,7 +145,7 @@ export const useApiStore = create<ApiStore>()(
         try {
           const response = await api.patch<T>(url, data);
           setData(url, response);
-          return response as T;
+          return response;
         } catch (error) {
           const apiError = error as Error;
           setError(url, apiError);
@@ -134,7 +161,7 @@ export const useApiStore = create<ApiStore>()(
         try {
           const response = await api.delete<T>(url);
           setData(url, response);
-          return response as T;
+          return response;
         } catch (error) {
           const apiError = error as Error;
           setError(url, apiError);

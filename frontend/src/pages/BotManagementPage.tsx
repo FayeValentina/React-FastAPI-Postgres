@@ -115,6 +115,28 @@ const BotManagementPage: React.FC = () => {
     }
   };
 
+  const handleTriggerScraping = async (config: BotConfigResponse) => {
+    try {
+      const request: BatchScrapeRequest = {
+        config_ids: [config.id],
+        session_type: 'manual'
+      };
+      
+      const response = await postData<BatchScrapeResponse>('/v1/scraping/bot-configs/batch-scrape', request);
+      
+      if (response.successful_configs > 0) {
+        setSnackbarMessage(`${config.name} 的爬取任务已启动`);
+      } else {
+        setSnackbarMessage(`${config.name} 爬取失败：${response.results[0]?.message || '未知错误'}`);
+      }
+      setSnackbarOpen(true);
+    } catch (error) {
+      console.error('Failed to trigger scraping:', error);
+      setSnackbarMessage('启动爬取失败，请稍后重试');
+      setSnackbarOpen(true);
+    }
+  };
+
   // 多选相关函数
   const handleSelectionModeToggle = () => {
     setSelectionMode(!selectionMode);
@@ -287,6 +309,7 @@ const BotManagementPage: React.FC = () => {
                   onDelete={handleDeleteConfig}
                   onToggle={handleToggleConfig}
                   onToggleAutoScrape={handleToggleAutoScrape}
+                  onTriggerScraping={handleTriggerScraping}
                   loading={listLoading}
                   selectable={selectionMode}
                   selected={selectedConfigs.has(config.id)}
