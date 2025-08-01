@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,13 +6,11 @@ from app.schemas.scrape_session import (
     ScrapeSessionResponse, ScrapeSessionStats,
     BatchScrapeRequest, BatchScrapeResponse, BatchScrapeResult
 )
-from app.crud.bot_config import CRUDBotConfig
 from app.crud.scrape_session import CRUDScrapeSession
 from app.services.scraping_orchestrator import ScrapingOrchestrator
 from app.db.base import get_async_session
 from app.models.user import User
 from app.dependencies.current_user import get_current_active_user
-from app.core.exceptions import InsufficientPermissionsError
 from app.utils.common import handle_error
 from app.utils.permissions import get_accessible_bot_config, get_accessible_session
 from app.models.scrape_session import SessionStatus, SessionType

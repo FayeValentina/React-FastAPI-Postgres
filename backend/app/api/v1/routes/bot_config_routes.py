@@ -9,7 +9,6 @@ from app.crud.bot_config import CRUDBotConfig
 from app.db.base import get_async_session
 from app.models.user import User
 from app.dependencies.current_user import get_current_active_user
-from app.core.exceptions import UserNotFoundError, InsufficientPermissionsError
 from app.utils.common import handle_error
 from app.utils.permissions import get_accessible_bot_config
 

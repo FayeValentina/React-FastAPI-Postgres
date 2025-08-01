@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Integer
 from sqlalchemy.orm import relationship
 from uuid import uuid4
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.db.base_class import Base
 from app.utils.common import get_current_time

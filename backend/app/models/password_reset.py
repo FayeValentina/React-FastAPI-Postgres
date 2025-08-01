@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, DateTime, Boolean, ForeignKey, Integer, func
+from sqlalchemy import String, Boolean, ForeignKey, Integer, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import uuid4

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
-from sqlalchemy import String, DateTime, func, Integer, Text, ForeignKey, Enum
+from sqlalchemy import DateTime, func, Integer, Text, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from enum import Enum as PyEnum

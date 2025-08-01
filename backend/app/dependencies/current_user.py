@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 

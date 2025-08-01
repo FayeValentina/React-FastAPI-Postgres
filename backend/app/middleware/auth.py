@@ -1,11 +1,10 @@
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional, List, Callable
 import re
 
 from app.core.security import verify_token
-from app.core.config import settings
 
 # 默认排除认证的路径 - 集中定义避免重复
 DEFAULT_EXCLUDE_PATHS = [
