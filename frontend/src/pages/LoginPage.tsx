@@ -36,13 +36,6 @@ const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Clear error when user starts typing (only when form data actually changes)
-  useEffect(() => {
-    if (error && (formData.username || formData.password)) {
-      clearError();
-    }
-  }, [formData.username, formData.password]); // 只监听实际的表单字段
-
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
@@ -73,6 +66,10 @@ const LoginPage: React.FC = () => {
         ...prev,
         [name]: '',
       }));
+    }
+
+    if(error){
+      clearError();
     }
   };
 
