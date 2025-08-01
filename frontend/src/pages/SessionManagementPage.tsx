@@ -8,8 +8,6 @@ import {
   Fab,
 } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/auth-store';
 import { useApiStore } from '../stores/api-store';
 import ScraperLayout from '../components/Scraper/ScraperLayout';
 import SessionStatsPanel from '../components/Scraper/SessionStatsPanel';
@@ -19,8 +17,7 @@ import SessionDetailDialog from '../components/Scraper/SessionDetailDialog';
 import { ScrapeSessionResponse, SessionFilters } from '../types/session';
 
 const SessionManagementPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { fetchData, getApiState } = useApiStore();
   
   const [sessions, setSessions] = useState<ScrapeSessionResponse[]>([]);
@@ -48,26 +45,22 @@ const SessionManagementPage: React.FC = () => {
   }, [fetchData, filters, sessionsApiUrl]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
     loadSessions();
-  }, [isAuthenticated, navigate, loadSessions]);
+  }, [loadSessions]);
 
   // Auto refresh for running sessions
   useEffect(() => {
     if (!autoRefresh) return;
     
     const interval = setInterval(() => {
-      const hasRunningSessions = sessions.some(session => session.status === 'running');
-      if (hasRunningSessions) {
-        loadSessions();
-      }
+      loadSessions();
     }, 5000); // Refresh every 5 seconds
 
     return () => clearInterval(interval);
-  }, [autoRefresh, sessions, loadSessions]);
+  }, [autoRefresh, loadSessions]);
+
+  // Check if there are running sessions
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
 
   const handleSessionClick = (session: ScrapeSessionResponse) => {
     setSelectedSession(session);
@@ -78,9 +71,6 @@ const SessionManagementPage: React.FC = () => {
     setFilters(newFilters);
   };
 
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <ScraperLayout>

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -19,17 +19,8 @@ import MainLayout from '../components/Layout/MainLayout';
 
 const UserPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuthStore();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    }
-  }, [isAuthenticated, navigate]);
-
-  if (!isAuthenticated) {
-    return null;
-  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { user } = useAuthStore();
 
   return (
     <MainLayout>

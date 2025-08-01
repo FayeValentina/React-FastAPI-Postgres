@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from 'react-router-dom';
 import { Typography, Button, CircularProgress, Alert, Box } from "@mui/material";
 import MainLayout from "../components/Layout/MainLayout";
 import { useApiStore } from '../stores/api-store';
-import { useAuthStore } from '../stores/auth-store';
 
 interface HelloResponse {
   message: string;
@@ -11,8 +9,7 @@ interface HelloResponse {
 }
 
 const DemoPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [activeResponse, setActiveResponse] = useState<'hello' | 'world'>('hello');
   
   // Use useApiStore directly with selectors
@@ -28,24 +25,10 @@ const DemoPage: React.FC = () => {
   const { data: helloData, loading: helloLoading, error: helloError } = helloState;
   const { data: worldData, loading: worldLoading, error: worldError } = worldState;
 
-  // 认证检查
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-  }, [isAuthenticated, navigate]);
+    fetchData<HelloResponse>('/hello');
+  }, [fetchData]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchData<HelloResponse>('/hello');
-    }
-  }, [isAuthenticated, fetchData]);
-
-  // 如果未认证，不渲染内容
-  if (!isAuthenticated) {
-    return null;
-  }
 
   const handleHelloClick = () => {
     setActiveResponse('hello');

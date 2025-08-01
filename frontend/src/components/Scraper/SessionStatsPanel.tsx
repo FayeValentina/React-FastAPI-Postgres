@@ -25,16 +25,26 @@ const SessionStatsPanel: React.FC = () => {
   const { loading, error } = getApiState(statsApiUrl);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadStats = async () => {
       try {
         const data = await fetchData<ScrapeSessionStats>(statsApiUrl);
-        setStats(data);
+        if (isMounted) {
+          setStats(data);
+        }
       } catch (error) {
-        console.error('Failed to load session stats:', error);
+        if (isMounted) {
+          console.error('Failed to load session stats:', error);
+        }
       }
     };
 
     loadStats();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [fetchData, statsApiUrl]);
 
   if (loading) {

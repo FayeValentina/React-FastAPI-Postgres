@@ -23,8 +23,6 @@ import {
   SelectAll as SelectAllIcon,
   ClearAll as ClearAllIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/auth-store';
 import { useApiStore } from '../stores/api-store';
 import ScraperLayout from '../components/Scraper/ScraperLayout';
 import BotConfigCard from '../components/Scraper/BotConfigCard';
@@ -32,8 +30,7 @@ import BotConfigDialog from '../components/Scraper/BotConfigDialog';
 import { BotConfigResponse, BatchScrapeRequest, BatchScrapeResponse } from '../types/bot';
 
 const BotManagementPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { fetchData, postData, patchData, deleteData, getApiState } = useApiStore();
   
   const [configs, setConfigs] = useState<BotConfigResponse[]>([]);
@@ -63,12 +60,8 @@ const BotManagementPage: React.FC = () => {
   }, [fetchData, listApiUrl]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
     loadConfigs();
-  }, [isAuthenticated, navigate, loadConfigs]);
+  }, [loadConfigs]);
 
   const handleCreateConfig = () => {
     setSelectedConfig(null);
@@ -187,9 +180,6 @@ const BotManagementPage: React.FC = () => {
     await loadConfigs(); // Reload the list
   };
 
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <ScraperLayout>

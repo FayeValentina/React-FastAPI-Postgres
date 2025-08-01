@@ -75,7 +75,7 @@ const ResetPasswordPage: React.FC = () => {
       setTokenValid(false);
       setTokenMessage('重置链接无效或已过期');
     }
-  }, [searchParams, postData, verifyTokenUrl]);
+  }, [searchParams, postData]);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};

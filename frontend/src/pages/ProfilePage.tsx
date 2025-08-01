@@ -51,10 +51,6 @@ const ProfilePage: React.FC = () => {
 
   // Redirect if not authenticated
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
 
     // Initialize form with user data
     if (user) {
@@ -64,8 +60,16 @@ const ProfilePage: React.FC = () => {
         full_name: user.full_name || '',
         age: user.age || '',
       });
+    } else {
+      // Reset form when user is null
+      setFormData({
+        username: '',
+        email: '',
+        full_name: '',
+        age: '',
+      });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [user]);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
