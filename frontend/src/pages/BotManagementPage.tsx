@@ -43,6 +43,9 @@ const BotManagementPage: React.FC = () => {
   const [batchScrapeLoading, setBatchScrapeLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  
+  // 单个配置爬取状态
+  const [scrapingConfigs, setScrapingConfigs] = useState<Set<number>>(new Set());
 
   // API states
   const listApiUrl = '/v1/bot-configs';
@@ -116,6 +119,9 @@ const BotManagementPage: React.FC = () => {
   };
 
   const handleTriggerScraping = async (config: BotConfigResponse) => {
+    // 设置加载状态
+    setScrapingConfigs(prev => new Set(prev).add(config.id));
+    
     try {
       const request: BatchScrapeRequest = {
         config_ids: [config.id],
@@ -125,7 +131,7 @@ const BotManagementPage: React.FC = () => {
       const response = await postData<BatchScrapeResponse>('/v1/scraping/bot-configs/batch-scrape', request);
       
       if (response.successful_configs > 0) {
-        setSnackbarMessage(`${config.name} 的爬取任务已启动`);
+        setSnackbarMessage(`${config.name} 的爬取任务成功！`);
       } else {
         setSnackbarMessage(`${config.name} 爬取失败：${response.results[0]?.message || '未知错误'}`);
       }
@@ -134,6 +140,13 @@ const BotManagementPage: React.FC = () => {
       console.error('Failed to trigger scraping:', error);
       setSnackbarMessage('启动爬取失败，请稍后重试');
       setSnackbarOpen(true);
+    } finally {
+      // 清除加载状态
+      setScrapingConfigs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(config.id);
+        return newSet;
+      });
     }
   };
 
@@ -301,22 +314,32 @@ const BotManagementPage: React.FC = () => {
           </Box>
         ) : (
           <Grid container spacing={3}>
-            {configs.map((config) => (
-              <Grid item xs={12} sm={6} lg={4} key={config.id}>
-                <BotConfigCard
-                  config={config}
-                  onEdit={handleEditConfig}
-                  onDelete={handleDeleteConfig}
-                  onToggle={handleToggleConfig}
-                  onToggleAutoScrape={handleToggleAutoScrape}
-                  onTriggerScraping={handleTriggerScraping}
-                  loading={listLoading}
-                  selectable={selectionMode}
-                  selected={selectedConfigs.has(config.id)}
-                  onSelect={handleConfigSelect}
-                />
-              </Grid>
-            ))}
+            {configs.map((config) => {
+              // 计算当前配置是否正在爬取中（用于显示CircularProgress）
+              const isConfigScraping = scrapingConfigs.has(config.id) || 
+                                       (batchScrapeLoading && selectedConfigs.has(config.id));
+              
+              // 计算当前配置的禁用状态
+              const isConfigDisabled = listLoading || isConfigScraping;
+              
+              return (
+                <Grid item xs={12} sm={6} lg={4} key={config.id}>
+                  <BotConfigCard
+                    config={config}
+                    onEdit={handleEditConfig}
+                    onDelete={handleDeleteConfig}
+                    onToggle={handleToggleConfig}
+                    onToggleAutoScrape={handleToggleAutoScrape}
+                    onTriggerScraping={handleTriggerScraping}
+                    disabled={isConfigDisabled}
+                    isScraping={isConfigScraping}
+                    selectable={selectionMode}
+                    selected={selectedConfigs.has(config.id)}
+                    onSelect={handleConfigSelect}
+                  />
+                </Grid>
+              );
+            })}
           </Grid>
         )}
 

@@ -11,6 +11,7 @@ import {
   Switch,
   FormControlLabel,
   Checkbox,
+  CircularProgress,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -28,7 +29,8 @@ interface BotConfigCardProps {
   onToggle: (config: BotConfigResponse) => void;
   onToggleAutoScrape?: (config: BotConfigResponse) => void;
   onTriggerScraping?: (config: BotConfigResponse) => void;
-  loading?: boolean;
+  disabled?: boolean; // 统一的禁用状态
+  isScraping?: boolean; // 是否正在爬取中（控制爬取按钮的加载动画）
   // 多选相关
   selectable?: boolean;
   selected?: boolean;
@@ -42,7 +44,8 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
   onToggle,
   onToggleAutoScrape,
   onTriggerScraping,
-  loading = false,
+  disabled = false,
+  isScraping = false,
   selectable = false,
   selected = false,
   onSelect,
@@ -169,7 +172,7 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
               <Switch
                 checked={config.is_active}
                 onChange={() => onToggle(config)}
-                disabled={loading}
+                disabled={disabled}
                 size="small"
               />
             }
@@ -182,7 +185,7 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
                 <Switch
                   checked={config.auto_scrape_enabled}
                   onChange={() => onToggleAutoScrape(config)}
-                  disabled={loading}
+                  disabled={disabled}
                   size="small"
                 />
               }
@@ -194,13 +197,17 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
 
         <Box>
           {onTriggerScraping && config.is_active && (
-            <Tooltip title="手动触发爬取">
+            <Tooltip title={isScraping ? "爬取中..." : "手动触发爬取"}>
               <IconButton
                 onClick={() => onTriggerScraping(config)}
-                disabled={loading}
+                disabled={disabled}
                 color="primary"
               >
-                <PlayIcon />
+                {isScraping ? (
+                  <CircularProgress size={24} />
+                ) : (
+                  <PlayIcon />
+                )}
               </IconButton>
             </Tooltip>
           )}
@@ -208,7 +215,7 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
           <Tooltip title="编辑配置">
             <IconButton
               onClick={() => onEdit(config)}
-              disabled={loading}
+              disabled={disabled}
               color="primary"
             >
               <EditIcon />
@@ -218,7 +225,7 @@ const BotConfigCard: React.FC<BotConfigCardProps> = ({
           <Tooltip title="删除配置">
             <IconButton
               onClick={() => onDelete(config)}
-              disabled={loading}
+              disabled={disabled}
               color="error"
             >
               <DeleteIcon />
