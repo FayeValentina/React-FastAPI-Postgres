@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Annotated, List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from typing import Annotated, List, Optional, Dict, Any, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import asyncio
@@ -51,106 +51,86 @@ async def list_jobs(
     return job_infos
 
 
-@router.get("/health")
-async def check_tasks_health(
+@router.get("/system")
+async def get_system_info(
     db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_superuser)]
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    include_health: bool = Query(True, description="是否包含健康状态"),
+    include_stats: bool = Query(True, description="是否包含统计信息")
 ) -> Dict[str, Any]:
-    """检查所有任务的健康状态"""
+    """获取系统信息（需要超级管理员权限）"""
     jobs = task_scheduler.get_jobs()
-    unhealthy_jobs = []
+    result = {}
     
-    for job in jobs:
-        status = await calculate_job_status(
-            db, job.id, job.pending, job.next_run_time, task_scheduler._running
-        )
+    if include_stats:
+        # 统计各种任务类型
+        task_types = {}
+        for job in jobs:
+            task_type = job.id.split('_')[0]  # 从job_id提取任务类型
+            task_types[task_type] = task_types.get(task_type, 0) + 1
         
-        # 检查异常状态
-        if status in [TaskStatus.FAILED, TaskStatus.TIMEOUT, TaskStatus.MISFIRED]:
-            unhealthy_jobs.append({
-                "job_id": job.id,
-                "name": job.name,
-                "status": status,
-                "next_run_time": job.next_run_time
-            })
+        result["stats"] = {
+            "total_jobs": len(jobs),
+            "active_jobs": len([j for j in jobs if not j.pending]),
+            "paused_jobs": len([j for j in jobs if j.pending]),
+            "task_types": task_types,
+            "scheduler_running": task_scheduler._running
+        }
     
-    return {
-        "total_jobs": len(jobs),
-        "healthy_jobs": len(jobs) - len(unhealthy_jobs),
-        "unhealthy_jobs": unhealthy_jobs,
-        "scheduler_running": task_scheduler._running,
-        "health_score": (len(jobs) - len(unhealthy_jobs)) / len(jobs) if jobs else 1.0
-    }
+    if include_health:
+        unhealthy_jobs = []
+        
+        for job in jobs:
+            status = await calculate_job_status(
+                db, job.id, job.pending, job.next_run_time, task_scheduler._running
+            )
+            
+            # 检查异常状态
+            if status in [TaskStatus.FAILED, TaskStatus.TIMEOUT, TaskStatus.MISFIRED]:
+                unhealthy_jobs.append({
+                    "job_id": job.id,
+                    "name": job.name,
+                    "status": status,
+                    "next_run_time": job.next_run_time
+                })
+        
+        result["health"] = {
+            "total_jobs": len(jobs),
+            "healthy_jobs": len(jobs) - len(unhealthy_jobs),
+            "unhealthy_jobs": unhealthy_jobs,
+            "scheduler_running": task_scheduler._running,
+            "health_score": (len(jobs) - len(unhealthy_jobs)) / len(jobs) if jobs else 1.0
+        }
+    
+    return result
 
 
-@router.post("/batch/pause")
-async def batch_pause_jobs(
-    job_ids: List[str],
-    current_user: Annotated[User, Depends(get_current_superuser)]
+@router.post("/batch")
+async def batch_operation(
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    action: str = Query(..., description="操作类型: pause/resume/delete"),
+    job_ids: List[str] = Body(..., description="任务ID列表")
 ) -> Dict[str, Any]:
-    """批量暂停任务"""
+    """批量操作任务"""
+    if action not in ["pause", "resume", "delete"]:
+        raise HTTPException(status_code=400, detail="不支持的操作类型，支持的操作: pause/resume/delete")
+    
     results = {}
     for job_id in job_ids:
         try:
-            task_scheduler.pause_job(job_id)
-            results[job_id] = "paused"
+            if action == "pause":
+                task_scheduler.pause_job(job_id)
+                results[job_id] = "paused"
+            elif action == "resume":
+                task_scheduler.resume_job(job_id)
+                results[job_id] = "resumed"
+            elif action == "delete":
+                task_scheduler.remove_job(job_id)
+                results[job_id] = "deleted"
         except Exception as e:
             results[job_id] = f"error: {str(e)}"
-    return {"results": results}
-
-
-@router.post("/batch/resume")
-async def batch_resume_jobs(
-    job_ids: List[str],
-    current_user: Annotated[User, Depends(get_current_superuser)]
-) -> Dict[str, Any]:
-    """批量恢复任务"""
-    results = {}
-    for job_id in job_ids:
-        try:
-            task_scheduler.resume_job(job_id)
-            results[job_id] = "resumed"
-        except Exception as e:
-            results[job_id] = f"error: {str(e)}"
-    return {"results": results}
-
-
-@router.post("/batch/delete")
-async def batch_delete_jobs(
-    job_ids: List[str],
-    current_user: Annotated[User, Depends(get_current_superuser)]
-) -> Dict[str, Any]:
-    """批量删除任务"""
-    results = {}
-    for job_id in job_ids:
-        try:
-            task_scheduler.remove_job(job_id)
-            results[job_id] = "deleted"
-        except Exception as e:
-            results[job_id] = f"error: {str(e)}"
-    return {"results": results}
-
-@router.get("/system/stats")
-async def get_system_stats(
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_superuser)]
-) -> Dict[str, Any]:
-    """获取系统任务统计概览（需要超级管理员权限）"""
-    jobs = task_scheduler.get_jobs()
     
-    # 统计各种任务类型
-    task_types = {}
-    for job in jobs:
-        task_type = job.id.split('_')[0]  # 从job_id提取任务类型
-        task_types[task_type] = task_types.get(task_type, 0) + 1
-    
-    return {
-        "total_jobs": len(jobs),
-        "active_jobs": len([j for j in jobs if not j.pending]),
-        "paused_jobs": len([j for j in jobs if j.pending]),
-        "task_types": task_types,
-        "scheduler_running": task_scheduler._running
-    }
+    return {"action": action, "results": results}
 
 # 新增API端点
 @router.post("/", response_model=JobInfo)
@@ -239,82 +219,39 @@ async def get_job(
     )
 
 
-@router.get("/{job_id}/status")
-async def get_job_status(
+
+@router.post("/{job_id}/action")
+async def perform_job_action(
     job_id: str,
     current_user: Annotated[User, Depends(get_current_superuser)],
-    db: Annotated[AsyncSession, Depends(get_async_session)]
+    action: str = Query(..., description="操作类型: pause/resume/run")
 ) -> Dict[str, Any]:
-    """快速获取任务状态（需要超级管理员权限）"""
-    job = task_scheduler.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    
-    # 计算任务状态
-    status = await calculate_job_status(
-        db=db,
-        job_id=job.id,
-        pending=job.pending,
-        next_run_time=job.next_run_time,
-        scheduler_running=task_scheduler._running
-    )
-    
-    return {
-        "job_id": job_id,
-        "status": status,
-        "pending": job.pending,
-        "next_run_time": job.next_run_time,
-        "scheduler_running": task_scheduler._running
-    }
-
-
-@router.post("/{job_id}/pause")
-async def pause_job(
-    job_id: str,
-    current_user: Annotated[User, Depends(get_current_superuser)]
-) -> Dict[str, str]:
-    """暂停任务（需要超级管理员权限）"""
-    try:
-        task_scheduler.pause_job(job_id)
-        return {"status": "paused", "job_id": job_id}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/{job_id}/resume")
-async def resume_job(
-    job_id: str,
-    current_user: Annotated[User, Depends(get_current_superuser)]
-) -> Dict[str, str]:
-    """恢复任务（需要超级管理员权限）"""
-    try:
-        task_scheduler.resume_job(job_id)
-        return {"status": "resumed", "job_id": job_id}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/{job_id}/run")
-async def run_job_now(
-    job_id: str,
-    current_user: Annotated[User, Depends(get_current_superuser)]
-) -> Dict[str, Any]:
-    """立即运行任务（需要超级管理员权限）"""
-    job = task_scheduler.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    """对任务执行操作（需要超级管理员权限）"""
+    if action not in ["pause", "resume", "run"]:
+        raise HTTPException(status_code=400, detail="不支持的操作类型，支持的操作: pause/resume/run")
     
     try:
-        # 立即执行任务，传递正确的参数
-        # 从job对象获取参数和关键字参数
-        args = job.args or []
-        kwargs = job.kwargs or {}
-        
-        # 使用 asyncio.create_task 来异步执行，传递正确的参数
-        asyncio.create_task(job.func(*args, **kwargs))
-        return {"status": "triggered", "job_id": job_id, "message": "任务已触发执行"}
+        if action == "pause":
+            task_scheduler.pause_job(job_id)
+            return {"status": "paused", "job_id": job_id, "action": action}
+        elif action == "resume":
+            task_scheduler.resume_job(job_id)
+            return {"status": "resumed", "job_id": job_id, "action": action}
+        elif action == "run":
+            job = task_scheduler.get_job(job_id)
+            if not job:
+                raise HTTPException(status_code=404, detail="任务不存在")
+            
+            # 立即执行任务，传递正确的参数
+            args = job.args or []
+            kwargs = job.kwargs or {}
+            
+            # 使用 asyncio.create_task 来异步执行，传递正确的参数
+            asyncio.create_task(job.func(*args, **kwargs))
+            return {"status": "triggered", "job_id": job_id, "action": action, "message": "任务已触发执行"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"执行失败: {str(e)}")
+        error_detail = f"执行失败: {str(e)}" if action == "run" else str(e)
+        raise HTTPException(status_code=500 if action == "run" else 400, detail=error_detail)
 
 
 @router.delete("/{job_id}")
@@ -330,18 +267,34 @@ async def delete_job(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/{job_id}/executions", response_model=List[TaskExecutionResponse])
-async def get_job_executions(
+@router.get("/{job_id}/history")
+async def get_job_history(
     job_id: str,
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_superuser)],
+    format: str = Query("detailed", description="返回格式: detailed/logs"),
     limit: int = Query(50, ge=1, le=200)
-) -> List[TaskExecutionResponse]:
+) -> Union[List[TaskExecutionResponse], List[Dict[str, Any]]]:
     """获取任务执行历史（需要超级管理员权限）"""
     try:
         manager = TaskManager(task_scheduler.scheduler)
         executions = await manager.get_job_executions(db, job_id, limit)
-        return executions
+        
+        if format == "logs":
+            # 返回日志格式
+            logs = []
+            for execution in executions:
+                logs.append({
+                    "timestamp": execution.started_at.isoformat(),
+                    "level": "ERROR" if execution.status == "FAILED" else "INFO",
+                    "message": execution.error_message if execution.error_message else f"任务执行{execution.status}",
+                    "duration": execution.duration_seconds,
+                    "result": execution.result
+                })
+            return logs
+        else:
+            # 返回详细执行记录
+            return executions
     except Exception as e:
         raise handle_error(e)
 
@@ -400,29 +353,3 @@ async def update_job_schedule(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/{job_id}/logs")
-async def get_job_logs(
-    job_id: str,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_superuser)],
-    limit: int = Query(100, ge=1, le=1000)
-) -> List[Dict[str, Any]]:
-    """获取任务的执行日志"""
-    try:
-        manager = TaskManager(task_scheduler.scheduler)
-        executions = await manager.get_job_executions(db, job_id, limit)
-        
-        # 转换为日志格式
-        logs = []
-        for execution in executions:
-            logs.append({
-                "timestamp": execution.started_at.isoformat(),
-                "level": "ERROR" if execution.status == "FAILED" else "INFO",
-                "message": execution.error_message if execution.error_message else f"任务执行{execution.status}",
-                "duration": execution.duration_seconds,
-                "result": execution.result
-            })
-        
-        return logs
-    except Exception as e:
-        raise handle_error(e)
