@@ -189,7 +189,7 @@ export const useAuthStore = create<AuthStore>()(
          * @returns {Promise<User>} Created user object
          */
         register: async (userData: RegisterRequest) => {
-          set({ loading: true, error: null });
+          set({ error: null });
           
           try {
             // Clean userData to remove undefined/null values that might cause server issues
@@ -205,12 +205,11 @@ export const useAuthStore = create<AuthStore>()(
             
             const user = await api.post('/v1/auth/register', cleanedData) as User;
             
-            set({ loading: false, error: null });
             return user;
           } catch (error: any) {
             const errorMessage = extractAuthErrorMessage(error);
             
-            set({ loading: false, error: errorMessage });
+            set({ error: errorMessage });
             throw error;
           }
         },
