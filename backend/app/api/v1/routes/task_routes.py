@@ -6,43 +6,67 @@ import asyncio
 
 from app.tasks.scheduler import task_scheduler
 from app.tasks.manager import TaskManager
-from app.schemas.task import JobInfo, TaskExecutionResponse, JobStatsResponse
+from app.schemas.task import JobInfo, TaskExecutionResponse, JobStatsResponse, TaskStatus
 from app.db.base import get_async_session
 from app.models.user import User
 from app.dependencies.current_user import get_current_superuser
 from app.utils.common import handle_error
+from app.utils.task_status import calculate_job_status
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.get("", response_model=List[JobInfo])
 async def list_jobs(
-    current_user: Annotated[User, Depends(get_current_superuser)]
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    db: Annotated[AsyncSession, Depends(get_async_session)]
 ) -> List[JobInfo]:
     """获取所有任务列表（需要超级管理员权限）"""
     jobs = task_scheduler.get_jobs()
+    scheduler_running = task_scheduler._running
     
-    return [
-        JobInfo(
+    job_infos = []
+    for job in jobs:
+        # 计算任务状态
+        status = await calculate_job_status(
+            db=db,
+            job_id=job.id,
+            pending=job.pending,
+            next_run_time=job.next_run_time,
+            scheduler_running=scheduler_running
+        )
+        
+        job_infos.append(JobInfo(
             id=job.id,
             name=job.name,
             trigger=str(job.trigger),
             next_run_time=job.next_run_time,
-            pending=job.pending
-        )
-        for job in jobs
-    ]
+            pending=job.pending,
+            status=status
+        ))
+    
+    return job_infos
 
 
 @router.get("/{job_id}", response_model=JobInfo)
 async def get_job(
     job_id: str,
-    current_user: Annotated[User, Depends(get_current_superuser)]
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    db: Annotated[AsyncSession, Depends(get_async_session)]
 ) -> JobInfo:
     """获取任务详情（需要超级管理员权限）"""
     job = task_scheduler.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="任务不存在")
+    
+    # 计算任务状态
+    status = await calculate_job_status(
+        db=db,
+        job_id=job.id,
+        pending=job.pending,
+        next_run_time=job.next_run_time,
+        scheduler_running=task_scheduler._running
+    )
     
     return JobInfo(
         id=job.id,
@@ -50,6 +74,7 @@ async def get_job(
         trigger=str(job.trigger),
         next_run_time=job.next_run_time,
         pending=job.pending,
+        status=status,
         func=job.func.__name__ if hasattr(job.func, '__name__') else str(job.func),
         args=job.args,
         kwargs=job.kwargs,
@@ -58,6 +83,35 @@ async def get_job(
         misfire_grace_time=job.misfire_grace_time,
         coalesce=job.coalesce
     )
+
+
+@router.get("/{job_id}/status")
+async def get_job_status(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    db: Annotated[AsyncSession, Depends(get_async_session)]
+) -> Dict[str, Any]:
+    """快速获取任务状态（需要超级管理员权限）"""
+    job = task_scheduler.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    
+    # 计算任务状态
+    status = await calculate_job_status(
+        db=db,
+        job_id=job.id,
+        pending=job.pending,
+        next_run_time=job.next_run_time,
+        scheduler_running=task_scheduler._running
+    )
+    
+    return {
+        "job_id": job_id,
+        "status": status,
+        "pending": job.pending,
+        "next_run_time": job.next_run_time,
+        "scheduler_running": task_scheduler._running
+    }
 
 
 @router.post("/{job_id}/pause")

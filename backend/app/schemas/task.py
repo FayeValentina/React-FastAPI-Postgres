@@ -2,6 +2,17 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from app.models.task_execution import ExecutionStatus
+from enum import Enum
+
+
+class TaskStatus(str, Enum):
+    """任务状态枚举"""
+    RUNNING = "running"        # 正在执行
+    SCHEDULED = "scheduled"    # 已调度等待执行
+    PAUSED = "paused"         # 已暂停
+    STOPPED = "stopped"       # 已停止（调度器未运行）
+    FAILED = "failed"         # 最近执行失败
+    IDLE = "idle"             # 空闲状态
 
 
 class JobInfo(BaseModel):
@@ -11,6 +22,7 @@ class JobInfo(BaseModel):
     trigger: str
     next_run_time: Optional[datetime] = None
     pending: bool = False
+    status: TaskStatus = TaskStatus.IDLE  # 新增：计算出的综合状态
     
     # 详细信息（可选）
     func: Optional[str] = None
