@@ -11,6 +11,7 @@ from app.models.user import User
 from app.dependencies.current_user import get_current_active_user
 from app.utils.common import handle_error
 from app.utils.permissions import get_accessible_bot_config
+from app.tasks.jobs.scraping import create_bot_scraping_task, remove_bot_scraping_task, update_bot_scraping_task
 
 router = APIRouter(prefix="/bot-configs", tags=["bot-configs"])
 
@@ -45,6 +46,14 @@ async def create_bot_config(
             scrape_interval_hours=config_data.scrape_interval_hours,
             max_daily_posts=config_data.max_daily_posts
         )
+        
+        # 如果启用了自动爬取，创建定时任务
+        if bot_config.auto_scrape_enabled and bot_config.is_active:
+            await create_bot_scraping_task(
+                bot_config.id, 
+                bot_config.scrape_interval_hours
+            )
+        
         return bot_config
     except Exception as e:
         raise handle_error(e)
@@ -116,6 +125,15 @@ async def update_bot_config(
         
         if not updated_config:
             raise HTTPException(status_code=404, detail="更新失败")
+        
+        # 更新定时任务
+        if updated_config.auto_scrape_enabled and updated_config.is_active:
+            await update_bot_scraping_task(
+                updated_config.id,
+                updated_config.scrape_interval_hours
+            )
+        else:
+            remove_bot_scraping_task(updated_config.id)
             
         return updated_config
     except Exception as e:
@@ -135,6 +153,9 @@ async def delete_bot_config(
     """
     try:
         await get_accessible_bot_config(db, config_id, current_user)
+        
+        # 删除定时任务
+        remove_bot_scraping_task(config_id)
         
         success = await CRUDBotConfig.delete_bot_config(db, config_id)
         

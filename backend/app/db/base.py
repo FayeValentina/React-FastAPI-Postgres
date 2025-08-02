@@ -7,6 +7,10 @@ from app.db.base_class import Base
 from app.models.user import User
 from app.models.token import RefreshToken
 from app.models.password_reset import PasswordReset
+from app.models.bot_config import BotConfig
+from app.models.scrape_session import ScrapeSession
+from app.models.reddit_content import RedditPost, RedditComment
+from app.models.task_execution import TaskExecution
 
 # 创建异步数据库引擎
 engine = create_async_engine(
@@ -38,4 +42,14 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 # Re-export Base and all models for Alembic
-__all__ = ["Base", "User", "RefreshToken", "PasswordReset"]
+__all__ = [
+    "Base", 
+    "User", 
+    "RefreshToken", 
+    "PasswordReset",
+    "BotConfig",
+    "ScrapeSession",
+    "RedditPost",
+    "RedditComment",
+    "TaskExecution"
+]

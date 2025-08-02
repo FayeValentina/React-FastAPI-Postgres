@@ -1,258 +1,247 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.date import DateTrigger
+from apscheduler.events import (
+    EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
+)
+import asyncio
+import traceback
 import logging
-from typing import Optional, List
+from typing import Optional, Dict, Any, Callable
+from datetime import datetime
+from functools import wraps
 
+from app.core.config import settings
+from app.tasks.manager import TaskManager
+from app.models.task_execution import ExecutionStatus
 from app.db.base import AsyncSessionLocal
-from app.crud.token import refresh_token
-from app.crud.password_reset import password_reset
-from app.crud.scrape_session import CRUDScrapeSession
-from app.crud.reddit_content import CRUDRedditContent
-from app.crud.bot_config import CRUDBotConfig
-from app.models.scrape_session import SessionType
-from app.services.scraping_orchestrator import ScrapingOrchestrator
 
 logger = logging.getLogger(__name__)
 
 
-class TaskScheduler:
+def with_task_logging(job_name: str):
+    """装饰器：为任务添加执行日志记录"""
+    def decorator(func: Callable):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            start_time = datetime.utcnow()
+            job_id = kwargs.get('_job_id', 'manual')
+            
+            async with AsyncSessionLocal() as db:
+                manager = TaskManager(task_scheduler.scheduler)
+                
+                try:
+                    # 执行任务
+                    result = await func(*args, **kwargs)
+                    
+                    # 记录成功
+                    await manager.record_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        status=ExecutionStatus.SUCCESS,
+                        started_at=start_time,
+                        completed_at=datetime.utcnow(),
+                        result=result if isinstance(result, dict) else {'result': result}
+                    )
+                    
+                    return result
+                    
+                except Exception as e:
+                    # 记录失败
+                    await manager.record_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        status=ExecutionStatus.FAILED,
+                        started_at=start_time,
+                        completed_at=datetime.utcnow(),
+                        error_message=str(e),
+                        error_traceback=traceback.format_exc()
+                    )
+                    raise
+        
+        return wrapper
+    return decorator
+
+
+class EnhancedScheduler:
+    """增强的任务调度器"""
+    
     def __init__(self):
-        self.scheduler = AsyncIOScheduler()
+        # 配置作业存储 - 使用 SQLAlchemyJobStore
+        jobstores = {
+            'default': SQLAlchemyJobStore(
+                url=settings.postgres.SQLALCHEMY_DATABASE_URL.replace(
+                    '+asyncpg', ''  # SQLAlchemyJobStore需要同步驱动
+                ),
+                tablename='apscheduler_jobs'
+            )
+        }
+        
+        # 配置执行器
+        executors = {
+            'default': AsyncIOExecutor(),
+        }
+        
+        # 配置作业默认设置
+        job_defaults = {
+            'coalesce': True,
+            'max_instances': 3,
+            'misfire_grace_time': 30
+        }
+        
+        # 创建调度器
+        self.scheduler = AsyncIOScheduler(
+            jobstores=jobstores,
+            executors=executors,
+            job_defaults=job_defaults,
+            timezone='UTC'
+        )
+        
+        self.manager = TaskManager(self.scheduler)
+        self._setup_listeners()
         self._running = False
     
-    async def cleanup_expired_tokens(self):
-        """清理过期令牌任务 - 每小时执行"""
-        try:
-            async with AsyncSessionLocal() as db:
-                # 清理过期的刷新令牌
-                expired_refresh_tokens = await refresh_token.cleanup_expired(db)
-                # 清理过期的密码重置令牌
-                expired_reset_tokens = await password_reset.cleanup_expired(db)
-                
-                logger.info(f"令牌清理完成: {expired_refresh_tokens}个刷新令牌, {expired_reset_tokens}个重置令牌")
-        except Exception as e:
-            logger.error(f"令牌清理任务失败: {e}")
+    def _setup_listeners(self):
+        """设置事件监听器"""
+        self.scheduler.add_listener(
+            self._job_executed_listener,
+            EVENT_JOB_EXECUTED
+        )
+        self.scheduler.add_listener(
+            self._job_error_listener,
+            EVENT_JOB_ERROR
+        )
+        self.scheduler.add_listener(
+            self._job_missed_listener,
+            EVENT_JOB_MISSED
+        )
     
-    async def cleanup_old_sessions(self):
-        """清理旧爬取会话 - 每天执行"""
-        try:
-            async with AsyncSessionLocal() as db:
-                deleted_sessions = await CRUDScrapeSession.cleanup_old_sessions(db, days_to_keep=30)
-                logger.info(f"会话清理完成: 删除了{deleted_sessions}个旧会话")
-        except Exception as e:
-            logger.error(f"会话清理任务失败: {e}")
+    def _job_executed_listener(self, event):
+        """作业执行成功监听器"""
+        logger.info(f"作业 {event.job_id} 执行成功")
     
-    async def cleanup_old_content(self):
-        """清理旧Reddit内容 - 每周执行"""
-        try:
-            async with AsyncSessionLocal() as db:
-                deleted_posts, deleted_comments = await CRUDRedditContent.delete_old_content(db, days_to_keep=90)
-                logger.info(f"内容清理完成: 删除了{deleted_posts}个帖子, {deleted_comments}条评论")
-        except Exception as e:
-            logger.error(f"内容清理任务失败: {e}")
-
-    async def _execute_single_bot_scraping(self, bot_config_id: int):
-        """执行单个bot的爬取任务"""
-        try:
-            async with AsyncSessionLocal() as db:
-                orchestrator = ScrapingOrchestrator()
-                result = await orchestrator.execute_scraping_session(
-                    db, bot_config_id, session_type=SessionType.AUTO
-                )
-                
-                if result and result.get('status') == 'completed':
-                    logger.info(f"Bot {bot_config_id} 自动爬取完成: {result.get('total_posts', 0)}个帖子, {result.get('total_comments', 0)}条评论")
-                elif result and result.get('status') == 'failed':
-                    logger.error(f"Bot {bot_config_id} 自动爬取失败: {result.get('error', 'Unknown error')}")
-                else:
-                    logger.warning(f"Bot {bot_config_id} 自动爬取未返回有效结果")
-        except Exception as e:
-            logger.error(f"Bot {bot_config_id} 自动爬取任务失败: {e}")
+    def _job_error_listener(self, event):
+        """作业执行错误监听器"""
+        logger.error(
+            f"作业 {event.job_id} 执行失败: {event.exception}",
+            exc_info=event.exception
+        )
     
-    async def add_bot_task(self, bot_config_id: int, interval_hours: int):
-        """为单个bot添加定时任务"""
-        try:
-            job_id = f"bot_scraping_{bot_config_id}"
-            
-            # 如果任务已存在，先删除
-            if self.scheduler.get_job(job_id):
-                self.scheduler.remove_job(job_id)
-            
-            # 添加新任务
-            self.scheduler.add_job(
-                func=self._execute_single_bot_scraping,
-                trigger=IntervalTrigger(hours=interval_hours),
-                args=[bot_config_id],
-                id=job_id,
-                name=f'Bot {bot_config_id} 自动爬取',
-                replace_existing=True
+    def _job_missed_listener(self, event):
+        """作业错过执行监听器"""
+        logger.warning(f"作业 {event.job_id} 错过了执行时间")
+    
+    def add_job(
+        self,
+        func: str,  # 明确标注只接受字符串
+        trigger: str,
+        id: str,
+        name: str = None,
+        args: list = None,
+        kwargs: dict = None,
+        **trigger_args
+    ):
+        """添加任务的便捷方法"""
+        
+        # 确保 func 是字符串引用
+        if not isinstance(func, str):
+            raise ValueError(
+                f"func 必须是字符串引用，格式为 'module:function'，"
+                f"收到的类型: {type(func)}"
             )
-            
-            logger.info(f"已添加Bot {bot_config_id}的定时任务，执行间隔: {interval_hours}小时")
-            return True
-        except Exception as e:
-            logger.error(f"添加Bot {bot_config_id}的定时任务失败: {e}")
-            return False
+        
+        # 根据触发器类型创建触发器对象
+        if trigger == 'interval':
+            trigger_obj = IntervalTrigger(**trigger_args)
+        elif trigger == 'cron':
+            trigger_obj = CronTrigger(**trigger_args)
+        elif trigger == 'date':
+            trigger_obj = DateTrigger(**trigger_args)
+        else:
+            raise ValueError(f"不支持的触发器类型: {trigger}")
+        
+        # 准备job参数，自动添加 _job_id
+        job_kwargs = kwargs or {}
+        job_kwargs['_job_id'] = id  # 确保每个任务都能获取到 job_id
+        job_args = args or []
+        
+        self.scheduler.add_job(
+            func,
+            trigger=trigger_obj,
+            id=id,
+            name=name or id,
+            args=job_args,
+            kwargs=job_kwargs,
+            replace_existing=True
+        )
     
-    def remove_bot_task(self, bot_config_id: int):
-        """移除单个bot的定时任务"""
-        try:
-            job_id = f"bot_scraping_{bot_config_id}"
-            
-            if self.scheduler.get_job(job_id):
-                self.scheduler.remove_job(job_id)
-                logger.info(f"已移除Bot {bot_config_id}的定时任务")
-                return True
-            else:
-                logger.warning(f"Bot {bot_config_id}的定时任务不存在")
-                return False
-        except Exception as e:
-            logger.error(f"移除Bot {bot_config_id}的定时任务失败: {e}")
-            return False
+    def remove_job(self, job_id: str):
+        """移除任务"""
+        self.scheduler.remove_job(job_id)
     
-    async def update_bot_task(self, bot_config_id: int, interval_hours: int):
-        """更新单个bot的定时任务"""
-        return await self.add_bot_task(bot_config_id, interval_hours)
+    def pause_job(self, job_id: str):
+        """暂停任务"""
+        self.scheduler.pause_job(job_id)
     
-    async def reload_all_bot_tasks(self):
-        """重新加载所有bot的定时任务"""
-        try:
-            async with AsyncSessionLocal() as db:
-                # 获取所有启用自动爬取的bot配置
-                active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
-                
-                # 获取当前所有bot任务的job_id
-                current_bot_jobs = [
-                    job.id for job in self.scheduler.get_jobs() 
-                    if job.id.startswith('bot_scraping_')
-                ]
-                
-                # 移除所有现有的bot任务
-                for job_id in current_bot_jobs:
-                    try:
-                        self.scheduler.remove_job(job_id)
-                    except:
-                        pass
-                
-                # 为每个活跃的bot配置添加任务
-                added_tasks = 0
-                for config in active_configs:
-                    success = await self.add_bot_task(
-                        config.id, 
-                        config.scrape_interval_hours
-                    )
-                    if success:
-                        added_tasks += 1
-                
-                logger.info(f"重新加载bot任务完成: 添加了{added_tasks}个任务")
-                return added_tasks
-        except Exception as e:
-            logger.error(f"重新加载bot任务失败: {e}")
-            return 0
+    def resume_job(self, job_id: str):
+        """恢复任务"""
+        self.scheduler.resume_job(job_id)
     
-    def start(self):
-        """启动所有定时任务"""
+    def get_job(self, job_id: str):
+        """获取任务信息"""
+        return self.scheduler.get_job(job_id)
+    
+    def get_jobs(self):
+        """获取所有任务"""
+        return self.scheduler.get_jobs()
+    
+    async def start(self):
+        """启动调度器"""
         if self._running:
             logger.warning("调度器已经在运行")
             return
-        
-        # 1. 每小时清理过期令牌 (每小时的0分执行)
-        self.scheduler.add_job(
-            self.cleanup_expired_tokens,
-            CronTrigger(minute=0),
-            id='cleanup_tokens',
-            name='清理过期令牌',
-            replace_existing=True
-        )
-        
-        # 2. 每天凌晨2点清理旧会话
-        self.scheduler.add_job(
-            self.cleanup_old_sessions,
-            CronTrigger(hour=2, minute=0),
-            id='cleanup_sessions',
-            name='清理旧会话',
-            replace_existing=True
-        )
-        
-        # 3. 每周日凌晨2点30分清理旧内容
-        self.scheduler.add_job(
-            self.cleanup_old_content,
-            CronTrigger(day_of_week=6, hour=2, minute=30),  # 周日=6
-            id='cleanup_content',
-            name='清理旧内容',
-            replace_existing=True
-        )
-        
+            
         self.scheduler.start()
         self._running = True
-        logger.info("定时任务调度器已启动")
         
-        # 打印已注册的任务
-        jobs = self.scheduler.get_jobs()
+        # 注册所有任务
+        await self._register_all_tasks()
+        
+        logger.info("任务调度器已启动")
+        
+        # 打印已加载的任务
+        jobs = self.get_jobs()
+        logger.info(f"已加载 {len(jobs)} 个任务")
         for job in jobs:
-            logger.info(f"已注册任务: {job.name} (ID: {job.id})")
+            logger.info(f"- {job.name} (ID: {job.id}, 下次运行: {job.next_run_time})")
     
-    async def start_with_bot_tasks(self):
-        """启动调度器并加载所有bot任务"""
-        # 先启动基础调度器
-        self.start()
+    async def _register_all_tasks(self):
+        """注册所有定时任务"""
+        # 导入任务模块，这会自动注册任务
+        from app.tasks.jobs import cleanup, scraping
         
-        # 然后加载所有bot任务
-        if self._running:
-            added_tasks = await self.reload_all_bot_tasks()
-            logger.info(f"调度器启动完成，已加载{added_tasks}个bot任务")
-    
-    def get_bot_tasks_status(self):
-        """获取所有bot任务的状态"""
-        bot_tasks = []
-        for job in self.scheduler.get_jobs():
-            if job.id.startswith('bot_scraping_'):
-                bot_config_id = int(job.id.replace('bot_scraping_', ''))
-                
-                # 获取下次执行时间
-                next_run_time = job.next_run_time.isoformat() if job.next_run_time else None
-                
-                # 获取触发器信息
-                trigger_info = str(job.trigger)
-                
-                bot_tasks.append({
-                    'bot_config_id': bot_config_id,
-                    'job_id': job.id,
-                    'job_name': job.name,
-                    'next_run_time': next_run_time,
-                    'trigger_info': trigger_info,
-                    'is_running': not job.pending
-                })
-        
-        return bot_tasks
-    
-    def get_bot_task_info(self, bot_config_id: int):
-        """获取特定bot任务的信息"""
-        job_id = f"bot_scraping_{bot_config_id}"
-        job = self.scheduler.get_job(job_id)
-        
-        if not job:
-            return None
-        
-        return {
-            'bot_config_id': bot_config_id,
-            'job_id': job.id,
-            'job_name': job.name,
-            'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
-            'trigger_info': str(job.trigger),
-            'is_running': not job.pending,
-            'args': job.args,
-            'kwargs': job.kwargs
-        }
+        # 为所有启用自动爬取的Bot配置添加任务
+        from app.crud.bot_config import CRUDBotConfig
+        async with AsyncSessionLocal() as db:
+            active_configs = await CRUDBotConfig.get_active_configs_for_auto_scraping(db)
+            
+            for config in active_configs:
+                from app.tasks.jobs.scraping import create_bot_scraping_task
+                await create_bot_scraping_task(config.id, config.scrape_interval_hours)
+                logger.info(f"已为Bot配置 {config.id} 添加定时任务")
     
     def shutdown(self):
         """关闭调度器"""
         if self.scheduler.running:
             self.scheduler.shutdown(wait=False)
             self._running = False
-            logger.info("定时任务调度器已关闭")
+            logger.info("任务调度器已关闭")
 
 
 # 全局调度器实例
-task_scheduler = TaskScheduler()
+task_scheduler = EnhancedScheduler()

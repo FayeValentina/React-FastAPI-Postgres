@@ -8,8 +8,10 @@ from sqlalchemy import pool
 from alembic import context
 from dotenv import load_dotenv
 
-# 加载 .env 文件
-load_dotenv()
+# 加载 .env 文件（如果存在）
+# 在 Docker 环境中，环境变量已通过 docker-compose 传递，不需要加载 .env 文件
+if os.path.exists('.env'):
+    load_dotenv()
 
 # 添加项目根目录到 Python 路径
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
