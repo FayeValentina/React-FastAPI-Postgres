@@ -13,6 +13,8 @@ class TaskStatus(str, Enum):
     STOPPED = "stopped"       # 已停止（调度器未运行）
     FAILED = "failed"         # 最近执行失败
     IDLE = "idle"             # 空闲状态
+    TIMEOUT = "timeout"       # 执行超时
+    MISFIRED = "misfired"     # 错过执行时间
 
 
 class JobInfo(BaseModel):
@@ -58,3 +60,21 @@ class JobStatsResponse(BaseModel):
     failed_runs: int
     success_rate: float
     avg_duration_seconds: float
+
+
+class JobCreateRequest(BaseModel):
+    """创建任务请求"""
+    func: str = Field(..., description="任务函数引用")
+    name: str = Field(..., description="任务名称")
+    trigger: str = Field(..., description="触发器类型: date/interval/cron")
+    trigger_args: Dict[str, Any] = Field(..., description="触发器参数")
+    args: Optional[List[Any]] = Field(None, description="函数参数")
+    kwargs: Optional[Dict[str, Any]] = Field(None, description="函数关键字参数")
+    max_retries: int = Field(0, description="最大重试次数")
+    timeout: Optional[int] = Field(None, description="超时时间（秒）")
+
+
+class JobScheduleUpdate(BaseModel):
+    """更新任务调度"""
+    trigger: Optional[str] = None
+    trigger_args: Optional[Dict[str, Any]] = None

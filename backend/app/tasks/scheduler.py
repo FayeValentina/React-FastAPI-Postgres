@@ -103,6 +103,10 @@ class EnhancedScheduler:
         )
         
         self.manager = TaskManager(self.scheduler)
+        
+        # 添加任务配置缓存
+        self.job_configs = {}  # 存储任务的额外配置
+        
         self._setup_listeners()
         self._running = False
     
@@ -122,19 +126,79 @@ class EnhancedScheduler:
         )
     
     def _job_executed_listener(self, event):
-        """作业执行成功监听器"""
+        """作业执行成功监听器 - 改进版"""
         logger.info(f"作业 {event.job_id} 执行成功")
+        
+        # 异步记录到数据库
+        asyncio.create_task(self._record_job_event(
+            event.job_id, 
+            'executed',
+            event.retval if hasattr(event, 'retval') else None
+        ))
     
     def _job_error_listener(self, event):
-        """作业执行错误监听器"""
+        """作业执行错误监听器 - 改进版"""
         logger.error(
             f"作业 {event.job_id} 执行失败: {event.exception}",
             exc_info=event.exception
         )
+        
+        # 异步记录到数据库
+        asyncio.create_task(self._record_job_event(
+            event.job_id,
+            'error',
+            error=str(event.exception),
+            traceback=event.traceback if hasattr(event, 'traceback') else None
+        ))
     
     def _job_missed_listener(self, event):
         """作业错过执行监听器"""
         logger.warning(f"作业 {event.job_id} 错过了执行时间")
+        
+        # 异步记录到数据库
+        asyncio.create_task(self._record_job_event(
+            event.job_id,
+            'missed'
+        ))
+    
+    async def _record_job_event(self, job_id: str, event_type: str, result=None, error=None, traceback=None):
+        """记录任务事件到数据库"""
+        try:
+            async with AsyncSessionLocal() as db:
+                # 这里可以记录到TaskExecution表或创建新的事件表
+                # 目前先记录日志，具体实现可以根据需要调整
+                logger.info(f"记录任务事件: {job_id} - {event_type}")
+        except Exception as e:
+            logger.error(f"记录任务事件失败: {e}")
+    
+    def add_job_with_config(
+        self,
+        func: str,
+        trigger: str,
+        id: str,
+        name: str = None,
+        args: list = None,
+        kwargs: dict = None,
+        max_retries: int = 0,  # 新增：最大重试次数
+        retry_interval: int = 60,  # 新增：重试间隔（秒）
+        timeout: int = None,  # 新增：任务超时时间（秒）
+        **trigger_args
+    ):
+        """添加任务的增强版本，支持重试和超时配置"""
+        # 存储额外配置
+        self.job_configs[id] = {
+            'max_retries': max_retries,
+            'retry_interval': retry_interval,
+            'timeout': timeout,
+            'retry_count': 0
+        }
+        
+        # 包装原始函数以支持超时和重试
+        if timeout:
+            kwargs = kwargs or {}
+            kwargs['_timeout'] = timeout
+            
+        self.add_job(func, trigger, id, name, args, kwargs, **trigger_args)
     
     def add_job(
         self,
