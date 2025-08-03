@@ -17,10 +17,7 @@ import {
   MenuItem,
   Snackbar,
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Refresh as RefreshIcon,
-} from '@mui/icons-material';
+import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { useApiStore } from '../stores/api-store';
 import { useAuthStore } from '../stores/auth-store';
 import ManagementLayout from '../components/Layout/ManagementLayout';
@@ -40,6 +37,7 @@ const TaskManagementPage: React.FC = () => {
   const [filters, setFilters] = useState<TaskFilters>({});
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   const tasksApiUrl = '/v1/tasks';
   const { loading: tasksLoading, error: tasksError } = getApiState(tasksApiUrl);
@@ -57,6 +55,11 @@ const TaskManagementPage: React.FC = () => {
       console.error('Failed to load tasks:', error);
     }
   }, [fetchData, tasksApiUrl, isSuperuser]);
+
+  const handleRefresh = useCallback(async () => {
+    await loadTasks();
+    setRefreshTrigger(prev => prev + 1); // 触发 SystemHealthPanel 刷新
+  }, [loadTasks]);
 
   useEffect(() => {
     if (isSuperuser) {
@@ -151,7 +154,7 @@ const TaskManagementPage: React.FC = () => {
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
-              onClick={loadTasks}
+              onClick={handleRefresh}
               disabled={tasksLoading}
             >
               刷新
@@ -160,7 +163,7 @@ const TaskManagementPage: React.FC = () => {
         </Box>
 
         {/* System Health Panel */}
-        <SystemHealthPanel />
+        <SystemHealthPanel refreshTrigger={refreshTrigger} />
 
         {/* Filter Bar */}
         <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>

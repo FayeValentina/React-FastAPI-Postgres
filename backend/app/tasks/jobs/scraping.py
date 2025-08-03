@@ -20,7 +20,7 @@ async def execute_bot_scraping(bot_config_id: int, **kwargs) -> Dict[str, Any]:
         return result or {"status": "failed", "reason": "no result"}
 
 
-async def create_bot_scraping_task(bot_config_id: int, interval_hours: int):
+async def create_bot_scraping_task(bot_config_id: int, bot_config_name: str, interval_hours: int):
     """为Bot配置创建爬取任务"""
     
     # 添加到调度器，使用文本引用避免序列化问题
@@ -28,7 +28,7 @@ async def create_bot_scraping_task(bot_config_id: int, interval_hours: int):
         'app.tasks.jobs.scraping:execute_bot_scraping',
         trigger='interval',
         id=f'bot_scraping_{bot_config_id}',
-        name=f'Bot-{bot_config_id} 自动爬取',
+        name=f'Bot-{bot_config_name} 自动爬取',
         args=[bot_config_id],
         hours=interval_hours
     )
@@ -49,10 +49,10 @@ def remove_bot_scraping_task(bot_config_id: int) -> bool:
         return False
 
 
-async def update_bot_scraping_task(bot_config_id: int, interval_hours: int):
+async def update_bot_scraping_task(bot_config_id: int, bot_config_name: str, interval_hours: int):
     """更新Bot爬取任务（先删除后添加）"""
     remove_bot_scraping_task(bot_config_id)
-    return await create_bot_scraping_task(bot_config_id, interval_hours)
+    return await create_bot_scraping_task(bot_config_id, bot_config_name, interval_hours)
 
 
 @with_task_logging("批量自动爬取")

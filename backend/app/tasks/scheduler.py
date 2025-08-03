@@ -247,7 +247,7 @@ class EnhancedScheduler:
             
             for config in active_configs:
                 from app.tasks.jobs.scraping import create_bot_scraping_task
-                await create_bot_scraping_task(config.id, config.scrape_interval_hours)
+                await create_bot_scraping_task(config.id, config.name, config.scrape_interval_hours)
                 logger.info(f"已为Bot配置 {config.id} 添加定时任务")
     
     def shutdown(self):

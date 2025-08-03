@@ -51,6 +51,7 @@ async def create_bot_config(
         if bot_config.auto_scrape_enabled and bot_config.is_active:
             await create_bot_scraping_task(
                 bot_config.id, 
+                bot_config.name,
                 bot_config.scrape_interval_hours
             )
         
@@ -130,6 +131,7 @@ async def update_bot_config(
         if updated_config.auto_scrape_enabled and updated_config.is_active:
             await update_bot_scraping_task(
                 updated_config.id,
+                updated_config.name,
                 updated_config.scrape_interval_hours
             )
         else:

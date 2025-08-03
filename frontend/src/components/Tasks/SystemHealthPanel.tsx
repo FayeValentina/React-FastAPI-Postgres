@@ -17,7 +17,11 @@ import {
 import { useApiStore } from '../../stores/api-store';
 import { SystemInfo } from '../../types/task';
 
-const SystemHealthPanel: React.FC = () => {
+interface SystemHealthPanelProps {
+  refreshTrigger?: number;
+}
+
+const SystemHealthPanel: React.FC<SystemHealthPanelProps> = ({ refreshTrigger }) => {
   const { fetchData, getApiState } = useApiStore();
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
 
@@ -26,9 +30,16 @@ const SystemHealthPanel: React.FC = () => {
 
   useEffect(() => {
     loadSystemInfo();
-    const interval = setInterval(loadSystemInfo, 30000); // 每30秒刷新
+    const interval = setInterval(loadSystemInfo, 120000); // 每30秒刷新
     return () => clearInterval(interval);
   }, []);
+
+  // 监听外部刷新触发器
+  useEffect(() => {
+    if (refreshTrigger) {
+      loadSystemInfo();
+    }
+  }, [refreshTrigger]);
 
   const loadSystemInfo = async () => {
     try {
