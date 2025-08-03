@@ -69,10 +69,14 @@ async def get_system_info(
             task_type = job.id.split('_')[0]  # 从job_id提取任务类型
             task_types[task_type] = task_types.get(task_type, 0) + 1
         
+        # 修正：使用 next_run_time 来判断暂停状态
+        active_jobs = len([j for j in jobs if j.next_run_time is not None])
+        paused_jobs = len([j for j in jobs if j.next_run_time is None and hasattr(j, 'trigger')])
+        
         result["stats"] = {
             "total_jobs": len(jobs),
-            "active_jobs": len([j for j in jobs if not j.pending]),
-            "paused_jobs": len([j for j in jobs if j.pending]),
+            "active_jobs": active_jobs,
+            "paused_jobs": paused_jobs,
             "task_types": task_types,
             "scheduler_running": task_scheduler._running
         }

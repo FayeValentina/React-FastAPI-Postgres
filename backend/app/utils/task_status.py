@@ -28,11 +28,23 @@ class TaskStatusCalculator:
         if not scheduler_running:
             return TaskStatus.STOPPED
         
-        # 2. 任务被暂停
-        if pending:
-            return TaskStatus.PAUSED
+        # 2. 检查任务是否被暂停
+        # APScheduler 通过将 next_run_time 设置为 None 来暂停任务
+        if next_run_time is None:
+            try:
+                job = self.scheduler.get_job(job_id)
+                if job and hasattr(job, 'trigger') and job.trigger:
+                    # 有触发器但 next_run_time 为 None，说明是暂停状态
+                    return TaskStatus.PAUSED
+            except Exception:
+                pass
         
-        # 3. 检查是否正在执行（查看最近的执行记录）
+        # 3. pending 为 True 表示任务还在等待被添加到作业存储
+        # 这通常发生在调度器还未启动时
+        if pending:
+            return TaskStatus.IDLE
+        
+        # 4. 检查是否正在执行（查看最近的执行记录）
         try:
             latest_executions = await self.manager.get_job_executions(db, job_id, limit=1)
             if latest_executions:
@@ -68,11 +80,12 @@ class TaskStatusCalculator:
             import logging
             logging.error(f"获取任务执行历史失败: {e}")
         
-        # 4. 有下次运行时间 - 已调度等待执行
+        # 5. 有下次运行时间 - 已调度等待执行
         if next_run_time:
             return TaskStatus.SCHEDULED
         
-        # 5. 默认状态 - 空闲（没有下次运行时间，也没有执行记录）
+        # 6. 默认状态 - 空闲
+        # 没有下次运行时间，可能是一次性任务已完成或是其他情况
         return TaskStatus.IDLE
 
 

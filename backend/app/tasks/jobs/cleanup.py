@@ -1,5 +1,6 @@
 from typing import Dict, Any
-from app.tasks.scheduler import task_scheduler, with_task_logging
+from app.tasks.scheduler import task_scheduler
+from app.tasks.decorators import with_task_logging
 from app.db.base import AsyncSessionLocal
 from app.crud.token import refresh_token
 from app.crud.password_reset import password_reset

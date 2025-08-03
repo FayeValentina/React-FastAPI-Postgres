@@ -8,64 +8,15 @@ from apscheduler.events import (
     EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
 )
 import asyncio
-import traceback
 import logging
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any
 from datetime import datetime
-from functools import wraps
 
 from app.core.config import settings
 from app.tasks.manager import TaskManager
-from app.models.task_execution import ExecutionStatus
 from app.db.base import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
-
-
-def with_task_logging(job_name: str):
-    """装饰器：为任务添加执行日志记录"""
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            start_time = datetime.utcnow()
-            job_id = kwargs.get('_job_id', 'manual')
-            
-            async with AsyncSessionLocal() as db:
-                manager = TaskManager(task_scheduler.scheduler)
-                
-                try:
-                    # 执行任务
-                    result = await func(*args, **kwargs)
-                    
-                    # 记录成功
-                    await manager.record_execution(
-                        db=db,
-                        job_id=job_id,
-                        job_name=job_name,
-                        status=ExecutionStatus.SUCCESS,
-                        started_at=start_time,
-                        completed_at=datetime.utcnow(),
-                        result=result if isinstance(result, dict) else {'result': result}
-                    )
-                    
-                    return result
-                    
-                except Exception as e:
-                    # 记录失败
-                    await manager.record_execution(
-                        db=db,
-                        job_id=job_id,
-                        job_name=job_name,
-                        status=ExecutionStatus.FAILED,
-                        started_at=start_time,
-                        completed_at=datetime.utcnow(),
-                        error_message=str(e),
-                        error_traceback=traceback.format_exc()
-                    )
-                    raise
-        
-        return wrapper
-    return decorator
 
 
 class EnhancedScheduler:
