@@ -24,7 +24,7 @@ import {
   ClearAll as ClearAllIcon,
 } from '@mui/icons-material';
 import { useApiStore } from '../stores/api-store';
-import ScraperLayout from '../components/Scraper/ScraperLayout';
+import ManagementLayout from '../components/Layout/ManagementLayout';
 import BotConfigCard from '../components/Scraper/BotConfigCard';
 import BotConfigDialog from '../components/Scraper/BotConfigDialog';
 import { BotConfigResponse, BatchScrapeRequest, BatchScrapeResponse } from '../types/bot';
@@ -215,7 +215,7 @@ const BotManagementPage: React.FC = () => {
 
 
   return (
-    <ScraperLayout>
+    <ManagementLayout>
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" gutterBottom>
@@ -390,7 +390,7 @@ const BotManagementPage: React.FC = () => {
           message={snackbarMessage}
         />
       </Box>
-    </ScraperLayout>
+    </ManagementLayout>
   );
 };
 

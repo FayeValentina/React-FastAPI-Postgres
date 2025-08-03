@@ -159,10 +159,10 @@ const DashboardPage: React.FC = () => {
 
                   <Button
                     variant="outlined"
-                    onClick={() => navigate('/scraper/bots')}
+                    onClick={() => navigate('/management')}
                     fullWidth
                   >
-                    爬虫管理
+                    综合管理系统
                   </Button>
                   
                   <Button

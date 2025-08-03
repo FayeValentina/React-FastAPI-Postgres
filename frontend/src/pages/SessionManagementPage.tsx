@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { useApiStore } from '../stores/api-store';
-import ScraperLayout from '../components/Scraper/ScraperLayout';
+import ManagementLayout from '../components/Layout/ManagementLayout';
 import SessionStatsPanel from '../components/Scraper/SessionStatsPanel';
 import SessionFilterBar from '../components/Scraper/SessionFilterBar';
 import SessionCard from '../components/Scraper/SessionCard';
@@ -77,7 +77,7 @@ const SessionManagementPage: React.FC = () => {
 
 
   return (
-    <ScraperLayout>
+    <ManagementLayout>
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" gutterBottom>
@@ -145,7 +145,7 @@ const SessionManagementPage: React.FC = () => {
           onClose={() => setDetailDialogOpen(false)}
         />
       </Box>
-    </ScraperLayout>
+    </ManagementLayout>
   );
 };
 
