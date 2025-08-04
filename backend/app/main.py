@@ -10,7 +10,7 @@ from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
-from app.tasks import task_scheduler
+from app.tasks.hybrid_scheduler import scheduler
 
 # 配置日志系统
 setup_logging()
@@ -20,12 +20,12 @@ setup_logging()
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
-    await task_scheduler.start()
+    await scheduler.start()
     
     yield
     
     # 关闭时
-    task_scheduler.shutdown()
+    scheduler.shutdown()
 
 
 app = FastAPI(

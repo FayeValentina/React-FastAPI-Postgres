@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.tasks import task_scheduler
+from app.tasks import scheduler
 from app.schemas import (
     LoginRequest,
     UserCreate
@@ -332,12 +332,14 @@ async def verify_reset_token(
 @router.get("/test/cleanup-tokens")
 async def test_cleanup_tokens():
     """测试令牌清理任务"""
-    await task_scheduler.cleanup_expired_tokens()
+    # Note: Token cleanup is now handled by Celery tasks
+    pass
     return {"message": "令牌清理任务执行完成"}
 
 
 @router.get("/test/auto-scraping")
 async def test_auto_scraping():
     """测试自动爬取任务"""
-    await task_scheduler.auto_scraping_task()
+    # Note: Auto scraping is now handled by Celery tasks
+    pass
     return {"message": "自动爬取任务执行完成"} 

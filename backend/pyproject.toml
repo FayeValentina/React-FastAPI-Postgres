@@ -32,6 +32,9 @@ pillow = "^10.0.0"
 google-genai = "^0.3.0"
 twitter-text-parser = "^3.0.0"
 apscheduler = "^3.10.4"
+celery = {extras = ["amqp", "sqlalchemy"], version = "^5.3.0"}
+kombu = "^5.3.4"
+flower = "^2.0.1"
 
 [build-system]
 requires = ["poetry-core"]

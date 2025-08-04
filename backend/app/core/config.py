@@ -40,7 +40,7 @@ class PostgresSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_",
-        env_file=[".env.local", ".env"],  # .env.local 优先级更高
+        env_file=[ ".env"],  # .env.local 优先级更高
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -59,7 +59,7 @@ class PgAdminSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGADMIN_",
         env_nested_delimiter="__",
-        env_file=[".env.local", ".env"],
+        env_file=[ ".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -74,7 +74,7 @@ class SecuritySettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[".env.local", ".env"],
+        env_file=[ ".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -95,7 +95,7 @@ class CORSSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="BACKEND_CORS_",
-        env_file=[".env.local", ".env"],
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -109,7 +109,7 @@ class LoggingSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LOG_",
-        env_file=[".env.local", ".env"],
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -125,7 +125,7 @@ class RedditSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="REDDIT_",
-        env_file=[".env.local", ".env"],
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -141,7 +141,7 @@ class TwitterSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="TWITTER_",
-        env_file=[".env.local", ".env"],
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -153,7 +153,7 @@ class AISettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="AI_",
-        env_file=[".env.local", ".env"],
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -170,7 +170,60 @@ class EmailSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="EMAIL_",
-        env_file=[".env.local", ".env"],
+        env_file=[".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class RabbitMQSettings(BaseSettings):
+    """RabbitMQ 配置"""
+    HOST: str = "rabbitmq"
+    PORT: int = 5672
+    USER: str = "guest"
+    PASSWORD: str = "guest"
+    VHOST: str = "/"
+    
+    @property
+    def URL(self) -> str:
+        return f"amqp://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.VHOST}"
+    
+    model_config = SettingsConfigDict(
+        env_prefix="RABBITMQ_",
+        env_file=[ ".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class CelerySettings(BaseSettings):
+    """Celery 配置"""
+    BROKER_URL: Optional[str] = None
+    RESULT_BACKEND: Optional[str] = None
+    
+    @field_validator("BROKER_URL", mode="before")
+    @classmethod
+    def set_broker_url(cls, v: Optional[str], info: Any) -> str:
+        if v:
+            return v
+        # 默认使用 RabbitMQ
+        rabbitmq = RabbitMQSettings()
+        return rabbitmq.URL
+    
+    @field_validator("RESULT_BACKEND", mode="before")
+    @classmethod
+    def set_result_backend(cls, v: Optional[str], info: Any) -> str:
+        if v:
+            return v
+        # 默认使用 PostgreSQL (同步驱动，适用于Celery)
+        postgres = PostgresSettings()
+        # 将asyncpg驱动替换为psycopg2，用于Celery结果存储
+        sync_url = str(postgres.SQLALCHEMY_DATABASE_URL).replace("+asyncpg", "")
+        return f"db+{sync_url}"
+    
+    model_config = SettingsConfigDict(
+        env_prefix="CELERY_",
+        env_file=[ ".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -198,13 +251,15 @@ class Settings(BaseSettings):
     twitter: TwitterSettings = TwitterSettings()
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
+    rabbitmq: RabbitMQSettings = RabbitMQSettings()
+    celery: CelerySettings = CelerySettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[".env.local", ".env"],
+        env_file=[ ".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )

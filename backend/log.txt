@@ -1,0 +1,385 @@
+Attaching to backend-1, celery_worker-1, flower-1, frontend-1, pgadmin-1, postgres-1, rabbitmq-1
+backend-1        | 等待数据库准备...
+backend-1        | 检查依赖同步状态...
+pgadmin-1        | email config is {'CHECK_EMAIL_DELIVERABILITY': False, 'ALLOW_SPECIAL_EMAIL_DOMAINS': []}                           
+backend-1        | Warning: [tool.poetry.name] is deprecated. Use [project.name] instead.
+backend-1        | Warning: [tool.poetry.version] is set but 'version' is not in [project.dynamic]. If it is static use [project.version]. If it is dynamic, add 'version' to [project.dynamic].                                                                            
+backend-1        | If you want to set the version dynamically via `poetry build --local-version` or you are using a plugin, which sets the version dynamically, you should define the version in [tool.poetry] and add 'version' to [project.dynamic].                      
+backend-1        | Warning: [tool.poetry.description] is deprecated. Use [project.description] instead.
+backend-1        | Warning: [tool.poetry.authors] is deprecated. Use [project.authors] instead.                                       
+backend-1        | 检查数据库模型变化...                                                                                              
+frontend-1       | 
+frontend-1       | > frontend@0.0.0 dev
+frontend-1       | > vite                                                                                                             
+frontend-1       |                                                                                                                    
+frontend-1       |                                                                                                                    
+frontend-1       |   VITE v6.0.7  ready in 199 ms
+frontend-1       |                                                                                                                    
+frontend-1       |   ➜  Local:   http://localhost:3000/                                                                               
+frontend-1       |   ➜  Network: http://172.18.0.6:3000/                                                                              
+rabbitmq-1       | 2025-08-04 14:37:05.762478+00:00 [notice] <0.45.0> Application syslog exited with reason: stopped                  
+rabbitmq-1       | 2025-08-04 14:37:05.767437+00:00 [notice] <0.209.0> Logging: switching to configured handler(s); following messages may not be visible in this log output                                                                                                
+rabbitmq-1       | 2025-08-04 14:37:05.768166+00:00 [notice] <0.209.0> Logging: configured log handlers are now ACTIVE
+rabbitmq-1       | 2025-08-04 14:37:05.774890+00:00 [info] <0.209.0> ra: starting system coordination                                 
+rabbitmq-1       | 2025-08-04 14:37:05.774963+00:00 [info] <0.209.0> starting Ra system: coordination in directory: /var/lib/rabbitmq/mnesia/rabbit@15444067bcff/coordination/rabbit@15444067bcff                                                                           
+rabbitmq-1       | 2025-08-04 14:37:05.785162+00:00 [info] <0.216.0> ra_coordination_log_ets: in system coordination initialising. Mem table opts: [set,{write_concurrency,auto},public,{compressed,false}]
+rabbitmq-1       | 2025-08-04 14:37:05.828391+00:00 [info] <0.222.0> ra system 'coordination' running pre init for 0 registered servers
+rabbitmq-1       | 2025-08-04 14:37:05.840732+00:00 [info] <0.223.0> ra: meta data store initialised for system coordination. 0 record(s) recovered
+rabbitmq-1       | 2025-08-04 14:37:05.846563+00:00 [info] <0.226.0> segment_writer: upgrading segment file names to new format in dirctory /var/lib/rabbitmq/mnesia/rabbit@15444067bcff/coordination/rabbit@15444067bcff                                                   
+rabbitmq-1       | 2025-08-04 14:37:05.864016+00:00 [notice] <0.228.0> WAL: ra_coordination_log_wal init, mem-tables table name: ra_coordination_log_open_mem_tables
+rabbitmq-1       | 2025-08-04 14:37:05.877841+00:00 [info] <0.209.0> ra: starting system quorum_queues
+rabbitmq-1       | 2025-08-04 14:37:05.877890+00:00 [info] <0.209.0> starting Ra system: quorum_queues in directory: /var/lib/rabbitmq/mnesia/rabbit@15444067bcff/quorum/rabbit@15444067bcff                                                                                
+rabbitmq-1       | 2025-08-04 14:37:05.878425+00:00 [info] <0.232.0> ra_log_ets: in system quorum_queues initialising. Mem table opts: [set,{write_concurrency,auto},public,{compressed,true}]                                                                              
+rabbitmq-1       | 2025-08-04 14:37:05.880441+00:00 [info] <0.236.0> ra system 'quorum_queues' running pre init for 0 registered servers                                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:05.881059+00:00 [info] <0.237.0> ra: meta data store initialised for system quorum_queues. 0 record(s) recovered                                                                                                                        
+rabbitmq-1       | 2025-08-04 14:37:05.881252+00:00 [info] <0.240.0> segment_writer: upgrading segment file names to new format in dirctory /var/lib/rabbitmq/mnesia/rabbit@15444067bcff/quorum/rabbit@15444067bcff                                                         
+rabbitmq-1       | 2025-08-04 14:37:05.885669+00:00 [notice] <0.242.0> WAL: ra_log_wal init, mem-tables table name: ra_log_open_mem_tables                                                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:05.892730+00:00 [info] <0.244.0> ra_system_recover: ra system 'quorum_queues' server recovery strategy rabbit_quorum_queue:system_recover                                                                                               
+rabbitmq-1       | 2025-08-04 14:37:05.892806+00:00 [info] <0.244.0> [rabbit_quorum_queue:system_recover/1] rabbit not booted, skipping queue recovery
+rabbitmq-1       | 2025-08-04 14:37:05.892933+00:00 [info] <0.209.0> ra: starting system coordination
+rabbitmq-1       | 2025-08-04 14:37:05.892957+00:00 [info] <0.209.0> starting Ra system: coordination in directory: /var/lib/rabbitmq/mnesia/rabbit@15444067bcff/coordination/rabbit@15444067bcff                                                                           
+rabbitmq-1       | 2025-08-04 14:37:06.005440+00:00 [notice] <0.246.0> RabbitMQ metadata store: candidate -> leader in term: 1 machine version: 1, last applied 0
+rabbitmq-1       | 2025-08-04 14:37:06.143394+00:00 [info] <0.209.0> 
+rabbitmq-1       | 2025-08-04 14:37:06.143394+00:00 [info] <0.209.0>  Starting RabbitMQ 4.1.2 on Erlang 27.3.4.2 [jit]
+rabbitmq-1       | 2025-08-04 14:37:06.143394+00:00 [info] <0.209.0>  Copyright (c) 2007-2025 Broadcom Inc and/or its subsidiaries    
+rabbitmq-1       | 2025-08-04 14:37:06.143394+00:00 [info] <0.209.0>  Licensed under the MPL 2.0. Website: https://rabbitmq.com       
+rabbitmq-1       |                                                                                                                    
+rabbitmq-1       |   ##  ##      RabbitMQ 4.1.2                                                                                       
+rabbitmq-1       |   ##  ##                                                                                                           
+rabbitmq-1       |   ##########  Copyright (c) 2007-2025 Broadcom Inc and/or its subsidiaries                                         
+rabbitmq-1       |   ######  ##                                                                                                       
+rabbitmq-1       |   ##########  Licensed under the MPL 2.0. Website: https://rabbitmq.com                                            
+rabbitmq-1       |                                                                                                                    
+rabbitmq-1       |   Erlang:      27.3.4.2 [jit]                                                                                      
+rabbitmq-1       |   TLS Library: OpenSSL - OpenSSL 3.3.4 1 Jul 2025                                                                  
+rabbitmq-1       |   Release series support status: see https://www.rabbitmq.com/release-information                                  
+rabbitmq-1       |                                                                                                                    
+rabbitmq-1       |   Doc guides:  https://www.rabbitmq.com/docs                                                                       
+rabbitmq-1       |   Support:     https://www.rabbitmq.com/docs/contact                                                               
+rabbitmq-1       |   Tutorials:   https://www.rabbitmq.com/tutorials                                                                  
+rabbitmq-1       |   Monitoring:  https://www.rabbitmq.com/docs/monitoring                                                            
+rabbitmq-1       |   Upgrading:   https://www.rabbitmq.com/docs/upgrade                                                               
+rabbitmq-1       |                                                                                                                    
+rabbitmq-1       |   Logs: <stdout>                                                                                                   
+rabbitmq-1       |                                                                                                                    
+rabbitmq-1       |   Config file(s): /etc/rabbitmq/conf.d/10-defaults.conf                                                            
+rabbitmq-1       |                                                                                                                    
+rabbitmq-1       |   Starting broker...2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>                                              
+rabbitmq-1       | 2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>  node           : rabbit@15444067bcff                            
+rabbitmq-1       | 2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>  home dir       : /var/lib/rabbitmq                              
+rabbitmq-1       | 2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>  config file(s) : /etc/rabbitmq/conf.d/10-defaults.conf          
+rabbitmq-1       | 2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>  cookie hash    : 2h5fmNTcLVLyzSvAdcbrEA==                       
+rabbitmq-1       | 2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>  log(s)         : <stdout>                                       
+rabbitmq-1       | 2025-08-04 14:37:06.144668+00:00 [info] <0.209.0>  data dir       : /var/lib/rabbitmq/mnesia/rabbit@15444067bcff
+rabbitmq-1       | 2025-08-04 14:37:06.475226+00:00 [info] <0.209.0> Running boot step pre_boot defined by app rabbit                 
+rabbitmq-1       | 2025-08-04 14:37:06.475281+00:00 [info] <0.209.0> Running boot step rabbit_global_counters defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.475570+00:00 [info] <0.209.0> Running boot step rabbit_osiris_metrics defined by app rabbit    
+rabbitmq-1       | 2025-08-04 14:37:06.475627+00:00 [info] <0.209.0> Running boot step rabbit_core_metrics defined by app rabbit      
+rabbitmq-1       | 2025-08-04 14:37:06.477298+00:00 [info] <0.209.0> Running boot step rabbit_alarm defined by app rabbit             
+rabbitmq-1       | 2025-08-04 14:37:06.484930+00:00 [info] <0.276.0> Memory high watermark set to 9495 MiB (9957079449 bytes) of 15826 MiB (16595132416 bytes) total
+rabbitmq-1       | 2025-08-04 14:37:06.487964+00:00 [info] <0.278.0> Enabling free disk space monitoring (disk free space: 953493942272, total memory: 16595132416)                                                                                                         
+rabbitmq-1       | 2025-08-04 14:37:06.488016+00:00 [info] <0.278.0> Disk free limit set to 50MB
+rabbitmq-1       | 2025-08-04 14:37:06.489588+00:00 [info] <0.209.0> Running boot step code_server_cache defined by app rabbit        
+rabbitmq-1       | 2025-08-04 14:37:06.489720+00:00 [info] <0.209.0> Running boot step file_handle_cache defined by app rabbit        
+rabbitmq-1       | 2025-08-04 14:37:06.495899+00:00 [info] <0.281.0> Limiting to approx 1048479 file handles (943629 sockets)         
+rabbitmq-1       | 2025-08-04 14:37:06.496163+00:00 [info] <0.282.0> FHC read buffering: OFF
+rabbitmq-1       | 2025-08-04 14:37:06.496221+00:00 [info] <0.282.0> FHC write buffering: ON                                          
+rabbitmq-1       | 2025-08-04 14:37:06.496671+00:00 [info] <0.209.0> Running boot step worker_pool defined by app rabbit              
+rabbitmq-1       | 2025-08-04 14:37:06.496793+00:00 [info] <0.263.0> Will use 20 processes for default worker pool                    
+rabbitmq-1       | 2025-08-04 14:37:06.496883+00:00 [info] <0.263.0> Starting worker pool 'worker_pool' with 20 processes in it       
+rabbitmq-1       | 2025-08-04 14:37:06.497649+00:00 [info] <0.209.0> Running boot step rabbit_registry defined by app rabbit          
+rabbitmq-1       | 2025-08-04 14:37:06.497716+00:00 [info] <0.209.0> Running boot step database defined by app rabbit                 
+rabbitmq-1       | 2025-08-04 14:37:06.498245+00:00 [info] <0.209.0> Peer discovery: configured backend: rabbit_peer_discovery_classic_config
+rabbitmq-1       | 2025-08-04 14:37:06.500124+00:00 [notice] <0.264.0> Feature flags: attempt to enable `message_containers_deaths_v2`...                                                                                                                                   
+rabbitmq-1       | 2025-08-04 14:37:06.507211+00:00 [notice] <0.264.0> Feature flags: `message_containers_deaths_v2` enabled
+rabbitmq-1       | 2025-08-04 14:37:06.507295+00:00 [notice] <0.264.0> Feature flags: attempt to enable `rabbit_exchange_type_local_random`...                                                                                                                              
+rabbitmq-1       | 2025-08-04 14:37:06.515325+00:00 [notice] <0.264.0> Feature flags: `rabbit_exchange_type_local_random` enabled
+rabbitmq-1       | 2025-08-04 14:37:06.515376+00:00 [notice] <0.264.0> Feature flags: attempt to enable `rabbitmq_4.0.0`...           
+rabbitmq-1       | 2025-08-04 14:37:06.522691+00:00 [notice] <0.264.0> Feature flags: `rabbitmq_4.0.0` enabled                        
+rabbitmq-1       | 2025-08-04 14:37:06.522744+00:00 [notice] <0.264.0> Feature flags: attempt to enable `quorum_queue_non_voters`...
+rabbitmq-1       | 2025-08-04 14:37:06.529718+00:00 [notice] <0.264.0> Feature flags: `quorum_queue_non_voters` enabled               
+rabbitmq-1       | 2025-08-04 14:37:06.529824+00:00 [notice] <0.264.0> Feature flags: attempt to enable `rabbitmq_4.1.0`...
+rabbitmq-1       | 2025-08-04 14:37:06.538607+00:00 [notice] <0.264.0> Feature flags: `rabbitmq_4.1.0` enabled                        
+rabbitmq-1       | 2025-08-04 14:37:06.538672+00:00 [notice] <0.264.0> Feature flags: attempt to enable `detailed_queues_endpoint`...
+rabbitmq-1       | 2025-08-04 14:37:06.545016+00:00 [notice] <0.264.0> Feature flags: `detailed_queues_endpoint` enabled              
+rabbitmq-1       | 2025-08-04 14:37:06.545213+00:00 [info] <0.209.0> DB: virgin node -> run peer discovery
+rabbitmq-1       | 2025-08-04 14:37:06.545255+00:00 [warning] <0.209.0> Classic peer discovery backend: list of nodes does not contain the local node []                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:06.555856+00:00 [notice] <0.45.0> Application mnesia exited with reason: stopped
+rabbitmq-1       | 2025-08-04 14:37:06.740885+00:00 [info] <0.209.0> Waiting for Mnesia tables for 30000 ms, 9 retries left
+rabbitmq-1       | 2025-08-04 14:37:06.740992+00:00 [info] <0.209.0> Successfully synced tables from a peer
+rabbitmq-1       | 2025-08-04 14:37:06.741181+00:00 [info] <0.209.0> Waiting for Mnesia tables for 30000 ms, 9 retries left           
+rabbitmq-1       | 2025-08-04 14:37:06.741261+00:00 [info] <0.209.0> Successfully synced tables from a peer                           
+rabbitmq-1       | 2025-08-04 14:37:06.753774+00:00 [info] <0.209.0> Waiting for Mnesia tables for 30000 ms, 9 retries left           
+rabbitmq-1       | 2025-08-04 14:37:06.753882+00:00 [info] <0.209.0> Successfully synced tables from a peer
+rabbitmq-1       | 2025-08-04 14:37:06.754002+00:00 [info] <0.209.0> Running boot step tracking_metadata_store defined by app rabbit  
+rabbitmq-1       | 2025-08-04 14:37:06.754102+00:00 [info] <0.495.0> Setting up a table for connection tracking on this node: tracked_connection                                                                                                                            
+rabbitmq-1       | 2025-08-04 14:37:06.754164+00:00 [info] <0.495.0> Setting up a table for per-vhost connection counting on this node: tracked_connection_per_vhost                                                                                                        
+rabbitmq-1       | 2025-08-04 14:37:06.754200+00:00 [info] <0.495.0> Setting up a table for per-user connection counting on this node: tracked_connection_per_user                                                                                                          
+rabbitmq-1       | 2025-08-04 14:37:06.754226+00:00 [info] <0.495.0> Setting up a table for channel tracking on this node: tracked_channel                                                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:06.754251+00:00 [info] <0.495.0> Setting up a table for channel tracking on this node: tracked_channel_per_user                                                                                                                         
+rabbitmq-1       | 2025-08-04 14:37:06.754292+00:00 [info] <0.209.0> Running boot step networking_metadata_store defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.754391+00:00 [info] <0.209.0> Running boot step feature_flags defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.757083+00:00 [info] <0.209.0> Running boot step codec_correctness_check defined by app rabbit  
+rabbitmq-1       | 2025-08-04 14:37:06.757247+00:00 [info] <0.209.0> Running boot step external_infrastructure defined by app rabbit  
+rabbitmq-1       | 2025-08-04 14:37:06.757302+00:00 [info] <0.209.0> Running boot step rabbit_event defined by app rabbit             
+rabbitmq-1       | 2025-08-04 14:37:06.757380+00:00 [info] <0.209.0> Running boot step rabbit_auth_mechanism_amqplain defined by app rabbit                                                                                                                                 
+rabbitmq-1       | 2025-08-04 14:37:06.757433+00:00 [info] <0.209.0> Running boot step rabbit_auth_mechanism_anonymous defined by app rabbit                                                                                                                                
+rabbitmq-1       | 2025-08-04 14:37:06.757480+00:00 [info] <0.209.0> Running boot step rabbit_auth_mechanism_cr_demo defined by app rabbit                                                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:06.757513+00:00 [info] <0.209.0> Running boot step rabbit_auth_mechanism_plain defined by app rabbit                                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:06.757532+00:00 [info] <0.209.0> Running boot step rabbit_exchange_type_direct defined by app rabbit                                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:06.757553+00:00 [info] <0.209.0> Running boot step rabbit_exchange_type_fanout defined by app rabbit                                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:06.757572+00:00 [info] <0.209.0> Running boot step rabbit_exchange_type_headers defined by app rabbit                                                                                                                                   
+rabbitmq-1       | 2025-08-04 14:37:06.757589+00:00 [info] <0.209.0> Running boot step rabbit_exchange_type_local_random defined by app rabbit                                                                                                                              
+rabbitmq-1       | 2025-08-04 14:37:06.757637+00:00 [info] <0.209.0> Running boot step rabbit_exchange_type_topic defined by app rabbit                                                                                                                                     
+rabbitmq-1       | 2025-08-04 14:37:06.757699+00:00 [info] <0.209.0> Running boot step rabbit_priority_queue defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.757717+00:00 [info] <0.209.0> Priority queues enabled, real BQ is rabbit_variable_queue        
+rabbitmq-1       | 2025-08-04 14:37:06.757794+00:00 [info] <0.209.0> Running boot step kernel_ready defined by app rabbit             
+rabbitmq-1       | 2025-08-04 14:37:06.757810+00:00 [info] <0.209.0> Running boot step pg_local_amqp_connection defined by app rabbit 
+rabbitmq-1       | 2025-08-04 14:37:06.764512+00:00 [info] <0.209.0> Running boot step pg_local_amqp_session defined by app rabbit    
+rabbitmq-1       | 2025-08-04 14:37:06.764622+00:00 [info] <0.209.0> Running boot step rabbit_sysmon_minder defined by app rabbit     
+rabbitmq-1       | 2025-08-04 14:37:06.764732+00:00 [info] <0.209.0> Running boot step rabbit_epmd_monitor defined by app rabbit      
+rabbitmq-1       | 2025-08-04 14:37:06.765570+00:00 [info] <0.504.0> epmd monitor knows us, inter-node communication (distribution) port: 25672                                                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:06.765653+00:00 [info] <0.209.0> Running boot step guid_generator defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.770446+00:00 [info] <0.209.0> Running boot step rabbit_node_monitor defined by app rabbit      
+rabbitmq-1       | 2025-08-04 14:37:06.770659+00:00 [info] <0.508.0> Starting rabbit_node_monitor (in ignore mode)
+rabbitmq-1       | 2025-08-04 14:37:06.770769+00:00 [info] <0.209.0> Running boot step delegate_sup defined by app rabbit             
+rabbitmq-1       | 2025-08-04 14:37:06.770955+00:00 [info] <0.209.0> Running boot step rabbit_fifo_dlx_sup defined by app rabbit      
+rabbitmq-1       | 2025-08-04 14:37:06.770993+00:00 [info] <0.209.0> Running boot step core_initialized defined by app rabbit         
+rabbitmq-1       | 2025-08-04 14:37:06.771007+00:00 [info] <0.209.0> Running boot step rabbit_channel_tracking_handler defined by app rabbit                                                                                                                                
+rabbitmq-1       | 2025-08-04 14:37:06.771063+00:00 [info] <0.209.0> Running boot step rabbit_classic_queue defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.771123+00:00 [info] <0.209.0> Running boot step rabbit_connection_tracking_handler defined by app rabbit                                                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:06.771158+00:00 [info] <0.209.0> Running boot step rabbit_definitions_hashing defined by app rabbit                                                                                                                                     
+rabbitmq-1       | 2025-08-04 14:37:06.771207+00:00 [info] <0.209.0> Running boot step rabbit_exchange_parameters defined by app rabbit                                                                                                                                     
+rabbitmq-1       | 2025-08-04 14:37:06.924143+00:00 [info] <0.209.0> Running boot step rabbit_policies defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.924572+00:00 [info] <0.209.0> Running boot step rabbit_policy defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.924639+00:00 [info] <0.209.0> Running boot step rabbit_quorum_memory_manager defined by app rabbit                                                                                                                                   
+rabbitmq-1       | 2025-08-04 14:37:06.924702+00:00 [info] <0.209.0> Running boot step rabbit_quorum_queue defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.924861+00:00 [info] <0.209.0> Running boot step rabbit_stream_coordinator defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.924974+00:00 [info] <0.209.0> Running boot step rabbit_vhost_limit defined by app rabbit       
+rabbitmq-1       | 2025-08-04 14:37:06.925048+00:00 [info] <0.209.0> Running boot step rabbit_mgmt_reset_handler defined by app rabbitmq_management                                                                                                                         
+rabbitmq-1       | 2025-08-04 14:37:06.925190+00:00 [info] <0.209.0> Running boot step rabbit_mgmt_db_handler defined by app rabbitmq_management_agent                                                                                                                      
+rabbitmq-1       | 2025-08-04 14:37:06.925240+00:00 [info] <0.209.0> Management plugin: using rates mode 'basic'
+rabbitmq-1       | 2025-08-04 14:37:06.925386+00:00 [info] <0.209.0> Running boot step recovery defined by app rabbit                 
+rabbitmq-1       | 2025-08-04 14:37:06.939273+00:00 [info] <0.209.0> Running boot step prevent_startup_if_node_was_reset defined by app rabbit                                                                                                                              
+rabbitmq-1       | 2025-08-04 14:37:06.939330+00:00 [info] <0.209.0> Running boot step empty_db_check defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:06.939383+00:00 [info] <0.209.0> Will seed default virtual host and user...                       
+rabbitmq-1       | 2025-08-04 14:37:06.939429+00:00 [info] <0.209.0> Adding vhost '/' (description: 'Default virtual host', tags: []) 
+rabbitmq-1       | 2025-08-04 14:37:06.972228+00:00 [info] <0.551.0> Making sure data directory '/var/lib/rabbitmq/mnesia/rabbit@15444067bcff/msg_stores/vhosts/628WB79CIFDYO9LJI6DKMI09L' for vhost '/' exists
+rabbitmq-1       | 2025-08-04 14:37:06.973724+00:00 [info] <0.551.0> Setting segment_entry_count for vhost '/' with 0 queues to '2048'
+rabbitmq-1       | 2025-08-04 14:37:06.984573+00:00 [info] <0.551.0> Starting message stores for vhost '/'                            
+rabbitmq-1       | 2025-08-04 14:37:06.986105+00:00 [info] <0.551.0> Started message store of type transient for vhost '/'            
+rabbitmq-1       | 2025-08-04 14:37:06.986854+00:00 [warning] <0.565.0> Message store "628WB79CIFDYO9LJI6DKMI09L/msg_store_persistent": rebuilding indices from scratch                                                                                                     
+rabbitmq-1       | 2025-08-04 14:37:06.988004+00:00 [info] <0.551.0> Started message store of type persistent for vhost '/'
+rabbitmq-1       | 2025-08-04 14:37:06.988188+00:00 [info] <0.551.0> Recovering 0 queues of type rabbit_classic_queue took 14ms       
+rabbitmq-1       | 2025-08-04 14:37:06.988334+00:00 [info] <0.551.0> Recovering 0 queues of type rabbit_quorum_queue took 0ms         
+rabbitmq-1       | 2025-08-04 14:37:06.988416+00:00 [info] <0.551.0> Recovering 0 queues of type rabbit_stream_queue took 0ms         
+rabbitmq-1       | 2025-08-04 14:37:06.995510+00:00 [info] <0.209.0> Created user 'guest'                                             
+rabbitmq-1       | 2025-08-04 14:37:07.000228+00:00 [info] <0.209.0> Successfully set user tags for user 'guest' to [administrator]
+rabbitmq-1       | 2025-08-04 14:37:07.004385+00:00 [info] <0.209.0> Successfully set permissions for user 'guest' in virtual host '/' to '.*', '.*', '.*'                                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:07.004472+00:00 [info] <0.209.0> Running boot step rabbit_observer_cli defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:07.004562+00:00 [info] <0.209.0> Running boot step rabbit_core_metrics_gc defined by app rabbit   
+rabbitmq-1       | 2025-08-04 14:37:07.004765+00:00 [info] <0.209.0> Running boot step background_gc defined by app rabbit            
+rabbitmq-1       | 2025-08-04 14:37:07.004936+00:00 [info] <0.209.0> Running boot step routing_ready defined by app rabbit            
+rabbitmq-1       | 2025-08-04 14:37:07.004956+00:00 [info] <0.209.0> Running boot step pre_flight defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:07.004995+00:00 [info] <0.209.0> Running boot step notify_cluster defined by app rabbit           
+rabbitmq-1       | 2025-08-04 14:37:07.005049+00:00 [info] <0.209.0> Running boot step networking defined by app rabbit               
+rabbitmq-1       | 2025-08-04 14:37:07.005067+00:00 [info] <0.209.0> Running boot step rabbit_quorum_queue_periodic_membership_reconciliation defined by app rabbit                                                                                                         
+rabbitmq-1       | 2025-08-04 14:37:07.005162+00:00 [info] <0.209.0> Running boot step definition_import_worker_pool defined by app rabbit                                                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:07.005200+00:00 [info] <0.263.0> Starting worker pool 'definition_import_pool' with 20 processes in it                                                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:07.005848+00:00 [info] <0.209.0> Running boot step cluster_name defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:07.005939+00:00 [info] <0.209.0> Initialising internal cluster ID to 'rabbitmq-cluster-id-pjtLwzuXkYIDW_42tmqdgQ'                                                                                                                       
+rabbitmq-1       | 2025-08-04 14:37:07.011147+00:00 [info] <0.209.0> Running boot step virtual_host_reconciliation defined by app rabbit                                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:07.012197+00:00 [info] <0.209.0> Running boot step direct_client defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:07.012613+00:00 [info] <0.209.0> Running boot step cluster_tags defined by app rabbit
+rabbitmq-1       | 2025-08-04 14:37:07.018267+00:00 [info] <0.209.0> Running boot step rabbit_management_load_definitions defined by app rabbitmq_management                                                                                                                
+rabbitmq-1       | 2025-08-04 14:37:07.018492+00:00 [info] <0.618.0> Resetting node maintenance status
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0> Deprecated features: `management_metrics_collection`: Feature `management_metrics_collection` is deprecated.
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0> By default, this feature can still be used for now.
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0> Its use will not be permitted by default in a future minor RabbitMQ version and the feature will be removed from a future major RabbitMQ version; actual versions to be determined.                 
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0> To continue using this feature when it is not permitted by default, set the following parameter in your configuration:                                                                              
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0>     "deprecated_features.permit.management_metrics_collection = true"                                                                                                                               
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0> To test RabbitMQ as if the feature was removed, set this in your configuration:                                                                                                                     
+rabbitmq-1       | 2025-08-04 14:37:07.149217+00:00 [warning] <0.640.0>     "deprecated_features.permit.management_metrics_collection = false"                                                                                                                              
+rabbitmq-1       | 2025-08-04 14:37:07.183978+00:00 [info] <0.676.0> Management plugin: HTTP (non-TLS) listener started on port 15672
+rabbitmq-1       | 2025-08-04 14:37:07.184079+00:00 [info] <0.704.0> Statistics database started.
+rabbitmq-1       | 2025-08-04 14:37:07.184121+00:00 [info] <0.703.0> Starting worker pool 'management_worker_pool' with 3 processes in it                                                                                                                                   
+rabbitmq-1       | 2025-08-04 14:37:07.197763+00:00 [info] <0.715.0> Prometheus metrics: HTTP (non-TLS) listener started on port 15692
+rabbitmq-1       | 2025-08-04 14:37:07.197898+00:00 [info] <0.618.0> Ready to start client connection listeners
+rabbitmq-1       | 2025-08-04 14:37:07.199134+00:00 [info] <0.759.0> started TCP listener on [::]:5672                                
+rabbitmq-1       |  completed with 4 plugins.                                                                                         
+rabbitmq-1       | 2025-08-04 14:37:08.440479+00:00 [info] <0.618.0> Server startup complete; 4 plugins started.
+rabbitmq-1       | 2025-08-04 14:37:08.440479+00:00 [info] <0.618.0>  * rabbitmq_prometheus                                           
+rabbitmq-1       | 2025-08-04 14:37:08.440479+00:00 [info] <0.618.0>  * rabbitmq_management                                           
+rabbitmq-1       | 2025-08-04 14:37:08.440479+00:00 [info] <0.618.0>  * rabbitmq_management_agent                                     
+rabbitmq-1       | 2025-08-04 14:37:08.440479+00:00 [info] <0.618.0>  * rabbitmq_web_dispatch                                         
+rabbitmq-1       | 2025-08-04 14:37:10.754764+00:00 [info] <0.10.0> Time to start RabbitMQ: 6140 ms                                   
+backend-1        | Generating /app/alembic/versions/2eeb32a707ba_auto_migration.py ...  done
+backend-1        | 应用数据库迁移...
+pgadmin-1        | NOTE: Configuring authentication for DESKTOP mode.
+pgadmin-1        | pgAdmin 4 - Application Initialisation
+pgadmin-1        | ======================================                                                                             
+pgadmin-1        |                                                                                                                    
+backend-1        | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.                                                     
+backend-1        | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+backend-1        | INFO  [alembic.runtime.migration] Running upgrade 36069f6372dc -> 2eeb32a707ba, Auto migration                     
+celery_worker-1  | 等待依赖服务...
+backend-1        | 启动应用服务器...
+flower-1         | You have incorrectly specified the following celery arguments after flower command: ['--broker']. Please specify them after celery command instead following this template: celery [celery args] flower [flower args].
+flower-1         | [I 250804 14:37:16 command:168] Visit me at http://0.0.0.0:5555
+flower-1         | [I 250804 14:37:16 command:176] Broker: amqp://guest:**@rabbitmq:5672//                                            
+flower-1         | [I 250804 14:37:16 command:177] Registered tasks:                                                                  
+flower-1         |     ['celery.accumulate',                                                                                          
+flower-1         |      'celery.backend_cleanup',                                                                                     
+flower-1         |      'celery.chain',                                                                                               
+flower-1         |      'celery.chord',                                                                                               
+flower-1         |      'celery.chord_unlock',
+flower-1         |      'celery.chunks',                                                                                              
+flower-1         |      'celery.group',                                                                                               
+rabbitmq-1       | 2025-08-04 14:37:16.043627+00:00 [info] <0.767.0> accepting AMQP connection 172.18.0.8:40996 -> 172.18.0.3:5672    
+flower-1         |      'celery.map',                                                                                                 
+flower-1         |      'celery.starmap']                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.050931+00:00 [info] <0.776.0> accepting AMQP connection 172.18.0.8:41022 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.051072+00:00 [info] <0.772.0> accepting AMQP connection 172.18.0.8:41006 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.054064+00:00 [info] <0.780.0> accepting AMQP connection 172.18.0.8:41026 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.056161+00:00 [info] <0.788.0> accepting AMQP connection 172.18.0.8:41046 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.057657+00:00 [info] <0.784.0> accepting AMQP connection 172.18.0.8:41040 -> 172.18.0.3:5672
+rabbitmq-1       | 2025-08-04 14:37:16.058195+00:00 [info] <0.767.0> connection 172.18.0.8:40996 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.058211+00:00 [info] <0.776.0> connection 172.18.0.8:41022 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.058331+00:00 [info] <0.772.0> connection 172.18.0.8:41006 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.058454+00:00 [info] <0.792.0> accepting AMQP connection 172.18.0.8:41056 -> 172.18.0.3:5672
+rabbitmq-1       | 2025-08-04 14:37:16.059479+00:00 [info] <0.809.0> accepting AMQP connection 172.18.0.8:41070 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.059623+00:00 [info] <0.802.0> accepting AMQP connection 172.18.0.8:41060 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.063617+00:00 [info] <0.780.0> connection 172.18.0.8:41026 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0> Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated.                                                                                                  
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0> By default, this feature can still be used for now.
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0> Its use will not be permitted by default in a future minor RabbitMQ version and the feature will be removed from a future major RabbitMQ version; actual versions to be determined.                 
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0> To continue using this feature when it is not permitted by default, set the following parameter in your configuration:                                                                              
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0>     "deprecated_features.permit.transient_nonexcl_queues = true"                                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0> To test RabbitMQ as if the feature was removed, set this in your configuration:                                                                                                                     
+rabbitmq-1       | 2025-08-04 14:37:16.063895+00:00 [warning] <0.823.0>     "deprecated_features.permit.transient_nonexcl_queues = false"                                                                                                                                   
+rabbitmq-1       | 2025-08-04 14:37:16.064198+00:00 [info] <0.792.0> connection 172.18.0.8:41056 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.066529+00:00 [info] <0.851.0> accepting AMQP connection 172.18.0.8:41072 -> 172.18.0.3:5672
+rabbitmq-1       | 2025-08-04 14:37:16.066766+00:00 [info] <0.788.0> connection 172.18.0.8:41046 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.066732+00:00 [info] <0.802.0> connection 172.18.0.8:41060 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.066767+00:00 [info] <0.784.0> connection 172.18.0.8:41040 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.066790+00:00 [info] <0.809.0> connection 172.18.0.8:41070 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.074622+00:00 [info] <0.912.0> accepting AMQP connection 172.18.0.8:41074 -> 172.18.0.3:5672
+rabbitmq-1       | 2025-08-04 14:37:16.075516+00:00 [info] <0.851.0> connection 172.18.0.8:41072 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+flower-1         | [I 250804 14:37:16 mixins:228] Connected to amqp://guest:**@rabbitmq:5672//
+rabbitmq-1       | 2025-08-04 14:37:16.077646+00:00 [info] <0.927.0> accepting AMQP connection 172.18.0.8:41088 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:16.078739+00:00 [info] <0.912.0> connection 172.18.0.8:41074 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:16.079909+00:00 [info] <0.927.0> connection 172.18.0.8:41088 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+backend-1        | INFO:     Will watch for changes in these directories: ['/app']
+backend-1        | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+backend-1        | INFO:     Started reloader process [1] using StatReload                                                            
+pgadmin-1        | postfix/postlog: starting the Postfix mail system                                                                  
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method active_queues failed
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method scheduled failed
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method stats failed                                                       
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method registered failed                                                  
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method revoked failed                                                     
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method active failed                                                      
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method conf failed                                                        
+flower-1         | [W 250804 14:37:17 inspector:44] Inspect method reserved failed                                                    
+pgadmin-1        | [2025-08-04 14:37:19 +0000] [1] [INFO] Starting gunicorn 22.0.0                                                    
+pgadmin-1        | [2025-08-04 14:37:19 +0000] [1] [INFO] Listening at: http://[::]:80 (1)
+pgadmin-1        | [2025-08-04 14:37:19 +0000] [1] [INFO] Using worker: gthread                                                       
+pgadmin-1        | [2025-08-04 14:37:19 +0000] [124] [INFO] Booting worker with pid: 124                                              
+backend-1        | 2025-08-04 14:37:23 | INFO     | app.core.logging:setup_logging:126 | Logging system initialized: level=INFO, json=False, file=None
+backend-1        | 2025-08-04 14:37:23 | INFO     | logging:callHandlers:1706 | Started server process [21]
+backend-1        | 2025-08-04 14:37:23 | INFO     | logging:callHandlers:1706 | Waiting for application startup.
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | Scheduler started
+backend-1        | 2025-08-04 14:37:24,062 INFO sqlalchemy.engine.Engine select pg_catalog.version()
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | select pg_catalog.version()
+backend-1        | 2025-08-04 14:37:24,062 INFO sqlalchemy.engine.Engine [raw sql] ()                                                 
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | [raw sql] ()                                          
+backend-1        | 2025-08-04 14:37:24,064 INFO sqlalchemy.engine.Engine select current_schema()                                      
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | select current_schema()                               
+backend-1        | 2025-08-04 14:37:24,064 INFO sqlalchemy.engine.Engine [raw sql] ()                                                 
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | [raw sql] ()                                          
+backend-1        | 2025-08-04 14:37:24,066 INFO sqlalchemy.engine.Engine show standard_conforming_strings                             
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | show standard_conforming_strings                      
+backend-1        | 2025-08-04 14:37:24,066 INFO sqlalchemy.engine.Engine [raw sql] ()                                                 
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | [raw sql] ()                                          
+backend-1        | 2025-08-04 14:37:24,067 INFO sqlalchemy.engine.Engine BEGIN (implicit)                                             
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | BEGIN (implicit)                                      
+backend-1        | 2025-08-04 14:37:24,083 INFO sqlalchemy.engine.Engine SELECT bot_configs.id, bot_configs.user_id, bot_configs.name, bot_configs.description, bot_configs.target_subreddits, bot_configs.posts_per_subreddit, bot_configs.comments_per_post, bot_configs.sort_method, bot_configs.time_filter, bot_configs.enable_ai_filter, bot_configs.ai_confidence_threshold, bot_configs.min_comment_length, bot_configs.max_comment_length, bot_configs.auto_scrape_enabled, bot_configs.scrape_interval_hours, bot_configs.max_daily_posts, bot_configs.is_active, bot_configs.created_at, bot_configs.updated_at
+backend-1        | FROM bot_configs 
+backend-1        | WHERE bot_configs.is_active = true AND bot_configs.auto_scrape_enabled = true ORDER BY bot_configs.scrape_interval_hours                                                                                                                                 
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | SELECT bot_configs.id, bot_configs.user_id, bot_configs.name, bot_configs.description, bot_configs.target_subreddits, bot_configs.posts_per_subreddit, bot_configs.comments_per_post, bot_configs.sort_method, bot_configs.time_filter, bot_configs.enable_ai_filter, bot_configs.ai_confidence_threshold, bot_configs.min_comment_length, bot_configs.max_comment_length, bot_configs.auto_scrape_enabled, bot_configs.scrape_interval_hours, bot_configs.max_daily_posts, bot_configs.is_active, bot_configs.created_at, bot_configs.updated_at
+backend-1        | FROM bot_configs 
+backend-1        | WHERE bot_configs.is_active = true AND bot_configs.auto_scrape_enabled = true ORDER BY bot_configs.scrape_interval_hours                                                                                                                                 
+backend-1        | 2025-08-04 14:37:24,083 INFO sqlalchemy.engine.Engine [generated in 0.00041s] ()
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | [generated in 0.00041s] ()                            
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | Added job "Bot-first bot 自动爬取调度" to job store "default"
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已添加Bot 1 的调度任务，执行间隔: 1小时
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已为Bot配置 1 添加调度任务                            
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | Added job "Bot-Faye's bot 自动爬取调度" to job store "default"                                                                                                                              
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已添加Bot 2 的调度任务，执行间隔: 2小时
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已为Bot配置 2 添加调度任务                            
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | Added job "Bot-yuki's bot 自动爬取调度" to job store "default"                                                                                                                              
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已添加Bot 3 的调度任务，执行间隔: 2小时
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已为Bot配置 3 添加调度任务                            
+backend-1        | 2025-08-04 14:37:24,138 INFO sqlalchemy.engine.Engine ROLLBACK                                                     
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | ROLLBACK
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | Added job "清理旧会话调度 (30天)" to job store "default"                                                                                                                                    
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已添加清理任务调度，ID: cleanup_old_sessions, cron: 0 2 * * *                                                                                                                               
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 混合调度器已启动
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | 已加载 4 个调度任务                                   
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | - Bot-first bot 自动爬取调度 (ID: bot_scraping_1, 下次运行: 2025-08-04 15:37:24.124711+00:00)                                                                                               
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | - Bot-Faye's bot 自动爬取调度 (ID: bot_scraping_2, 下 次运行: 2025-08-04 16:37:24.129347+00:00)                                                                                             
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | - Bot-yuki's bot 自动爬取调度 (ID: bot_scraping_3, 下 次运行: 2025-08-04 16:37:24.132156+00:00)                                                                                             
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | - 清理旧会话调度 (30天) (ID: cleanup_old_sessions, 下 次运行: 2025-08-05 02:00:00+00:00)                                                                                                    
+backend-1        | 2025-08-04 14:37:24 | INFO     | logging:callHandlers:1706 | Application startup complete.
+celery_worker-1  | Celery配置检查完成                                                                                                 
+celery_worker-1  | /app/.venv/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+celery_worker-1  | absolutely not recommended!
+celery_worker-1  |                                                                                                                    
+celery_worker-1  | Please specify a different user using the --uid option.                                                            
+celery_worker-1  |                                                                                                                    
+celery_worker-1  | User information: uid=0 euid=0 gid=0 egid=0                                                                        
+celery_worker-1  |                                                                                                                    
+celery_worker-1  |   warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(                                                           
+celery_worker-1  |                                                                                                                    
+celery_worker-1  |  -------------- celery@7bf650d6c25b v5.5.3 (immunity)
+celery_worker-1  | --- ***** -----                                                                                                    
+celery_worker-1  | -- ******* ---- Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.36 2025-08-04 14:37:36                 
+celery_worker-1  | - *** --- * ---                                                                                                    
+celery_worker-1  | - ** ---------- [config]                                                                                           
+celery_worker-1  | - ** ---------- .> app:         reddit_scraper:0x7f6023b59f10                                                      
+celery_worker-1  | - ** ---------- .> transport:   amqp://guest:**@rabbitmq:5672//                                                    
+celery_worker-1  | - ** ---------- .> results:     postgresql://postgres:**@postgres:5432/postgres                                    
+celery_worker-1  | - *** --- * --- .> concurrency: 2 (prefork)                                                                        
+celery_worker-1  | -- ******* ---- .> task events: ON                                                                                 
+celery_worker-1  | --- ***** -----                                                                                                    
+celery_worker-1  |  -------------- [queues]                                                                                           
+celery_worker-1  |                 .> cleanup          exchange=cleanup(direct) key=cleanup                                           
+celery_worker-1  |                 .> default          exchange=default(direct) key=default                                           
+celery_worker-1  |                 .> scraping         exchange=scraping(direct) key=scraping                                         
+celery_worker-1  |                                                                                                                    
+celery_worker-1  | [tasks]                                                                                                            
+celery_worker-1  |   . auto_scraping_all_configs_task                                                                                 
+celery_worker-1  |   . batch_scraping_task                                                                                            
+celery_worker-1  |   . cleanup_old_sessions_task                                                                                      
+celery_worker-1  |   . execute_bot_scraping_task                                                                                      
+celery_worker-1  |   . manual_scraping_task                                                                                           
+celery_worker-1  |                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:36.699902+00:00 [info] <0.981.0> accepting AMQP connection 172.18.0.7:57616 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:36.701620+00:00 [info] <0.981.0> connection 172.18.0.7:57616 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+celery_worker-1  | [2025-08-04 14:37:36,701: INFO/MainProcess] Connected to amqp://guest:**@rabbitmq:5672//
+rabbitmq-1       | 2025-08-04 14:37:36.705032+00:00 [info] <0.990.0> accepting AMQP connection 172.18.0.7:57632 -> 172.18.0.3:5672    
+rabbitmq-1       | 2025-08-04 14:37:36.706386+00:00 [info] <0.990.0> connection 172.18.0.7:57632 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                             
+celery_worker-1  | [2025-08-04 14:37:36,708: INFO/MainProcess] mingle: searching for neighbors
+rabbitmq-1       | 2025-08-04 14:37:36.717648+00:00 [info] <0.1012.0> accepting AMQP connection 172.18.0.7:57642 -> 172.18.0.3:5672   
+rabbitmq-1       | 2025-08-04 14:37:36.719245+00:00 [info] <0.1012.0> connection 172.18.0.7:57642 -> 172.18.0.3:5672: user 'guest' authenticated and granted access to vhost '/'                                                                                            
+celery_worker-1  | [2025-08-04 14:37:37,731: INFO/MainProcess] mingle: all alone
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0> Deprecated features: `global_qos`: Feature `global_qos` is deprecated.                                                                                                                             
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0> By default, this feature can still be used for now.
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0> Its use will not be permitted by default in a future minor RabbitMQ version and the feature will be removed from a future major RabbitMQ version; actual versions to be determined.                
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0> To continue using this feature when it is not permitted by default, set the following parameter in your configuration:                                                                             
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0>     "deprecated_features.permit.global_qos = true"
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0> To test RabbitMQ as if the feature was removed, set this in your configuration:                                                                                                                    
+rabbitmq-1       | 2025-08-04 14:37:37.745433+00:00 [warning] <0.1002.0>     "deprecated_features.permit.global_qos = false"
+celery_worker-1  | [2025-08-04 14:37:37,794: INFO/MainProcess] celery@7bf650d6c25b ready.
+postgres-1       | 2025-08-04 14:37:51.925 UTC [27] LOG:  checkpoint starting: time
+postgres-1       | 2025-08-04 14:37:58.086 UTC [27] LOG:  checkpoint complete: wrote 62 buffers (0.4%); 0 WAL file(s) added, 0 removed, 0 recycled; write=6.111 s, sync=0.033 s, total=6.161 s; sync files=46, longest=0.004 s, average=0.001 s; distance=316 kB, estimate=316 kB; lsn=0/2DADD70, redo lsn=0/2DABDB8

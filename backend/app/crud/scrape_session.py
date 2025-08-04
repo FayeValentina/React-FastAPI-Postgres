@@ -278,3 +278,52 @@ class CRUDScrapeSession:
         
         await db.commit()
         return deleted_count
+    
+    @staticmethod
+    async def get_sessions_before_date(
+        db: AsyncSession,
+        cutoff_date: datetime
+    ) -> List[ScrapeSession]:
+        """获取指定日期之前的会话"""
+        result = await db.execute(
+            select(ScrapeSession)
+            .where(ScrapeSession.created_at < cutoff_date)
+            .order_by(ScrapeSession.created_at)
+        )
+        return result.scalars().all()
+    
+    @staticmethod
+    async def delete_sessions_before_date(
+        db: AsyncSession,
+        cutoff_date: datetime
+    ) -> int:
+        """删除指定日期之前的会话"""
+        # 获取要删除的会话ID
+        result = await db.execute(
+            select(ScrapeSession.id)
+            .where(ScrapeSession.created_at < cutoff_date)
+        )
+        session_ids = [row[0] for row in result.all()]
+        
+        if not session_ids:
+            return 0
+        
+        # 删除相关的Reddit内容
+        await db.execute(
+            delete(RedditPost)
+            .where(RedditPost.scrape_session_id.in_(session_ids))
+        )
+        await db.execute(
+            delete(RedditComment)
+            .where(RedditComment.scrape_session_id.in_(session_ids))
+        )
+        
+        # 删除会话
+        deleted_count = len(session_ids)
+        await db.execute(
+            delete(ScrapeSession)
+            .where(ScrapeSession.id.in_(session_ids))
+        )
+        
+        await db.commit()
+        return deleted_count

@@ -99,8 +99,83 @@ services:
     networks:
       - dbNetWork
 
+  rabbitmq:
+    image: rabbitmq:4-management
+    env_file:
+      - .env
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST:-/}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dbNetWork
+
+  celery_worker:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - C_FORCE_ROOT=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      bash -c "
+        echo '等待依赖服务...' &&
+        sleep 10 &&
+        poetry run python -c 'import os; os.environ.setdefault(\"DJANGO_SETTINGS_MODULE\", \"\"); from app.celery_app import celery_app; print(\"Celery配置检查完成\")' &&
+        poetry run celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q default,cleanup,scraping
+      "
+    volumes:
+      - ./backend:/app
+    networks:
+      - dbNetWork
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  flower:
+    image: mher/flower:2.0
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    depends_on:
+      - rabbitmq
+      - celery_worker
+    networks:
+      - dbNetWork
+    command: celery flower --broker=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+
 volumes:
   postgres_data:
+  rabbitmq_data:
 
 networks:
   dbNetWork:

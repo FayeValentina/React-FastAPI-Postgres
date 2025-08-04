@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.schemas.scrape_session import (
 )
 from app.crud.scrape_session import CRUDScrapeSession
 from app.services.scraping_orchestrator import ScrapingOrchestrator
+from app.services.schedule_manager import ScheduleManager
 from app.db.base import get_async_session
 from app.models.user import User
 from app.dependencies.current_user import get_current_active_user
@@ -16,6 +17,67 @@ from app.utils.permissions import get_accessible_bot_config, get_accessible_sess
 from app.models.scrape_session import SessionStatus, SessionType
 
 router = APIRouter(prefix="/scraping", tags=["scraping"])
+
+
+@router.post("/start/{config_id}")
+async def start_scraping(
+    config_id: int,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(get_current_active_user)]
+):
+    """
+    手动触发单个Bot配置的爬取任务
+    """
+    try:
+        # 验证权限
+        bot_config = await get_accessible_bot_config(db, config_id, current_user)
+        
+        if not bot_config.is_active:
+            raise HTTPException(status_code=400, detail="Bot配置未激活")
+        
+        # 发送手动爬取任务到队列
+        task_id = ScheduleManager.trigger_manual_scraping(config_id, "manual")
+        
+        return {
+            "message": "爬取任务已启动",
+            "config_id": config_id,
+            "task_id": task_id,
+            "status": "queued"
+        }
+        
+    except Exception as e:
+        raise handle_error(e)
+
+
+@router.get("/task-status/{task_id}")
+async def get_task_status(
+    task_id: str,
+    current_user: Annotated[User, Depends(get_current_active_user)]
+):
+    """
+    获取Celery任务状态
+    """
+    try:
+        status = ScheduleManager.get_task_status(task_id)
+        return status
+    except Exception as e:
+        raise handle_error(e)
+
+
+@router.post("/cancel-task/{task_id}")
+async def cancel_task(
+    task_id: str,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    terminate: bool = False
+):
+    """
+    取消Celery任务
+    """
+    try:
+        result = ScheduleManager.cancel_task(task_id, terminate)
+        return result
+    except Exception as e:
+        raise handle_error(e)
 
 
 @router.post("/bot-configs/batch-scrape", response_model=BatchScrapeResponse)
@@ -55,32 +117,21 @@ async def batch_trigger_scraping(
                     message=f"权限验证失败: {str(e)}"
                 ))
         
-        # 批量执行有效的配置
+        # 批量执行有效的配置 - 使用Celery队列
         if valid_config_ids:
-            orchestrator = ScrapingOrchestrator()
-            batch_results = await orchestrator.execute_multiple_configs(
-                db, valid_config_ids, session_type
+            # 发送批量爬取任务到队列
+            task_id = ScheduleManager.trigger_batch_scraping(
+                valid_config_ids, session_type
             )
             
-            # 转换结果格式
-            for result in batch_results:
-                if result.get('status') == 'completed':
-                    results.append(BatchScrapeResult(
-                        config_id=result.get('config_id'),
-                        session_id=result.get('session_id'),
-                        status="completed",
-                        message="爬取完成",
-                        total_posts=result.get('total_posts'),
-                        total_comments=result.get('total_comments')
-                    ))
-                else:
-                    results.append(BatchScrapeResult(
-                        config_id=result.get('config_id'),
-                        session_id=result.get('session_id'),
-                        status="failed",
-                        message="爬取失败",
-                        error=result.get('error')
-                    ))
+            # 返回任务ID，前端可以通过任务状态API查询进度
+            for config_id in valid_config_ids:
+                results.append(BatchScrapeResult(
+                    config_id=config_id,
+                    status="queued",
+                    message=f"任务已加入队列，任务ID: {task_id}",
+                    task_id=task_id
+                ))
         
         successful_count = len([r for r in results if r.status == "completed"])
         
