@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Annotated, List, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.schedule_manager import ScheduleManager
 from app.models.user import User
 from app.dependencies.current_user import get_current_superuser
@@ -7,6 +8,7 @@ from app.utils.common import handle_error
 from app.crud.schedule_event import CRUDScheduleEvent
 from app.crud.task_execution import CRUDTaskExecution
 from app.schemas.schedule_event import ScheduleEventResponse
+from app.db.base import get_async_session
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -171,3 +173,4 @@ async def get_execution_stats(
         return stats
     except Exception as e:
         raise handle_error(e)
+
