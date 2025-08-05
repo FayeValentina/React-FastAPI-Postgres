@@ -10,6 +10,7 @@ from app.tasks import (
     HybridScheduler, TaskDispatcher, EventRecorder, 
     JobConfigManager, MessageSender
 )
+from app.tasks.schedulers import scheduler as global_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class ScheduleManager:
     
     def __init__(self):
         """初始化调度管理器，注入所需依赖"""
-        self.scheduler = HybridScheduler()
+        self.scheduler = global_scheduler  # 使用全局调度器实例
         self.task_dispatcher = TaskDispatcher()
         self.message_sender = MessageSender(self.task_dispatcher)
         self.event_recorder = EventRecorder()
@@ -155,7 +156,7 @@ class ScheduleManager:
             raise ValueError("清理天数不能超过365天")
             
         # 直接使用TaskDispatcher
-        task_id = self.task_dispatcher.dispatch_cleanup_task(days_old)
+        task_id = self.task_dispatcher.dispatch_cleanup(days_old)
         logger.info(f"已触发清理任务，清理天数: {days_old}, 任务ID: {task_id}")
         return task_id
     
@@ -329,9 +330,11 @@ class ScheduleManager:
                 hour = schedule.next_run_time.hour
                 time_distribution[hour] = time_distribution.get(hour, 0) + 1
         
-        # 识别高峰时段
-        max_tasks_per_hour = max(time_distribution.values()) if time_distribution else 0
-        peak_hours = [h for h, count in time_distribution.items() if count >= max_tasks_per_hour * 0.8]
+        # 识别高峰时段（增加边界条件检查）
+        distribution_values = list(time_distribution.values())
+        max_tasks_per_hour = max(distribution_values) if distribution_values else 0
+        peak_hours = [h for h, count in time_distribution.items() 
+                      if count >= max_tasks_per_hour * 0.8] if max_tasks_per_hour > 0 else []
         
         return {
             "total_bot_schedules": len(bot_schedules),
@@ -353,7 +356,8 @@ class ScheduleManager:
         if peak_hours:
             recommendations.append(f"建议将部分任务从高峰时段({peak_hours})分散到其他时间")
         
-        if max(time_distribution.values()) > 20:
+        max_hourly_tasks = max(time_distribution.values()) if time_distribution else 0
+        if max_hourly_tasks > 20:
             recommendations.append("单小时任务数过多，建议增加调度间隔或分批执行")
         
         return recommendations

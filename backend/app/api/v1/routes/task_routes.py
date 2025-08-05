@@ -104,10 +104,20 @@ async def get_job_details(
 ) -> Dict[str, Any]:
     """获取指定任务的完整详细信息（需要超级管理员权限）"""
     try:
+        # 检查调度器是否运行
+        scheduler_running = schedule_manager.scheduler_instance._running
+        
         # 获取基础调度信息
         job = schedule_manager.scheduler_instance.get_schedule(job_id)
         if not job:
-            raise HTTPException(status_code=404, detail="任务不存在")
+            # 如果调度器未运行，提供更友好的错误信息
+            if not scheduler_running:
+                raise HTTPException(
+                    status_code=503, 
+                    detail=f"调度器未运行，无法获取任务 '{job_id}' 的详细信息"
+                )
+            else:
+                raise HTTPException(status_code=404, detail=f"任务 '{job_id}' 不存在")
         
         # 获取配置信息
         config = schedule_manager.scheduler_instance.get_schedule_config(job_id)
@@ -119,7 +129,7 @@ async def get_job_details(
             job_id=job_id,
             pending=job.pending if hasattr(job, 'pending') else False,
             next_run_time=job.next_run_time,
-            scheduler_running=schedule_manager.scheduler_instance._running
+            scheduler_running=scheduler_running
         )
         
         # 获取执行摘要和最近事件
@@ -146,7 +156,7 @@ async def get_job_details(
 @router.post("/cleanup")
 async def manage_cleanup(
     current_user: Annotated[User, Depends(get_current_superuser)],
-    action: str = Query("trigger", description="操作类型: trigger, schedule, remove"),
+    action: str = Query("trigger", description="操作类型: trigger, create, update, remove"),
     days_old: int = Query(30, description="清理天数"),
     schedule_id: str = Query("cleanup_old_sessions", description="调度ID"),
     cron_expression: str = Query("0 2 * * *", description="Cron表达式")
@@ -162,7 +172,7 @@ async def manage_cleanup(
                 "days_old": days_old,
                 "status": "queued"
             }
-        elif action in ["schedule", "remove"]:
+        elif action in ["create", "update", "remove"]:
             # 管理清理任务调度
             return schedule_manager.manage_cleanup_schedule(
                 action=action,
