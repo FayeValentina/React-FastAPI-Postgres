@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from app.models.task_execution import ExecutionStatus
@@ -89,8 +89,7 @@ class TaskExecutionResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class JobStatsResponse(BaseModel):
@@ -126,3 +125,4 @@ class SystemStatusResponse(BaseModel):
     celery: Dict[str, Any] = Field(..., description="Celery状态")
     queues: Dict[str, Any] = Field(..., description="队列状态")
     timestamp: str = Field(..., description="状态时间戳")
+
