@@ -18,6 +18,12 @@ from .reddit_content import (
     RedditPostBase, RedditPostResponse, RedditCommentBase, RedditCommentResponse,
     RedditContentListResponse, CommentSearchRequest, SubredditStats, RedditConnectionTestResponse
 )
+from .task import (
+    TaskStatus, JobExecutionSummary, ScheduleEventInfo,
+    EnhancedJobInfo, JobDetailResponse, JobInfo,
+    TaskExecutionResponse, JobStatsResponse,
+    JobCreateRequest, JobScheduleUpdate, SystemStatusResponse
+)
 
 __all__ = [
     # User models
@@ -39,5 +45,11 @@ __all__ = [
     
     # Reddit content models
     "RedditPostBase", "RedditPostResponse", "RedditCommentBase", "RedditCommentResponse",
-    "RedditContentListResponse", "CommentSearchRequest", "SubredditStats", "RedditConnectionTestResponse"
+    "RedditContentListResponse", "CommentSearchRequest", "SubredditStats", "RedditConnectionTestResponse",
+    
+    # Task models
+    "TaskStatus", "JobExecutionSummary", "ScheduleEventInfo",
+    "EnhancedJobInfo", "JobDetailResponse", "JobInfo",
+    "TaskExecutionResponse", "JobStatsResponse",
+    "JobCreateRequest", "JobScheduleUpdate", "SystemStatusResponse"
 ] 

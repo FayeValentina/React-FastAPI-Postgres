@@ -30,7 +30,7 @@ async def send_bot_scraping_task(bot_config_id: int):
         from app.celery_app import celery_app
         result = celery_app.send_task(
             'execute_bot_scraping_task',
-            args=[bot_config_id, 'scheduled'],
+            args=[bot_config_id],
             queue='scraping'
         )
         task_id = result.id
@@ -178,11 +178,20 @@ class HybridScheduler:
                 else:
                     job_name = f"调度任务: {job_id}"
                 
+                # 映射事件类型
+                event_type_map = {
+                    'scheduled': ScheduleEventType.SCHEDULED,
+                    'schedule_error': ScheduleEventType.ERROR,
+                    'missed': ScheduleEventType.MISSED
+                }
+                
+                event_type_enum = event_type_map.get(event_type, ScheduleEventType.EXECUTED)
+                
                 # 创建调度事件记录
                 event = ScheduleEvent(
                     job_id=job_id,
                     job_name=job_name,
-                    event_type=ScheduleEventType(event_type),
+                    event_type=event_type_enum,  # 使用枚举值
                     result=result if isinstance(result, dict) else {'result': str(result)} if result else None,
                     error_message=error,
                     error_traceback=traceback

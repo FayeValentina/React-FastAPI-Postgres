@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import TaskStatus
 from app.models.task_execution import ExecutionStatus
-from app.tasks.manager import TaskManager
 
 
 class TaskStatusCalculator:
@@ -12,7 +11,6 @@ class TaskStatusCalculator:
     
     def __init__(self, scheduler):
         self.scheduler = scheduler
-        self.manager = TaskManager(scheduler)
     
     async def calculate_job_status(
         self, 
@@ -46,9 +44,12 @@ class TaskStatusCalculator:
         
         # 4. 检查是否正在执行（查看最近的执行记录）
         try:
-            latest_executions = await self.manager.get_job_executions(db, job_id, limit=1)
-            if latest_executions:
-                latest_execution = latest_executions[0]
+            from app.crud.task_execution import CRUDTaskExecution
+            latest_executions = await CRUDTaskExecution.get_recent_executions(db, hours=1, limit=1)
+            # 过滤出当前job的执行记录
+            job_executions = [e for e in latest_executions if e.job_id == job_id]
+            if job_executions:
+                latest_execution = job_executions[0]
                 
                 # 如果最近的执行状态是RUNNING
                 if latest_execution.status == ExecutionStatus.RUNNING:
@@ -87,6 +88,62 @@ class TaskStatusCalculator:
         # 6. 默认状态 - 空闲
         # 没有下次运行时间，可能是一次性任务已完成或是其他情况
         return TaskStatus.IDLE
+    
+    async def get_job_execution_summary(self, db: AsyncSession, job_id: str, hours: int = 24):
+        """获取任务执行摘要"""
+        from app.crud.task_execution import CRUDTaskExecution
+        from app.schemas.task import JobExecutionSummary
+        
+        executions = await CRUDTaskExecution.get_recent_executions(db, hours)
+        job_executions = [e for e in executions if e.job_id == job_id]
+        
+        if not job_executions:
+            return JobExecutionSummary(
+                total_runs=0,
+                successful_runs=0,
+                failed_runs=0,
+                success_rate=0.0,
+                avg_duration=0.0,
+                last_run=None,
+                last_status=None,
+                last_error=None
+            )
+        
+        # 计算统计信息
+        total = len(job_executions)
+        successful = len([e for e in job_executions if e.status == ExecutionStatus.SUCCESS])
+        durations = [e.duration_seconds for e in job_executions if e.duration_seconds]
+        avg_duration = sum(durations) / len(durations) if durations else 0.0
+        
+        latest = max(job_executions, key=lambda x: x.started_at)
+        
+        return JobExecutionSummary(
+            total_runs=total,
+            successful_runs=successful,
+            failed_runs=total - successful,
+            success_rate=(successful / total * 100) if total > 0 else 0.0,
+            avg_duration=avg_duration,
+            last_run=latest.started_at.isoformat() if latest.started_at else None,
+            last_status=latest.status.value if latest.status else None,
+            last_error=latest.error_message if latest.error_message else None
+        )
+    
+    async def get_job_recent_events(self, db: AsyncSession, job_id: str, limit: int = 10):
+        """获取任务最近的事件"""
+        from app.crud.schedule_event import CRUDScheduleEvent
+        from app.schemas.task import ScheduleEventInfo
+        
+        events = await CRUDScheduleEvent.get_events_by_job(db, job_id, limit)
+        
+        return [
+            ScheduleEventInfo(
+                event_type=event.event_type.value,
+                created_at=event.created_at.isoformat(),
+                error_message=event.error_message,
+                result=event.result
+            )
+            for event in events
+        ]
 
 
 # 创建全局实例（延迟初始化）

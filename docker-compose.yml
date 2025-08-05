@@ -142,11 +142,9 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 10 &&
-        poetry run python -c 'import os; os.environ.setdefault(\"DJANGO_SETTINGS_MODULE\", \"\"); from app.celery_app import celery_app; print(\"Celery配置检查完成\")' &&
-        poetry run celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q default,cleanup,scraping
+        python -c 'import os; os.environ.setdefault(\"DJANGO_SETTINGS_MODULE\", \"\"); from app.celery_app import celery_app; print(\"Celery配置检查完成\")' &&
+        celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q default,cleanup,scraping
       "
-    volumes:
-      - ./backend:/app
     networks:
       - dbNetWork
     deploy:

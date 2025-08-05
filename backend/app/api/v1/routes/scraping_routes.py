@@ -105,16 +105,26 @@ async def batch_trigger_scraping(
                 if not bot_config.is_active:
                     results.append(BatchScrapeResult(
                         config_id=config_id,
+                        session_id=None,
+                        task_id=None,
                         status="error",
-                        message="Bot配置未激活"
+                        message="Bot配置未激活",
+                        total_posts=None,
+                        total_comments=None,
+                        error=None
                     ))
                 else:
                     valid_config_ids.append(config_id)
             except Exception as e:
                 results.append(BatchScrapeResult(
                     config_id=config_id,
+                    session_id=None,
+                    task_id=None,
                     status="error",
-                    message=f"权限验证失败: {str(e)}"
+                    message=f"权限验证失败: {str(e)}",
+                    total_posts=None,
+                    total_comments=None,
+                    error=str(e)
                 ))
         
         # 批量执行有效的配置 - 使用Celery队列
@@ -128,9 +138,13 @@ async def batch_trigger_scraping(
             for config_id in valid_config_ids:
                 results.append(BatchScrapeResult(
                     config_id=config_id,
+                    session_id=None,
+                    task_id=task_id,
                     status="queued",
                     message=f"任务已加入队列，任务ID: {task_id}",
-                    task_id=task_id
+                    total_posts=None,
+                    total_comments=None,
+                    error=None
                 ))
         
         successful_count = len([r for r in results if r.status == "completed"])

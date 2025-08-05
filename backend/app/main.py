@@ -19,13 +19,24 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时
-    await scheduler.start()
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # 启动时
+        await scheduler.start()
+        logger.info("调度器启动成功")
+    except Exception as e:
+        logger.error(f"调度器启动失败: {e}")
     
     yield
     
     # 关闭时
-    scheduler.shutdown()
+    try:
+        scheduler.shutdown()
+        logger.info("调度器关闭成功")
+    except Exception as e:
+        logger.error(f"调度器关闭失败: {e}")
 
 
 app = FastAPI(

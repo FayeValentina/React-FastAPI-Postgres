@@ -199,7 +199,7 @@ class CRUDScrapeSession:
             .where(
                 and_(
                     ScrapeSession.created_at >= start_date,
-                    ScrapeSession.status == 'completed'
+                    ScrapeSession.status == SessionStatus.COMPLETED
                 )
             )
         )

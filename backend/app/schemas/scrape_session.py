@@ -61,6 +61,7 @@ class BatchScrapeRequest(BaseModel):
 class BatchScrapeResult(BaseModel):
     config_id: int
     session_id: Optional[int] = None
+    task_id: Optional[str] = None
     status: str  # 'success', 'error', 'completed', 'failed'
     message: str
     total_posts: Optional[int] = None
