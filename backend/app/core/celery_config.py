@@ -62,6 +62,12 @@ class CeleryConfig(BaseModel):
         return (f"db+postgresql://{self.postgres_user}:{self.postgres_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}")
 
+    @property
+    def sqlalchemy_url(self) -> str:
+        """构建标准的SQLAlchemy URL（用于APScheduler等）"""
+        return (f"postgresql://{self.postgres_user}:{self.postgres_password}"
+                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}")
+
 
 # 全局实例
 celery_config = CeleryConfig()
