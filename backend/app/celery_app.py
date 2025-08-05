@@ -12,7 +12,8 @@ celery_app = Celery(
     broker=settings.celery.broker_url,
     backend=settings.celery.result_backend_url,
     include=[
-        'app.tasks.celery_tasks',
+        'app.tasks.jobs.scraping_jobs',
+        'app.tasks.jobs.cleanup_jobs',
     ]
 )
 
@@ -29,9 +30,14 @@ celery_app.conf.update(
     
     # 任务路由和队列
     task_routes={
-        'app.tasks.celery_tasks.execute_bot_scraping_task': {'queue': 'scraping'},
-        'app.tasks.celery_tasks.cleanup_old_sessions_task': {'queue': 'cleanup'},
-        'app.tasks.celery_tasks.batch_scraping_task': {'queue': 'scraping'},
+        'app.tasks.jobs.scraping_jobs.execute_bot_scraping_task': {'queue': 'scraping'},
+        'app.tasks.jobs.scraping_jobs.manual_scraping_task': {'queue': 'scraping'},
+        'app.tasks.jobs.scraping_jobs.batch_scraping_task': {'queue': 'scraping'},
+        'app.tasks.jobs.scraping_jobs.auto_scraping_all_configs_task': {'queue': 'scraping'},
+        'app.tasks.jobs.cleanup_jobs.cleanup_old_sessions_task': {'queue': 'cleanup'},
+        'app.tasks.jobs.cleanup_jobs.cleanup_expired_tokens_task': {'queue': 'cleanup'},
+        'app.tasks.jobs.cleanup_jobs.cleanup_old_content_task': {'queue': 'cleanup'},
+        'app.tasks.jobs.cleanup_jobs.cleanup_schedule_events_task': {'queue': 'cleanup'},
     },
     
     # 队列定义

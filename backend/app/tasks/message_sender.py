@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 
 from app.celery_app import celery_app
-from app.tasks.celery_tasks import (
+from app.tasks.jobs import (
     execute_bot_scraping_task,
     manual_scraping_task,
     batch_scraping_task,

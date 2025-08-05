@@ -1,6 +1,6 @@
 from .hybrid_scheduler import scheduler
 from .message_sender import MessageSender
-from .celery_tasks import (
+from .jobs import (
     execute_bot_scraping_task,
     manual_scraping_task,
     batch_scraping_task,
