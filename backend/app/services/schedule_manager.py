@@ -6,8 +6,11 @@ from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime
 
-from app.tasks.hybrid_scheduler import scheduler
-from app.tasks.message_sender import MessageSender
+from app.tasks.schedulers import scheduler
+from app.tasks.senders import MessageSender
+
+# 创建MessageSender实例
+message_sender = MessageSender()
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +87,7 @@ class ScheduleManager:
     ) -> str:
         """手动触发爬取任务"""
         try:
-            task_id = MessageSender.send_manual_scraping_task(
+            task_id = message_sender.send_manual_scraping_task(
                 bot_config_id, session_type, queue='scraping'
             )
             logger.info(f"已手动触发Bot {bot_config_id} 爬取任务，任务ID: {task_id}")
@@ -100,7 +103,7 @@ class ScheduleManager:
     ) -> str:
         """手动触发批量爬取任务"""
         try:
-            task_id = MessageSender.send_batch_scraping_task(
+            task_id = message_sender.send_batch_scraping_task(
                 bot_config_ids, session_type, queue='scraping'
             )
             logger.info(f"已手动触发批量爬取任务，Bot数量: {len(bot_config_ids)}, 任务ID: {task_id}")
@@ -113,7 +116,7 @@ class ScheduleManager:
     def trigger_cleanup_task(days_old: int = 30) -> str:
         """手动触发清理任务"""
         try:
-            task_id = MessageSender.send_cleanup_task(days_old, queue='cleanup')
+            task_id = message_sender.send_cleanup_task(days_old, queue='cleanup')
             logger.info(f"已手动触发清理任务，清理天数: {days_old}, 任务ID: {task_id}")
             return task_id
         except Exception as e:
@@ -125,22 +128,22 @@ class ScheduleManager:
     @staticmethod
     def get_task_status(task_id: str) -> Dict[str, Any]:
         """获取Celery任务状态"""
-        return MessageSender.get_task_status(task_id)
+        return message_sender.get_task_status(task_id)
     
     @staticmethod
     def cancel_task(task_id: str, terminate: bool = False) -> Dict[str, Any]:
         """取消Celery任务"""
-        return MessageSender.revoke_task(task_id, terminate)
+        return message_sender.revoke_task(task_id, terminate)
     
     @staticmethod
     def get_active_tasks() -> List[Dict[str, Any]]:
         """获取活跃的Celery任务"""
-        return MessageSender.get_active_tasks()
+        return message_sender.get_active_tasks()
     
     @staticmethod
     def get_queue_length(queue_name: str) -> int:
         """获取队列长度"""
-        return MessageSender.get_queue_length(queue_name)
+        return message_sender.get_queue_length(queue_name)
     
     # === 调度状态管理 ===
     
@@ -209,9 +212,9 @@ class ScheduleManager:
             active_tasks = ScheduleManager.get_active_tasks()
             
             # 队列长度统计
-            scraping_queue_length = ScheduleManager.get_queue_length('scraping')
-            cleanup_queue_length = ScheduleManager.get_queue_length('cleanup')
-            default_queue_length = ScheduleManager.get_queue_length('default')
+            scraping_queue_length = message_sender.get_queue_length('scraping')
+            cleanup_queue_length = message_sender.get_queue_length('cleanup')
+            default_queue_length = message_sender.get_queue_length('default')
             
             return {
                 "scheduler": {

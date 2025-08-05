@@ -17,64 +17,42 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from app.core.config import settings
-from app.tasks.message_sender import MessageSender
 from app.db.base import AsyncSessionLocal
+from app.tasks.core import TaskDispatcher, EventRecorder, JobConfigManager
 
 logger = logging.getLogger(__name__)
 
 
-# 独立的任务函数，避免序列化scheduler实例
+# 重构后使用TaskDispatcher的包装函数，避免序列化问题
 async def send_bot_scraping_task(bot_config_id: int):
-    """发送Bot爬取任务到Celery队列（独立函数，避免序列化问题）"""
-    try:
-        from app.celery_app import celery_app
-        result = celery_app.send_task(
-            'execute_bot_scraping_task',
-            args=[bot_config_id],
-            queue='scraping'
-        )
-        task_id = result.id
-        logger.info(f"调度器已发送Bot {bot_config_id} 爬取任务到Celery，任务ID: {task_id}")
-        return task_id
-    except Exception as e:
-        logger.error(f"发送Bot爬取任务到Celery失败: {e}")
-        raise
+    """发送Bot爬取任务（使用TaskDispatcher）"""
+    return TaskDispatcher.dispatch_bot_scraping(bot_config_id)
 
 
 async def send_cleanup_task(days_old: int):
-    """发送清理任务到Celery队列（独立函数，避免序列化问题）"""
-    try:
-        from app.celery_app import celery_app
-        result = celery_app.send_task(
-            'cleanup_old_sessions_task',
-            args=[days_old],
-            queue='cleanup'
-        )
-        task_id = result.id
-        logger.info(f"调度器已发送清理任务到Celery，任务ID: {task_id}")
-        return task_id
-    except Exception as e:
-        logger.error(f"发送清理任务到Celery失败: {e}")
-        raise
+    """发送清理任务（使用TaskDispatcher）"""
+    return TaskDispatcher.dispatch_cleanup(days_old)
 
 
 async def send_custom_task(celery_task_name: str, args: list, kwargs: dict):
-    """发送自定义任务到Celery队列（独立函数，避免序列化问题）"""
-    try:
-        from app.celery_app import celery_app
-        result = celery_app.send_task(celery_task_name, args=args, kwargs=kwargs)
-        task_id = result.id
-        logger.info(f"调度器已发送自定义任务 {celery_task_name} 到Celery，任务ID: {task_id}")
-        return task_id
-    except Exception as e:
-        logger.error(f"发送自定义任务到Celery失败: {e}")
-        raise
+    """发送自定义任务（使用TaskDispatcher）"""
+    return TaskDispatcher.dispatch_to_celery(celery_task_name, args, kwargs)
 
 
 class HybridScheduler:
     """混合调度器 - APScheduler负责调度，Celery负责执行"""
     
-    def __init__(self):
+    def __init__(
+        self,
+        task_dispatcher: Optional[TaskDispatcher] = None,
+        config_manager: Optional[JobConfigManager] = None,
+        event_recorder: Optional[EventRecorder] = None
+    ):
+        # 依赖注入核心组件
+        self.task_dispatcher = task_dispatcher or TaskDispatcher()
+        self.config_manager = config_manager or JobConfigManager()
+        self.event_recorder = event_recorder or EventRecorder()
+        
         # 配置作业存储 - 使用 SQLAlchemyJobStore
         jobstores = {
             'default': SQLAlchemyJobStore(
@@ -103,9 +81,6 @@ class HybridScheduler:
             timezone='UTC'
         )
         
-        # 任务配置缓存
-        self.job_configs = {}
-        
         self._setup_listeners()
         self._running = False
     
@@ -128,12 +103,14 @@ class HybridScheduler:
         """作业执行成功监听器"""
         logger.info(f"调度任务 {event.job_id} 执行成功")
         
-        # 异步记录到数据库
-        asyncio.create_task(self._record_job_event(
-            event.job_id, 
-            'scheduled',
+        # 使用EventRecorder记录事件
+        job_config = self.config_manager.get_config(event.job_id)
+        self.event_recorder.record_schedule_event_sync(
+            event.job_id,
+            'scheduled', 
+            job_config,
             event.retval if hasattr(event, 'retval') else None
-        ))
+        )
     
     def _job_error_listener(self, event):
         """作业执行错误监听器"""
@@ -142,68 +119,29 @@ class HybridScheduler:
             exc_info=event.exception
         )
         
-        # 异步记录到数据库
-        asyncio.create_task(self._record_job_event(
+        # 使用EventRecorder记录事件
+        job_config = self.config_manager.get_config(event.job_id)
+        self.event_recorder.record_schedule_event_sync(
             event.job_id,
             'schedule_error',
+            job_config,
             error=str(event.exception),
             traceback=event.traceback if hasattr(event, 'traceback') else None
-        ))
+        )
     
     def _job_missed_listener(self, event):
         """作业错过执行监听器"""
         logger.warning(f"调度任务 {event.job_id} 错过了执行时间")
         
-        # 异步记录到数据库
-        asyncio.create_task(self._record_job_event(
+        # 使用EventRecorder记录事件
+        job_config = self.config_manager.get_config(event.job_id)
+        self.event_recorder.record_schedule_event_sync(
             event.job_id,
-            'missed'
-        ))
+            'missed',
+            job_config
+        )
     
-    async def _record_job_event(self, job_id: str, event_type: str, result=None, error=None, traceback=None):
-        """记录任务事件到数据库"""
-        try:
-            async with AsyncSessionLocal() as db:
-                from app.models.schedule_event import ScheduleEvent, ScheduleEventType
-                
-                # 获取任务配置信息
-                job_config = self.job_configs.get(job_id, {})
-                job_name = job_config.get('bot_config_name', job_id)
-                
-                # 处理任务名称
-                if job_config.get('type') == 'bot_scraping':
-                    job_name = f"Bot自动爬取: {job_config.get('bot_config_name', 'Unknown')}"
-                elif job_config.get('type') == 'cleanup':
-                    job_name = f"数据清理: {job_config.get('days_old', 30)}天前"
-                else:
-                    job_name = f"调度任务: {job_id}"
-                
-                # 映射事件类型
-                event_type_map = {
-                    'scheduled': ScheduleEventType.SCHEDULED,
-                    'schedule_error': ScheduleEventType.ERROR,
-                    'missed': ScheduleEventType.MISSED
-                }
-                
-                event_type_enum = event_type_map.get(event_type, ScheduleEventType.EXECUTED)
-                
-                # 创建调度事件记录
-                event = ScheduleEvent(
-                    job_id=job_id,
-                    job_name=job_name,
-                    event_type=event_type_enum,  # 使用枚举值
-                    result=result if isinstance(result, dict) else {'result': str(result)} if result else None,
-                    error_message=error,
-                    error_traceback=traceback
-                )
-                
-                db.add(event)
-                await db.commit()
-                
-                logger.info(f"已记录调度事件到数据库: {job_id} - {event_type}")
-                
-        except Exception as e:
-            logger.error(f"记录调度事件失败: {e}")
+    # 移除_record_job_event方法，现在使用EventRecorder处理
     
     # === Bot爬取任务调度方法 ===
     
@@ -218,13 +156,14 @@ class HybridScheduler:
         job_id = f'bot_scraping_{bot_config_id}'
         
         try:
-            # 存储任务配置
-            self.job_configs[job_id] = {
+            # 使用JobConfigManager存储任务配置
+            config = {
                 'type': 'bot_scraping',
                 'bot_config_id': bot_config_id,
                 'bot_config_name': bot_config_name,
                 'interval_hours': interval_hours
             }
+            self.config_manager.register_config(job_id, config)
             
             # 添加到APScheduler，使用独立函数避免序列化问题
             self.scheduler.add_job(
@@ -248,8 +187,7 @@ class HybridScheduler:
         job_id = f'bot_scraping_{bot_config_id}'
         try:
             self.scheduler.remove_job(job_id)
-            if job_id in self.job_configs:
-                del self.job_configs[job_id]
+            self.config_manager.remove_config(job_id)
             logger.info(f"已移除Bot {bot_config_id} 的调度任务")
             return True
         except Exception as e:
@@ -278,12 +216,13 @@ class HybridScheduler:
     ) -> str:
         """添加清理任务调度"""
         try:
-            # 存储任务配置
-            self.job_configs[schedule_id] = {
+            # 使用JobConfigManager存储任务配置
+            config = {
                 'type': 'cleanup',
                 'days_old': days_old,
                 'cron_expression': cron_expression
             }
+            self.config_manager.register_config(schedule_id, config)
             
             # 解析cron表达式
             cron_parts = cron_expression.split()
@@ -329,8 +268,8 @@ class HybridScheduler:
     ) -> str:
         """添加自定义任务调度"""
         try:
-            # 存储任务配置
-            self.job_configs[schedule_id] = {
+            # 使用JobConfigManager存储任务配置
+            config = {
                 'type': 'custom',
                 'celery_task_name': celery_task_name,
                 'trigger_type': trigger_type,
@@ -338,6 +277,7 @@ class HybridScheduler:
                 'kwargs': kwargs or {},
                 'trigger_args': trigger_args
             }
+            self.config_manager.register_config(schedule_id, config)
             
             # 根据触发器类型创建触发器对象
             if trigger_type == 'interval':
@@ -373,8 +313,7 @@ class HybridScheduler:
         """移除调度任务"""
         try:
             self.scheduler.remove_job(schedule_id)
-            if schedule_id in self.job_configs:
-                del self.job_configs[schedule_id]
+            self.config_manager.remove_config(schedule_id)
             logger.info(f"已移除调度任务: {schedule_id}")
             return True
         except Exception as e:
@@ -411,7 +350,7 @@ class HybridScheduler:
     
     def get_schedule_config(self, schedule_id: str) -> Optional[Dict[str, Any]]:
         """获取调度任务配置"""
-        return self.job_configs.get(schedule_id)
+        return self.config_manager.get_config(schedule_id)
     
     # === 调度器生命周期管理 ===
     
@@ -469,8 +408,7 @@ class HybridScheduler:
             logger.info("混合调度器已关闭")
 
 
-# 全局混合调度器实例
-
+# 全局混合调度器实例（使用新的解耦架构）
 scheduler = HybridScheduler()
 
 
