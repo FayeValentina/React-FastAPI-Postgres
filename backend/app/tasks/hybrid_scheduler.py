@@ -17,7 +17,6 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.celery_config import celery_config
 from app.tasks.message_sender import MessageSender
 from app.db.base import AsyncSessionLocal
 
@@ -79,7 +78,7 @@ class HybridScheduler:
         # 配置作业存储 - 使用 SQLAlchemyJobStore
         jobstores = {
             'default': SQLAlchemyJobStore(
-                url=celery_config.sqlalchemy_url,
+                url=settings.postgres.SYNC_DATABASE_URL,  # 使用同步URL
                 tablename='apscheduler_jobs'
             )
         }
@@ -464,5 +463,6 @@ class HybridScheduler:
 # 全局混合调度器实例
 
 scheduler = HybridScheduler()
+
 
 
