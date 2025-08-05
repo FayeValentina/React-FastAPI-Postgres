@@ -13,6 +13,7 @@ from app.services.scraping_orchestrator import ScrapingOrchestrator
 from app.models.scrape_session import SessionType
 from app.crud.bot_config import CRUDBotConfig
 from app.crud.scrape_session import CRUDScrapeSession
+from app.models.task_execution import TaskExecution, ExecutionStatus
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,23 @@ def run_async_task(coro):
 @celery_app.task(bind=True, name='execute_bot_scraping_task')
 def execute_bot_scraping_task(self, bot_config_id: int) -> Dict[str, Any]:
     """执行Bot配置的爬取任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name=f"Bot爬取任务-{bot_config_id}",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
     try:
         logger.info(f"开始执行Bot {bot_config_id} 的爬取任务")
         
@@ -44,10 +62,17 @@ def execute_bot_scraping_task(self, bot_config_id: int) -> Dict[str, Any]:
                 return result or {"status": "failed", "reason": "no result"}
         
         result = run_async_task(_execute())
+        
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+        
         logger.info(f"Bot {bot_config_id} 爬取任务完成，结果: {result}")
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"Bot {bot_config_id} 爬取任务失败: {exc}")
         
         # 重试逻辑
@@ -70,6 +95,24 @@ def manual_scraping_task(
     session_type: str = "manual"
 ) -> Dict[str, Any]:
     """手动触发的爬取任务"""
+
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name=f"Bot手动爬取任务-{bot_config_id}",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
     try:
         logger.info(f"开始执行手动爬取任务，Bot ID: {bot_config_id}")
         
@@ -83,10 +126,17 @@ def manual_scraping_task(
                 return result or {"status": "failed", "reason": "no result"}
         
         result = run_async_task(_execute())
+
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+    
         logger.info(f"手动爬取任务完成，结果: {result}")
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"手动爬取任务失败: {exc}")
         
         # 手动任务通常不重试，但可以根据需要调整
@@ -105,6 +155,24 @@ def batch_scraping_task(
     session_type: str = "manual"
 ) -> Dict[str, Any]:
     """批量爬取任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name=f"批量爬取任务-{len(bot_config_ids)}个Bot",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
+    
     try:
         logger.info(f"开始执行批量爬取任务，Bot IDs: {bot_config_ids}")
         
@@ -145,10 +213,16 @@ def batch_scraping_task(
             "results": results
         }
         
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, summary))
+        
         logger.info(f"批量爬取任务完成，总数: {len(results)}, 成功: {successful}, 失败: {failed}")
         return summary
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"批量爬取任务失败: {exc}")
         return {
             "status": "failed",
@@ -160,6 +234,24 @@ def batch_scraping_task(
 @celery_app.task(bind=True, name='cleanup_old_sessions_task')
 def cleanup_old_sessions_task(self, days_old: int = 30) -> Dict[str, Any]:
     """清理旧的爬取会话任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name=f"清理旧会话任务-{days_old}天前",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
+    
     try:
         logger.info(f"开始执行清理任务，删除{days_old}天前的会话")
         
@@ -193,9 +285,16 @@ def cleanup_old_sessions_task(self, days_old: int = 30) -> Dict[str, Any]:
                     }
         
         result = run_async_task(_execute())
+        
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+        
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"清理任务失败: {exc}")
         
         # 清理任务失败时重试
@@ -209,9 +308,28 @@ def cleanup_old_sessions_task(self, days_old: int = 30) -> Dict[str, Any]:
             "retries": self.request.retries
         }
 
+
 @celery_app.task(bind=True, name='cleanup_expired_tokens_task')
 def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
     """清理过期令牌任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name="清理过期令牌任务",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
+    
     try:
         async def _execute():
             async with AsyncSessionLocal() as db:
@@ -228,10 +346,17 @@ def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
                 }
         
         result = run_async_task(_execute())
+        
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+        
         logger.info(f"清理过期令牌完成: {result}")
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"清理过期令牌失败: {exc}")
         return {"status": "failed", "reason": str(exc)}
 
@@ -239,6 +364,24 @@ def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
 @celery_app.task(bind=True, name='cleanup_old_content_task')
 def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
     """清理旧Reddit内容任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name=f"清理旧内容任务-{days_old}天前",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
+    
     try:
         async def _execute():
             async with AsyncSessionLocal() as db:
@@ -248,20 +391,47 @@ def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
                 )
                 return {
                     "deleted_posts": deleted_posts,
-                    "deleted_comments": deleted_comments
+                    "deleted_comments": deleted_comments,
+                    "total_deleted": deleted_posts + deleted_comments
                 }
         
         result = run_async_task(_execute())
+        
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+        
         logger.info(f"清理旧内容完成: {result}")
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"清理旧内容失败: {exc}")
         return {"status": "failed", "reason": str(exc)}
+
 
 @celery_app.task(bind=True, name='auto_scraping_all_configs_task')
 def auto_scraping_all_configs_task(self) -> Dict[str, Any]:
     """执行所有启用自动爬取的配置任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name="自动爬取所有配置任务",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
+    
     try:
         logger.info("开始执行所有自动爬取配置的任务")
         
@@ -311,51 +481,66 @@ def auto_scraping_all_configs_task(self) -> Dict[str, Any]:
                 }
         
         result = run_async_task(_execute())
+        
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+        
         logger.info(f"自动爬取任务完成，处理了 {result.get('total_configs', 0)} 个配置")
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"自动爬取任务失败: {exc}")
         return {
             "status": "failed",
             "reason": str(exc)
         }
 
+
 @celery_app.task(bind=True, name='cleanup_schedule_events_task')
 def cleanup_schedule_events_task(self, days_old: int = 30) -> Dict[str, Any]:
     """清理旧的调度事件任务"""
+    start_time = datetime.utcnow()
+    task_id = self.request.id
+    
+    async def _record_execution(status, result=None, error=None):
+        async with AsyncSessionLocal() as db:
+            execution = TaskExecution(
+                job_id=task_id,
+                job_name=f"清理调度事件任务-{days_old}天前",
+                status=status,
+                started_at=start_time,
+                completed_at=datetime.utcnow(),
+                duration_seconds=(datetime.utcnow() - start_time).total_seconds(),
+                result=result,
+                error_message=str(error) if error else None
+            )
+            db.add(execution)
+            await db.commit()
+    
     try:
         async def _execute():
             async with AsyncSessionLocal() as db:
                 from app.crud.schedule_event import CRUDScheduleEvent
                 deleted_count = await CRUDScheduleEvent.cleanup_old_events(db, days_old)
-                return {"deleted_events": deleted_count}
+                return {
+                    "deleted_events": deleted_count,
+                    "days_old": days_old
+                }
         
         result = run_async_task(_execute())
+        
+        # 记录成功执行
+        run_async_task(_record_execution(ExecutionStatus.SUCCESS, result))
+        
         logger.info(f"清理调度事件完成: {result}")
         return result
         
     except Exception as exc:
+        # 记录失败执行
+        run_async_task(_record_execution(ExecutionStatus.FAILED, error=exc))
+        
         logger.error(f"清理调度事件失败: {exc}")
         return {"status": "failed", "reason": str(exc)}
-        
-# 任务状态检查辅助函数
-def get_task_info(task_id: str) -> Dict[str, Any]:
-    """获取任务信息"""
-    try:
-        result = celery_app.AsyncResult(task_id)
-        return {
-            "task_id": task_id,
-            "status": result.status,
-            "result": result.result,
-            "traceback": result.traceback,
-            "date_done": result.date_done.isoformat() if result.date_done else None,
-        }
-    except Exception as e:
-        return {
-            "task_id": task_id,
-            "status": "UNKNOWN",
-            "error": str(e)
-
-        }
-
