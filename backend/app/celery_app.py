@@ -1,25 +1,12 @@
-"""
-Celery应用配置
-"""
-import os
 from celery import Celery
 from kombu import Queue, Exchange
-
-# 读取环境变量，避免循环导入
-CELERY_BROKER_URL = os.getenv(
-    'CELERY_BROKER_URL', 
-    'amqp://guest:guest@rabbitmq:5672/'
-)
-CELERY_RESULT_BACKEND = os.getenv(
-    'CELERY_RESULT_BACKEND',
-    'db+postgresql://postgres:thy8232143@postgres:5432/postgres'
-)
+from app.core.celery_config import celery_config
 
 # 创建Celery应用实例
 celery_app = Celery(
-    "reddit_scraper",
-    broker=CELERY_BROKER_URL,
-    backend=CELERY_RESULT_BACKEND,
+    "backend_worker",
+    broker=celery_config.broker_url,
+    backend=celery_config.result_backend,
     include=[
         'app.tasks.celery_tasks',
     ]
