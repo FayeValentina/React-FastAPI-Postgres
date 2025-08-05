@@ -1,12 +1,17 @@
 from celery import Celery
 from kombu import Queue, Exchange
-from app.core.celery_config import celery_config
+
+# 使用轻量级配置函数避免循环导入
+from app.core.config import get_celery_config
+
+# 获取 Celery 配置
+celery_config = get_celery_config()
 
 # 创建Celery应用实例
 celery_app = Celery(
     "backend_worker",
-    broker=celery_config.broker_url,
-    backend=celery_config.result_backend,
+    broker=celery_config['broker_url'],
+    backend=celery_config['result_backend'],
     include=[
         'app.tasks.celery_tasks',
     ]
@@ -15,13 +20,13 @@ celery_app = Celery(
 # Celery配置
 celery_app.conf.update(
     # 任务序列化
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
+    task_serializer=celery_config['task_serializer'],
+    accept_content=celery_config['accept_content'],
+    result_serializer=celery_config['result_serializer'],
     
     # 时区设置
-    timezone='UTC',
-    enable_utc=True,
+    timezone=celery_config['timezone'],
+    enable_utc=celery_config['enable_utc'],
     
     # 任务路由和队列
     task_routes={
@@ -38,28 +43,28 @@ celery_app.conf.update(
     ),
     
     # 任务重试设置
-    task_acks_late=True,
-    task_reject_on_worker_lost=True,
+    task_acks_late=celery_config['task_acks_late'],
+    task_reject_on_worker_lost=celery_config['task_reject_on_worker_lost'],
     
     # 结果存储设置
-    result_expires=3600 * 24,  # 结果保留24小时
-    result_persistent=True,
+    result_expires=celery_config['result_expires'],
+    result_persistent=celery_config['result_persistent'],
     
     # Worker设置
-    worker_prefetch_multiplier=1,
-    worker_max_tasks_per_child=1000,
+    worker_prefetch_multiplier=celery_config['worker_prefetch_multiplier'],
+    worker_max_tasks_per_child=celery_config['worker_max_tasks_per_child'],
     
     # 监控设置
-    worker_send_task_events=True,
-    task_send_sent_event=True,
+    worker_send_task_events=celery_config['worker_send_task_events'],
+    task_send_sent_event=celery_config['task_send_sent_event'],
     
     # 任务超时设置
-    task_time_limit=30 * 60,  # 硬超时30分钟
-    task_soft_time_limit=25 * 60,  # 软超时25分钟
+    task_time_limit=celery_config['task_time_limit'],
+    task_soft_time_limit=celery_config['task_soft_time_limit'],
     
     # 任务重试设置
-    task_default_retry_delay=60,  # 默认重试延迟60秒
-    task_max_retries=3,  # 默认最大重试3次
+    task_default_retry_delay=celery_config['task_default_retry_delay'],
+    task_max_retries=celery_config['task_max_retries'],
 )
 
 # 任务自动发现
