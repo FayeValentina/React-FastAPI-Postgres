@@ -209,6 +209,55 @@ def cleanup_old_sessions_task(self, days_old: int = 30) -> Dict[str, Any]:
             "retries": self.request.retries
         }
 
+@celery_app.task(bind=True, name='cleanup_expired_tokens_task')
+def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
+    """清理过期令牌任务"""
+    try:
+        async def _execute():
+            async with AsyncSessionLocal() as db:
+                from app.crud.token import refresh_token
+                from app.crud.password_reset import password_reset
+                
+                expired_refresh = await refresh_token.cleanup_expired(db)
+                expired_reset = await password_reset.cleanup_expired(db)
+                
+                return {
+                    "expired_refresh_tokens": expired_refresh,
+                    "expired_reset_tokens": expired_reset,
+                    "total_cleaned": expired_refresh + expired_reset
+                }
+        
+        result = run_async_task(_execute())
+        logger.info(f"清理过期令牌完成: {result}")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"清理过期令牌失败: {exc}")
+        return {"status": "failed", "reason": str(exc)}
+
+
+@celery_app.task(bind=True, name='cleanup_old_content_task')
+def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
+    """清理旧Reddit内容任务"""
+    try:
+        async def _execute():
+            async with AsyncSessionLocal() as db:
+                from app.crud.reddit_content import CRUDRedditContent
+                deleted_posts, deleted_comments = await CRUDRedditContent.delete_old_content(
+                    db, days_to_keep=days_old
+                )
+                return {
+                    "deleted_posts": deleted_posts,
+                    "deleted_comments": deleted_comments
+                }
+        
+        result = run_async_task(_execute())
+        logger.info(f"清理旧内容完成: {result}")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"清理旧内容失败: {exc}")
+        return {"status": "failed", "reason": str(exc)}
 
 @celery_app.task(bind=True, name='auto_scraping_all_configs_task')
 def auto_scraping_all_configs_task(self) -> Dict[str, Any]:
@@ -290,4 +339,5 @@ def get_task_info(task_id: str) -> Dict[str, Any]:
             "task_id": task_id,
             "status": "UNKNOWN",
             "error": str(e)
+
         }
