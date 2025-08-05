@@ -1,5 +1,5 @@
 from typing import Any, List, Optional, Union
-from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator
+from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -245,13 +245,35 @@ class CelerySettings(BaseSettings):
     TASK_DEFAULT_RETRY_DELAY: int = 60
     TASK_MAX_RETRIES: int = 3
     
-    def get_broker_url(self, rabbitmq_settings: RabbitMQSettings) -> str:
-        """获取 Broker URL"""
-        return self.BROKER_URL or rabbitmq_settings.URL
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._rabbitmq_settings = None
+        self._postgres_settings = None
     
-    def get_result_backend(self, postgres_settings: PostgresSettings) -> str:
+    def _set_dependencies(self, rabbitmq_settings: 'RabbitMQSettings', postgres_settings: 'PostgresSettings'):
+        """设置依赖的配置对象"""
+        self._rabbitmq_settings = rabbitmq_settings
+        self._postgres_settings = postgres_settings
+    
+    @computed_field
+    @property
+    def broker_url(self) -> str:
+        """获取 Broker URL"""
+        if self.BROKER_URL:
+            return self.BROKER_URL
+        
+        else:
+            return self._rabbitmq_settings.URL
+    
+    @computed_field
+    @property  
+    def result_backend_url(self) -> str:
         """获取 Result Backend URL"""
-        return self.RESULT_BACKEND or f"db+{postgres_settings.CELERY_RESULT_BACKEND_URL}"
+        if self.RESULT_BACKEND:
+            return self.RESULT_BACKEND
+            
+        else:
+            return f"db+{self._postgres_settings.CELERY_RESULT_BACKEND_URL}"
 
     model_config = SettingsConfigDict(
         env_prefix="CELERY_",
@@ -294,31 +316,12 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="allow"
     )
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # 在初始化完成后设置Celery的依赖关系
+        self.celery._set_dependencies(self.rabbitmq, self.postgres)
 
 settings = Settings() 
 
-# 导出 Celery 专用的轻量级配置函数
-def get_celery_config() -> dict:
-    """获取 Celery 配置字典，避免循环导入"""
-    return {
-        'broker_url': settings.celery.get_broker_url(settings.rabbitmq),
-        'result_backend': settings.celery.get_result_backend(settings.postgres),
-        'task_serializer': settings.celery.TASK_SERIALIZER,
-        'accept_content': settings.celery.ACCEPT_CONTENT,
-        'result_serializer': settings.celery.RESULT_SERIALIZER,
-        'timezone': settings.celery.TIMEZONE,
-        'enable_utc': settings.celery.ENABLE_UTC,
-        'task_acks_late': settings.celery.TASK_ACKS_LATE,
-        'task_reject_on_worker_lost': settings.celery.TASK_REJECT_ON_WORKER_LOST,
-        'result_expires': settings.celery.RESULT_EXPIRES,
-        'result_persistent': settings.celery.RESULT_PERSISTENT,
-        'worker_prefetch_multiplier': settings.celery.WORKER_PREFETCH_MULTIPLIER,
-        'worker_max_tasks_per_child': settings.celery.WORKER_MAX_TASKS_PER_CHILD,
-        'worker_send_task_events': settings.celery.WORKER_SEND_TASK_EVENTS,
-        'task_send_sent_event': settings.celery.TASK_SEND_SENT_EVENT,
-        'task_time_limit': settings.celery.TASK_TIME_LIMIT,
-        'task_soft_time_limit': settings.celery.TASK_SOFT_TIME_LIMIT,
-        'task_default_retry_delay': settings.celery.TASK_DEFAULT_RETRY_DELAY,
-        'task_max_retries': settings.celery.TASK_MAX_RETRIES,
-    }
 

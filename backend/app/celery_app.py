@@ -1,17 +1,16 @@
 from celery import Celery
 from kombu import Queue, Exchange
 
-# 使用轻量级配置函数避免循环导入
-from app.core.config import get_celery_config
-
-# 获取 Celery 配置
-celery_config = get_celery_config()
+# 直接导入settings，可能导致循环导入
+# 如果其他模块既导入celery_app又导入config.settings，可能出现循环导入错误
+# 常见错误: ImportError: cannot import name 'settings' from partially initialized module
+from app.core.config import settings
 
 # 创建Celery应用实例
 celery_app = Celery(
     "backend_worker",
-    broker=celery_config['broker_url'],
-    backend=celery_config['result_backend'],
+    broker=settings.celery.broker_url,
+    backend=settings.celery.result_backend_url,
     include=[
         'app.tasks.celery_tasks',
     ]
@@ -20,13 +19,13 @@ celery_app = Celery(
 # Celery配置
 celery_app.conf.update(
     # 任务序列化
-    task_serializer=celery_config['task_serializer'],
-    accept_content=celery_config['accept_content'],
-    result_serializer=celery_config['result_serializer'],
+    task_serializer=settings.celery.TASK_SERIALIZER,
+    accept_content=settings.celery.ACCEPT_CONTENT,
+    result_serializer=settings.celery.RESULT_SERIALIZER,
     
     # 时区设置
-    timezone=celery_config['timezone'],
-    enable_utc=celery_config['enable_utc'],
+    timezone=settings.celery.TIMEZONE,
+    enable_utc=settings.celery.ENABLE_UTC,
     
     # 任务路由和队列
     task_routes={
@@ -43,28 +42,28 @@ celery_app.conf.update(
     ),
     
     # 任务重试设置
-    task_acks_late=celery_config['task_acks_late'],
-    task_reject_on_worker_lost=celery_config['task_reject_on_worker_lost'],
+    task_acks_late=settings.celery.TASK_ACKS_LATE,
+    task_reject_on_worker_lost=settings.celery.TASK_REJECT_ON_WORKER_LOST,
     
     # 结果存储设置
-    result_expires=celery_config['result_expires'],
-    result_persistent=celery_config['result_persistent'],
+    result_expires=settings.celery.RESULT_EXPIRES,
+    result_persistent=settings.celery.RESULT_PERSISTENT,
     
     # Worker设置
-    worker_prefetch_multiplier=celery_config['worker_prefetch_multiplier'],
-    worker_max_tasks_per_child=celery_config['worker_max_tasks_per_child'],
+    worker_prefetch_multiplier=settings.celery.WORKER_PREFETCH_MULTIPLIER,
+    worker_max_tasks_per_child=settings.celery.WORKER_MAX_TASKS_PER_CHILD,
     
     # 监控设置
-    worker_send_task_events=celery_config['worker_send_task_events'],
-    task_send_sent_event=celery_config['task_send_sent_event'],
+    worker_send_task_events=settings.celery.WORKER_SEND_TASK_EVENTS,
+    task_send_sent_event=settings.celery.TASK_SEND_SENT_EVENT,
     
     # 任务超时设置
-    task_time_limit=celery_config['task_time_limit'],
-    task_soft_time_limit=celery_config['task_soft_time_limit'],
+    task_time_limit=settings.celery.TASK_TIME_LIMIT,
+    task_soft_time_limit=settings.celery.TASK_SOFT_TIME_LIMIT,
     
     # 任务重试设置
-    task_default_retry_delay=celery_config['task_default_retry_delay'],
-    task_max_retries=celery_config['task_max_retries'],
+    task_default_retry_delay=settings.celery.TASK_DEFAULT_RETRY_DELAY,
+    task_max_retries=settings.celery.TASK_MAX_RETRIES,
 )
 
 # 任务自动发现
