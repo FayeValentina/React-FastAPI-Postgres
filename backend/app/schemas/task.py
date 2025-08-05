@@ -17,6 +17,46 @@ class TaskStatus(str, Enum):
     MISFIRED = "misfired"     # 错过执行时间
 
 
+class JobExecutionSummary(BaseModel):
+    """任务执行摘要"""
+    total_runs: int = Field(..., description="总执行次数")
+    successful_runs: int = Field(..., description="成功执行次数")
+    failed_runs: int = Field(..., description="失败执行次数")
+    success_rate: float = Field(..., description="成功率（百分比）")
+    avg_duration: float = Field(..., description="平均执行时间（秒）")
+    last_run: Optional[str] = Field(None, description="最后执行时间")
+    last_status: Optional[str] = Field(None, description="最后执行状态")
+    last_error: Optional[str] = Field(None, description="最后错误信息")
+
+
+class ScheduleEventInfo(BaseModel):
+    """调度事件信息"""
+    event_type: str = Field(..., description="事件类型")
+    created_at: str = Field(..., description="创建时间")
+    error_message: Optional[str] = Field(None, description="错误信息")
+    result: Optional[Dict[str, Any]] = Field(None, description="执行结果")
+
+
+class EnhancedJobInfo(BaseModel):
+    """增强的任务信息"""
+    schedule_id: str = Field(..., description="调度任务ID")
+    name: str = Field(..., description="任务名称")
+    next_run_time: Optional[str] = Field(None, description="下次运行时间")
+    trigger: str = Field(..., description="触发器配置")
+    config: Optional[Dict[str, Any]] = Field(None, description="任务配置")
+    pending: bool = Field(..., description="是否等待中")
+    computed_status: TaskStatus = Field(..., description="计算的任务状态")
+    execution_summary: JobExecutionSummary = Field(..., description="执行摘要")
+
+
+class JobDetailResponse(BaseModel):
+    """任务详情响应"""
+    job_info: Dict[str, Any] = Field(..., description="基本任务信息")
+    computed_status: TaskStatus = Field(..., description="计算的任务状态")
+    execution_summary: JobExecutionSummary = Field(..., description="执行摘要")
+    recent_events: List[ScheduleEventInfo] = Field(..., description="最近事件")
+
+
 class JobInfo(BaseModel):
     """任务信息"""
     id: str
@@ -24,7 +64,7 @@ class JobInfo(BaseModel):
     trigger: str
     next_run_time: Optional[datetime] = None
     pending: bool = False
-    status: TaskStatus = TaskStatus.IDLE  # 新增：计算出的综合状态
+    status: TaskStatus = TaskStatus.IDLE  # 计算出的综合状态
     
     # 详细信息（可选）
     func: Optional[str] = None
@@ -78,3 +118,11 @@ class JobScheduleUpdate(BaseModel):
     """更新任务调度"""
     trigger: Optional[str] = None
     trigger_args: Optional[Dict[str, Any]] = None
+
+
+class SystemStatusResponse(BaseModel):
+    """系统状态响应"""
+    scheduler: Dict[str, Any] = Field(..., description="调度器状态")
+    celery: Dict[str, Any] = Field(..., description="Celery状态")
+    queues: Dict[str, Any] = Field(..., description="队列状态")
+    timestamp: str = Field(..., description="状态时间戳")
