@@ -4,6 +4,8 @@ from app.services.schedule_manager import ScheduleManager
 from app.models.user import User
 from app.dependencies.current_user import get_current_superuser
 from app.utils.common import handle_error
+from app.crud.schedule_event import CRUDScheduleEvent
+from app.schemas.schedule_event import ScheduleEventResponse
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -102,6 +104,31 @@ async def cancel_task(
     except Exception as e:
         raise handle_error(e)
 
+@router.get("/schedule-events/{job_id}", response_model=List[ScheduleEventResponse])
+async def get_schedule_events(
+    job_id: str,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    limit: int = Query(50, ge=1, le=200)
+) -> List[ScheduleEventResponse]:
+    """获取指定任务的调度事件历史"""
+    try:
+        events = await CRUDScheduleEvent.get_events_by_job(db, job_id, limit)
+        return events
+    except Exception as e:
+        raise handle_error(e)
 
 
-
+@router.get("/schedule-events", response_model=List[ScheduleEventResponse])
+async def get_recent_schedule_events(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    hours: int = Query(24, ge=1, le=168),
+    limit: int = Query(100, ge=1, le=500)
+) -> List[ScheduleEventResponse]:
+    """获取最近的调度事件"""
+    try:
+        events = await CRUDScheduleEvent.get_recent_events(db, hours, limit)
+        return events
+    except Exception as e:
+        raise handle_error(e)
