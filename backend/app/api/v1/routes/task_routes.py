@@ -9,6 +9,7 @@ from app.crud.schedule_event import CRUDScheduleEvent
 from app.crud.task_execution import CRUDTaskExecution
 from app.schemas.schedule_event import ScheduleEventResponse
 from app.db.base import get_async_session
+from app.utils.task_status import get_task_status_calculator
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -37,6 +38,48 @@ async def list_schedules(
         raise handle_error(e)
 
 
+@router.get("/schedules/enhanced", response_model=List[Dict[str, Any]])
+async def list_schedules_enhanced(
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(get_current_superuser)]
+) -> List[Dict[str, Any]]:
+    """获取增强的调度任务列表，包含状态和执行摘要（需要超级管理员权限）"""
+    try:
+        schedules = ScheduleManager.get_all_schedules()
+        
+        # 为每个调度任务计算状态和执行摘要
+        calculator = get_task_status_calculator()
+        enhanced_schedules = []
+        
+        for schedule in schedules:
+            # 计算任务状态
+            task_status = await calculator.calculate_job_status(
+                db=db,
+                job_id=schedule["schedule_id"],
+                pending=schedule["pending"],
+                next_run_time=schedule["next_run_time"],
+                scheduler_running=True  # 从系统状态获取
+            )
+            
+            # 获取执行摘要
+            execution_summary = await calculator.get_job_execution_summary(
+                db=db,
+                job_id=schedule["schedule_id"],
+                hours=24
+            )
+            
+            enhanced_schedule = {
+                **schedule,
+                "computed_status": task_status.value,
+                "execution_summary": execution_summary
+            }
+            enhanced_schedules.append(enhanced_schedule)
+        
+        return enhanced_schedules
+    except Exception as e:
+        raise handle_error(e)
+
+
 @router.get("/active-tasks", response_model=List[Dict[str, Any]])  
 async def get_active_tasks(
     current_user: Annotated[User, Depends(get_current_superuser)]
@@ -49,17 +92,42 @@ async def get_active_tasks(
         raise handle_error(e)
 
 
-@router.get("/schedule/{schedule_id}")
+@router.get("/schedule/{schedule_id}", response_model=Dict[str, Any])
 async def get_schedule_info(
     schedule_id: str,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_superuser)]
 ) -> Dict[str, Any]:
-    """获取指定调度任务信息（需要超级管理员权限）"""
+    """获取指定调度任务详细信息（需要超级管理员权限）"""
     try:
         info = ScheduleManager.get_schedule_info(schedule_id)
         if not info:
             raise HTTPException(status_code=404, detail="调度任务不存在")
-        return info
+        
+        # 增强信息
+        calculator = get_task_status_calculator()
+        
+        # 计算任务状态
+        task_status = await calculator.calculate_job_status(
+            db=db,
+            job_id=schedule_id,
+            pending=info["pending"],
+            next_run_time=info["next_run_time"],
+            scheduler_running=True
+        )
+        
+        # 获取执行摘要和最近事件
+        execution_summary = await calculator.get_job_execution_summary(db, schedule_id, hours=72)
+        recent_events = await calculator.get_job_recent_events(db, schedule_id, limit=10)
+        
+        enhanced_info = {
+            **info,
+            "computed_status": task_status.value,
+            "execution_summary": execution_summary,
+            "recent_events": recent_events
+        }
+        
+        return enhanced_info
     except Exception as e:
         raise handle_error(e)
 
@@ -80,6 +148,7 @@ async def trigger_cleanup_task(
         }
     except Exception as e:
         raise handle_error(e)
+
 
 @router.get("/task/{task_id}")
 async def get_task_status(
@@ -106,6 +175,7 @@ async def cancel_task(
         return result
     except Exception as e:
         raise handle_error(e)
+
 
 @router.get("/schedule-events/{job_id}", response_model=List[ScheduleEventResponse])
 async def get_schedule_events(
@@ -136,6 +206,7 @@ async def get_recent_schedule_events(
     except Exception as e:
         raise handle_error(e)
 
+
 @router.get("/executions", response_model=List[Dict[str, Any]])
 async def get_task_executions(
     current_user: Annotated[User, Depends(get_current_superuser)],
@@ -161,6 +232,7 @@ async def get_task_executions(
     except Exception as e:
         raise handle_error(e)
 
+
 @router.get("/execution-stats", response_model=Dict[str, Any])
 async def get_execution_stats(
     current_user: Annotated[User, Depends(get_current_superuser)],
@@ -174,3 +246,41 @@ async def get_execution_stats(
     except Exception as e:
         raise handle_error(e)
 
+
+@router.get("/job/{job_id}/summary", response_model=Dict[str, Any])
+async def get_job_summary(
+    job_id: str,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    hours: int = Query(24, ge=1, le=168, description="统计时间范围（小时）")
+) -> Dict[str, Any]:
+    """获取指定任务的详细摘要信息"""
+    try:
+        calculator = get_task_status_calculator()
+        
+        # 获取基本调度信息
+        schedule_info = ScheduleManager.get_schedule_info(job_id)
+        if not schedule_info:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        
+        # 计算状态
+        task_status = await calculator.calculate_job_status(
+            db=db,
+            job_id=job_id,
+            pending=schedule_info["pending"],
+            next_run_time=schedule_info["next_run_time"],
+            scheduler_running=True
+        )
+        
+        # 获取执行摘要和最近事件
+        execution_summary = await calculator.get_job_execution_summary(db, job_id, hours)
+        recent_events = await calculator.get_job_recent_events(db, job_id, limit=20)
+        
+        return {
+            "job_info": schedule_info,
+            "computed_status": task_status.value,
+            "execution_summary": execution_summary,
+            "recent_events": recent_events
+        }
+    except Exception as e:
+        raise handle_error(e)
