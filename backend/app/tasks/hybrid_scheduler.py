@@ -163,39 +163,39 @@ class HybridScheduler:
     
     async def _record_job_event(self, job_id: str, event_type: str, result=None, error=None, traceback=None):
         """记录任务事件到数据库"""
-    try:
-        async with AsyncSessionLocal() as db:
-            from app.models.schedule_event import ScheduleEvent, ScheduleEventType
-            
-            # 获取任务配置信息
-            job_config = self.job_configs.get(job_id, {})
-            job_name = job_config.get('bot_config_name', job_id)
-            
-            # 处理任务名称
-            if job_config.get('type') == 'bot_scraping':
-                job_name = f"Bot自动爬取: {job_config.get('bot_config_name', 'Unknown')}"
-            elif job_config.get('type') == 'cleanup':
-                job_name = f"数据清理: {job_config.get('days_old', 30)}天前"
-            else:
-                job_name = f"调度任务: {job_id}"
-            
-            # 创建调度事件记录
-            event = ScheduleEvent(
-                job_id=job_id,
-                job_name=job_name,
-                event_type=ScheduleEventType(event_type),
-                result=result if isinstance(result, dict) else {'result': str(result)} if result else None,
-                error_message=error,
-                error_traceback=traceback
-            )
-            
-            db.add(event)
-            await db.commit()
-            
-            logger.info(f"已记录调度事件到数据库: {job_id} - {event_type}")
-            
-    except Exception as e:
-        logger.error(f"记录调度事件失败: {e}")
+        try:
+            async with AsyncSessionLocal() as db:
+                from app.models.schedule_event import ScheduleEvent, ScheduleEventType
+                
+                # 获取任务配置信息
+                job_config = self.job_configs.get(job_id, {})
+                job_name = job_config.get('bot_config_name', job_id)
+                
+                # 处理任务名称
+                if job_config.get('type') == 'bot_scraping':
+                    job_name = f"Bot自动爬取: {job_config.get('bot_config_name', 'Unknown')}"
+                elif job_config.get('type') == 'cleanup':
+                    job_name = f"数据清理: {job_config.get('days_old', 30)}天前"
+                else:
+                    job_name = f"调度任务: {job_id}"
+                
+                # 创建调度事件记录
+                event = ScheduleEvent(
+                    job_id=job_id,
+                    job_name=job_name,
+                    event_type=ScheduleEventType(event_type),
+                    result=result if isinstance(result, dict) else {'result': str(result)} if result else None,
+                    error_message=error,
+                    error_traceback=traceback
+                )
+                
+                db.add(event)
+                await db.commit()
+                
+                logger.info(f"已记录调度事件到数据库: {job_id} - {event_type}")
+                
+        except Exception as e:
+            logger.error(f"记录调度事件失败: {e}")
     
     # === Bot爬取任务调度方法 ===
     
@@ -464,4 +464,5 @@ class HybridScheduler:
 # 全局混合调度器实例
 
 scheduler = HybridScheduler()
+
 
