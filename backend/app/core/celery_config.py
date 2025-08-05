@@ -18,6 +18,10 @@ class CeleryConfig(BaseModel):
     rabbitmq_user: str = "guest"
     rabbitmq_password: str = "guest"
     rabbitmq_vhost: str = "/"
+
+    # 直接的 Celery 配置（可选）
+    celery_broker_url: Optional[str] = None
+    celery_result_backend: Optional[str] = None
     
     def __init__(self, **kwargs):
         # 从环境变量读取配置
@@ -32,6 +36,8 @@ class CeleryConfig(BaseModel):
             'rabbitmq_user': os.getenv('RABBITMQ_USER', 'guest'),
             'rabbitmq_password': os.getenv('RABBITMQ_PASSWORD', 'guest'),
             'rabbitmq_vhost': os.getenv('RABBITMQ_VHOST', '/'),
+            'celery_broker_url': os.getenv('CELERY_BROKER_URL'),
+            'celery_result_backend': os.getenv('CELERY_RESULT_BACKEND'),
         }
         data.update(kwargs)
         super().__init__(**data)
@@ -39,14 +45,20 @@ class CeleryConfig(BaseModel):
     @property
     def broker_url(self) -> str:
         """构建 Celery Broker URL"""
-        
+        # 如果有直接配置的 CELERY_BROKER_URL，优先使用
+        if self.celery_broker_url:
+            return self.celery_broker_url
+            
         return (f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}"
                 f"@{self.rabbitmq_host}:{self.rabbitmq_port}/{self.rabbitmq_vhost}")
     
     @property
     def result_backend(self) -> str:
         """构建 Celery Result Backend URL"""
-        
+        # 如果有直接配置的 CELERY_RESULT_BACKEND，优先使用
+        if self.celery_result_backend:
+            return self.celery_result_backend
+            
         return (f"db+postgresql://{self.postgres_user}:{self.postgres_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}")
 
