@@ -294,7 +294,7 @@ async def get_system_analysis(
     """获取系统分析报告，包括调度分布和优化建议（需要超级管理员权限）"""
     try:
         analysis = await schedule_manager.optimize_schedule_distribution()
-        config_stats = schedule_manager.config_manager.get_stats()
+        config_stats = schedule_manager.config_manager_instance.get_stats()
         queue_status = {
             "scraping": {
                 "length": schedule_manager.message_sender_instance.get_queue_length('scraping')

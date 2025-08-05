@@ -417,3 +417,8 @@ class ScheduleManager:
     def event_recorder_instance(self) -> EventRecorder:
         """直接访问事件记录器实例"""
         return self.event_recorder
+    
+    @property
+    def config_manager_instance(self) -> JobConfigManager:
+        """直接访问配置管理器实例"""
+        return self.config_manager
