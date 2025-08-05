@@ -5,6 +5,7 @@ from app.models.user import User
 from app.dependencies.current_user import get_current_superuser
 from app.utils.common import handle_error
 from app.crud.schedule_event import CRUDScheduleEvent
+from app.crud.task_execution import CRUDTaskExecution
 from app.schemas.schedule_event import ScheduleEventResponse
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -130,5 +131,43 @@ async def get_recent_schedule_events(
     try:
         events = await CRUDScheduleEvent.get_recent_events(db, hours, limit)
         return events
+    except Exception as e:
+        raise handle_error(e)
+
+@router.get("/executions", response_model=List[Dict[str, Any]])
+async def get_task_executions(
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    hours: int = Query(24, ge=1, le=168)
+) -> List[Dict[str, Any]]:
+    """获取任务执行历史"""
+    try:
+        executions = await CRUDTaskExecution.get_recent_executions(db, hours)
+        return [
+            {
+                "job_id": exe.job_id,
+                "job_name": exe.job_name,
+                "status": exe.status,
+                "started_at": exe.started_at,
+                "completed_at": exe.completed_at,
+                "duration_seconds": exe.duration_seconds,
+                "result": exe.result,
+                "error_message": exe.error_message
+            }
+            for exe in executions
+        ]
+    except Exception as e:
+        raise handle_error(e)
+
+@router.get("/execution-stats", response_model=Dict[str, Any])
+async def get_execution_stats(
+    current_user: Annotated[User, Depends(get_current_superuser)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    days: int = Query(7, ge=1, le=30)
+) -> Dict[str, Any]:
+    """获取任务执行统计"""
+    try:
+        stats = await CRUDTaskExecution.get_execution_stats(db, days)
+        return stats
     except Exception as e:
         raise handle_error(e)
