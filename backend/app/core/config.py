@@ -20,7 +20,7 @@ class PostgresSettings(BaseSettings):
         
         fields = info.data
         if not all(fields.get(key) for key in ["USER", "PASSWORD", "HOST", "DB"]):
-            raise ValueError("Database configuration is incomplete. Please check your environment variables.")
+            raise ValueError("Database configuration is incomplete.")
             
         return PostgresDsn.build(
             scheme="postgresql+asyncpg",
@@ -37,10 +37,20 @@ class PostgresSettings(BaseSettings):
         if not self.DATABASE_URL:
             raise ValueError("Database URI is not set")
         return str(self.DATABASE_URL)
+    
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
+        """获取同步数据库 URI（用于 Alembic）"""
+        return self.SQLALCHEMY_DATABASE_URL.replace("+asyncpg", "+psycopg2")
+    
+    @property
+    def CELERY_RESULT_BACKEND_URL(self) -> str:
+        """获取 Celery Result Backend URI (不包含驱动程序)"""
+        return f"postgresql://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB}"
 
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_",
-        env_file=[ ".env"],  # .env.local 优先级更高
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -186,11 +196,66 @@ class RabbitMQSettings(BaseSettings):
     
     @property
     def URL(self) -> str:
+        """获取 RabbitMQ 连接 URL"""
         return f"amqp://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.VHOST}"
     
     model_config = SettingsConfigDict(
         env_prefix="RABBITMQ_",
-        env_file=[ ".env"],
+        env_file=[".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class CelerySettings(BaseSettings):
+    """Celery 配置"""
+    BROKER_URL: Optional[str] = None
+    RESULT_BACKEND: Optional[str] = None
+    
+    # 任务配置
+    TASK_SERIALIZER: str = "json"
+    ACCEPT_CONTENT: List[str] = ["json"]
+    RESULT_SERIALIZER: str = "json"
+    
+    # 时区设置
+    TIMEZONE: str = "UTC"
+    ENABLE_UTC: bool = True
+    
+    # 任务重试设置
+    TASK_ACKS_LATE: bool = True
+    TASK_REJECT_ON_WORKER_LOST: bool = True
+    
+    # 结果存储设置
+    RESULT_EXPIRES: int = 3600 * 24  # 24小时
+    RESULT_PERSISTENT: bool = True
+    
+    # Worker设置
+    WORKER_PREFETCH_MULTIPLIER: int = 1
+    WORKER_MAX_TASKS_PER_CHILD: int = 1000
+    
+    # 监控设置
+    WORKER_SEND_TASK_EVENTS: bool = True
+    TASK_SEND_SENT_EVENT: bool = True
+    
+    # 任务超时设置
+    TASK_TIME_LIMIT: int = 30 * 60  # 30分钟
+    TASK_SOFT_TIME_LIMIT: int = 25 * 60  # 25分钟
+    
+    # 任务重试设置
+    TASK_DEFAULT_RETRY_DELAY: int = 60
+    TASK_MAX_RETRIES: int = 3
+    
+    def get_broker_url(self, rabbitmq_settings: RabbitMQSettings) -> str:
+        """获取 Broker URL"""
+        return self.BROKER_URL or rabbitmq_settings.URL
+    
+    def get_result_backend(self, postgres_settings: PostgresSettings) -> str:
+        """获取 Result Backend URL"""
+        return self.RESULT_BACKEND or f"db+{postgres_settings.CELERY_RESULT_BACKEND_URL}"
+
+    model_config = SettingsConfigDict(
+        env_prefix="CELERY_",
+        env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -218,6 +283,7 @@ class Settings(BaseSettings):
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
+    celery: CelerySettings = CelerySettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True
@@ -229,6 +295,30 @@ class Settings(BaseSettings):
         extra="allow"
     )
 
-
-
 settings = Settings() 
+
+# 导出 Celery 专用的轻量级配置函数
+def get_celery_config() -> dict:
+    """获取 Celery 配置字典，避免循环导入"""
+    return {
+        'broker_url': settings.celery.get_broker_url(settings.rabbitmq),
+        'result_backend': settings.celery.get_result_backend(settings.postgres),
+        'task_serializer': settings.celery.TASK_SERIALIZER,
+        'accept_content': settings.celery.ACCEPT_CONTENT,
+        'result_serializer': settings.celery.RESULT_SERIALIZER,
+        'timezone': settings.celery.TIMEZONE,
+        'enable_utc': settings.celery.ENABLE_UTC,
+        'task_acks_late': settings.celery.TASK_ACKS_LATE,
+        'task_reject_on_worker_lost': settings.celery.TASK_REJECT_ON_WORKER_LOST,
+        'result_expires': settings.celery.RESULT_EXPIRES,
+        'result_persistent': settings.celery.RESULT_PERSISTENT,
+        'worker_prefetch_multiplier': settings.celery.WORKER_PREFETCH_MULTIPLIER,
+        'worker_max_tasks_per_child': settings.celery.WORKER_MAX_TASKS_PER_CHILD,
+        'worker_send_task_events': settings.celery.WORKER_SEND_TASK_EVENTS,
+        'task_send_sent_event': settings.celery.TASK_SEND_SENT_EVENT,
+        'task_time_limit': settings.celery.TASK_TIME_LIMIT,
+        'task_soft_time_limit': settings.celery.TASK_SOFT_TIME_LIMIT,
+        'task_default_retry_delay': settings.celery.TASK_DEFAULT_RETRY_DELAY,
+        'task_max_retries': settings.celery.TASK_MAX_RETRIES,
+    }
+
