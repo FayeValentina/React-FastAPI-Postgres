@@ -321,7 +321,24 @@ def auto_scraping_all_configs_task(self) -> Dict[str, Any]:
             "reason": str(exc)
         }
 
-
+@celery_app.task(bind=True, name='cleanup_schedule_events_task')
+def cleanup_schedule_events_task(self, days_old: int = 30) -> Dict[str, Any]:
+    """清理旧的调度事件任务"""
+    try:
+        async def _execute():
+            async with AsyncSessionLocal() as db:
+                from app.crud.schedule_event import CRUDScheduleEvent
+                deleted_count = await CRUDScheduleEvent.cleanup_old_events(db, days_old)
+                return {"deleted_events": deleted_count}
+        
+        result = run_async_task(_execute())
+        logger.info(f"清理调度事件完成: {result}")
+        return result
+        
+    except Exception as exc:
+        logger.error(f"清理调度事件失败: {exc}")
+        return {"status": "failed", "reason": str(exc)}
+        
 # 任务状态检查辅助函数
 def get_task_info(task_id: str) -> Dict[str, Any]:
     """获取任务信息"""
@@ -341,3 +358,4 @@ def get_task_info(task_id: str) -> Dict[str, Any]:
             "error": str(e)
 
         }
+
