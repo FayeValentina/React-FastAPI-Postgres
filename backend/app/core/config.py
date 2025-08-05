@@ -195,40 +195,6 @@ class RabbitMQSettings(BaseSettings):
         extra="allow"
     )
 
-
-class CelerySettings(BaseSettings):
-    """Celery 配置"""
-    BROKER_URL: Optional[str] = None
-    RESULT_BACKEND: Optional[str] = None
-    
-    @field_validator("BROKER_URL", mode="before")
-    @classmethod
-    def set_broker_url(cls, v: Optional[str], info: Any) -> str:
-        if v:
-            return v
-        # 默认使用 RabbitMQ
-        rabbitmq = RabbitMQSettings()
-        return rabbitmq.URL
-    
-    @field_validator("RESULT_BACKEND", mode="before")
-    @classmethod
-    def set_result_backend(cls, v: Optional[str], info: Any) -> str:
-        if v:
-            return v
-        # 默认使用 PostgreSQL (同步驱动，适用于Celery)
-        postgres = PostgresSettings()
-        # 将asyncpg驱动替换为psycopg2，用于Celery结果存储
-        sync_url = str(postgres.SQLALCHEMY_DATABASE_URL).replace("+asyncpg", "")
-        return f"db+{sync_url}"
-    
-    model_config = SettingsConfigDict(
-        env_prefix="CELERY_",
-        env_file=[ ".env"],
-        env_file_encoding="utf-8",
-        extra="allow"
-    )
-
-
 class Settings(BaseSettings):
     """主配置类"""
     # 基本配置
@@ -252,7 +218,6 @@ class Settings(BaseSettings):
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
-    celery: CelerySettings = CelerySettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True
@@ -263,6 +228,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="allow"
     )
+
 
 
 settings = Settings() 
