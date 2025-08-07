@@ -1,62 +1,22 @@
 """
-纯任务分发器 - 只负责注册任务和分发到Celery
+纯任务分发器 - 从task_config表读取配置并分发到Celery
 """
 from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime
 
+from app.db.base import AsyncSessionLocal
+from app.core.task_mapping import (
+    get_celery_task_name, 
+    register_task_type as register_mapping, 
+    is_task_type_supported
+)
+
 logger = logging.getLogger(__name__)
 
 
 class TaskDispatcher:
-    """纯任务分发器 - 负责任务注册、分发和管理"""
-    
-    # 任务注册表 - 统一管理所有任务配置
-    TASK_REGISTRY = {
-        # 爬取任务
-        'bot_scraping': {
-            'celery_task': 'execute_bot_scraping_task',
-            'queue': 'scraping',
-            'default_args': []
-        },
-        'manual_scraping': {
-            'celery_task': 'manual_scraping_task', 
-            'queue': 'scraping',
-            'default_args': []
-        },
-        'batch_scraping': {
-            'celery_task': 'batch_scraping_task',
-            'queue': 'scraping', 
-            'default_args': []
-        },
-        'auto_scraping_all': {
-            'celery_task': 'auto_scraping_all_configs_task',
-            'queue': 'scraping',
-            'default_args': []
-        },
-        
-        # 清理任务
-        'cleanup_sessions': {
-            'celery_task': 'cleanup_old_sessions_task',
-            'queue': 'cleanup',
-            'default_args': [30]
-        },
-        'cleanup_tokens': {
-            'celery_task': 'cleanup_expired_tokens_task',
-            'queue': 'cleanup',
-            'default_args': []
-        },
-        'cleanup_content': {
-            'celery_task': 'cleanup_old_content_task', 
-            'queue': 'cleanup',
-            'default_args': [90]
-        },
-        'cleanup_events': {
-            'celery_task': 'cleanup_schedule_events_task',
-            'queue': 'cleanup', 
-            'default_args': [30]
-        },
-    }
+    """纯任务分发器 - 从数据库获取配置并分发任务"""
     
     def __init__(self):
         self._celery_app = None
@@ -117,91 +77,133 @@ class TaskDispatcher:
             logger.error(f"任务分发失败 {task_name}: {e}")
             raise
     
-    def dispatch_registered_task(
+    async def dispatch_by_config_id(
         self,
-        task_type: str,
-        args: List = None,
-        kwargs: Dict = None,
+        task_config_id: int,
         **options
     ) -> str:
         """
-        发送已注册的任务类型
+        根据任务配置ID分发任务
         
         Args:
-            task_type: 注册的任务类型键
-            args: 任务参数
-            kwargs: 任务关键字参数
-            **options: 分发选项(queue, countdown, eta等)
+            task_config_id: 任务配置ID
+            **options: 分发选项(countdown, eta等)
             
         Returns:
             task_id: Celery任务ID
         """
-        if task_type not in self.TASK_REGISTRY:
-            raise ValueError(f"未注册的任务类型: {task_type}")
+        async with AsyncSessionLocal() as db:
+            from app.crud.task_config import crud_task_config
+            
+            # 获取任务配置
+            config = await crud_task_config.get(db, id=task_config_id)
+            if not config:
+                raise ValueError(f"任务配置不存在: {task_config_id}")
+            
+            # 获取对应的Celery任务名称
+            celery_task = get_celery_task_name(config.task_type)
+            
+            # 准备参数
+            args = [task_config_id]  # 总是传递配置ID作为第一个参数
+            kwargs = config.task_params or {}
+            
+            # 使用配置中的队列或默认队列
+            queue = config.task_params.get('queue', 'default') if config.task_params else 'default'
+            
+            return self.dispatch_task(
+                task_name=celery_task,
+                args=args,
+                kwargs=kwargs,
+                queue=queue,
+                **options
+            )
+    
+    
+    async def dispatch_by_task_type(
+        self,
+        task_type: str,
+        task_params: Dict = None,
+        queue: str = 'default',
+        **options
+    ) -> str:
+        """
+        根据任务类型直接分发（不使用数据库配置）
         
-        task_config = self.TASK_REGISTRY[task_type]
-        
-        # 使用提供的参数或默认参数
-        final_args = args if args is not None else task_config['default_args']
-        final_queue = options.pop('queue', task_config['queue'])
+        Args:
+            task_type: 任务类型
+            task_params: 任务参数
+            queue: 队列名称
+            **options: 分发选项
+            
+        Returns:
+            task_id: Celery任务ID
+        """
+        celery_task = get_celery_task_name(task_type)
         
         return self.dispatch_task(
-            task_name=task_config['celery_task'],
-            args=final_args,
-            kwargs=kwargs,
-            queue=final_queue,
+            task_name=celery_task,
+            args=[],
+            kwargs=task_params or {},
+            queue=queue,
             **options
         )
     
-    # === 便捷方法 ===
+    # === 批量操作方法 ===
     
-    def dispatch_bot_scraping(self, bot_config_id: int, **options) -> str:
-        """发送Bot爬取任务"""
-        return self.dispatch_registered_task(
-            'bot_scraping', args=[bot_config_id], **options
-        )
+    async def dispatch_multiple_configs(
+        self, 
+        task_config_ids: List[int],
+        **options
+    ) -> List[str]:
+        """
+        批量分发多个任务配置
+        
+        Args:
+            task_config_ids: 任务配置ID列表
+            **options: 分发选项
+            
+        Returns:
+            List[str]: Celery任务ID列表
+        """
+        task_ids = []
+        for config_id in task_config_ids:
+            try:
+                task_id = await self.dispatch_by_config_id(config_id, **options)
+                task_ids.append(task_id)
+            except Exception as e:
+                logger.error(f"分发任务配置 {config_id} 失败: {e}")
+                # 继续处理其他任务
+        
+        return task_ids
     
-    def dispatch_manual_scraping(
-        self, bot_config_id: int, session_type: str = "manual", **options
-    ) -> str:
-        """发送手动爬取任务"""
-        return self.dispatch_registered_task(
-            'manual_scraping', args=[bot_config_id, session_type], **options
-        )
-    
-    def dispatch_batch_scraping(
-        self, bot_config_ids: List[int], session_type: str = "manual", **options
-    ) -> str:
-        """发送批量爬取任务"""
-        return self.dispatch_registered_task(
-            'batch_scraping', args=[bot_config_ids, session_type], **options
-        )
-    
-    def dispatch_cleanup_sessions(self, days_old: int = 30, **options) -> str:
-        """发送清理会话任务"""
-        return self.dispatch_registered_task(
-            'cleanup_sessions', args=[days_old], **options
-        )
-    
-    def dispatch_cleanup_tokens(self, **options) -> str:
-        """发送清理令牌任务"""
-        return self.dispatch_registered_task('cleanup_tokens', **options)
-    
-    def dispatch_cleanup_content(self, days_old: int = 90, **options) -> str:
-        """发送清理内容任务"""
-        return self.dispatch_registered_task(
-            'cleanup_content', args=[days_old], **options
-        )
-    
-    def dispatch_cleanup_events(self, days_old: int = 30, **options) -> str:
-        """发送清理事件任务"""
-        return self.dispatch_registered_task(
-            'cleanup_events', args=[days_old], **options
-        )
-    
-    def dispatch_auto_scraping_all(self, **options) -> str:
-        """发送自动爬取所有配置任务"""
-        return self.dispatch_registered_task('auto_scraping_all', **options)
+    async def dispatch_by_task_type_batch(
+        self,
+        task_type: str,
+        **options
+    ) -> List[str]:
+        """
+        批量分发指定类型的所有活跃任务配置
+        
+        Args:
+            task_type: 任务类型
+            **options: 分发选项
+            
+        Returns:
+            List[str]: Celery任务ID列表
+        """
+        async with AsyncSessionLocal() as db:
+            from app.crud.task_config import crud_task_config
+            from app.core.task_type import TaskType
+            
+            # 获取指定类型的所有活跃配置
+            configs = await crud_task_config.get_by_type_and_status(
+                db,
+                task_type=TaskType(task_type),
+                status=None  # 获取活跃配置
+            )
+            
+            config_ids = [config.id for config in configs]
+            return await self.dispatch_multiple_configs(config_ids, **options)
     
     # === 任务管理方法 ===
     
@@ -281,28 +283,25 @@ class TaskDispatcher:
             logger.error(f"获取队列长度失败: {e}")
             return -1
     
-    # === 注册表管理 ===
+    # === 任务类型管理 ===
     
-    @classmethod
-    def register_task(
-        cls,
+    def register_task_type(
+        self,
         task_type: str,
-        celery_task: str, 
-        queue: str = 'default',
-        default_args: List = None
+        celery_task: str
     ):
-        """注册新的任务类型"""
-        cls.TASK_REGISTRY[task_type] = {
-            'celery_task': celery_task,
-            'queue': queue,
-            'default_args': default_args or []
-        }
-        logger.info(f"已注册任务类型: {task_type} -> {celery_task}")
+        """注册新的任务类型映射"""
+        register_mapping(task_type, celery_task)
+        logger.info(f"已注册任务类型映射: {task_type} -> {celery_task}")
     
-    @classmethod
-    def get_task_registry(cls) -> Dict[str, Dict[str, Any]]:
-        """获取任务注册表"""
-        return cls.TASK_REGISTRY.copy()
+    def get_supported_task_types(self) -> Dict[str, str]:
+        """获取支持的任务类型映射"""
+        from app.core.task_mapping import get_all_task_types
+        return get_all_task_types()
+    
+    def is_task_type_supported(self, task_type: str) -> bool:
+        """检查是否支持指定的任务类型"""
+        return is_task_type_supported(task_type)
 
 
 # 全局任务分发器实例
