@@ -10,7 +10,7 @@ from app.celery_app import celery_app
 from app.db.base import AsyncSessionLocal
 from app.crud.scrape_session import CRUDScrapeSession
 from app.models.task_execution import ExecutionStatus
-from .common import run_async_task, record_task_execution
+from .common_utils import run_async_task, record_task_execution
 
 logger = logging.getLogger(__name__)
 
