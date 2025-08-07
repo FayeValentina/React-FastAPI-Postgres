@@ -1,8 +1,6 @@
 from .user import CRUDUser
 from .token import CRUDRefreshToken  
 from .password_reset import CRUDPasswordReset
-from .bot_config import CRUDBotConfig
-from .scrape_session import CRUDScrapeSession
 from .reddit_content import CRUDRedditPost, CRUDRedditComment
 from .schedule_event import CRUDScheduleEvent, crud_schedule_event
 from .task_execution import CRUDTaskExecution, crud_task_execution
@@ -12,8 +10,6 @@ __all__ = [
     "CRUDUser",
     "CRUDRefreshToken",
     "CRUDPasswordReset", 
-    "CRUDBotConfig",
-    "CRUDScrapeSession",
     "CRUDRedditPost",
     "CRUDRedditComment",
     "CRUDScheduleEvent",

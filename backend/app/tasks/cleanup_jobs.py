@@ -8,78 +8,10 @@ from celery import current_task
 
 from app.celery_app import celery_app
 from app.db.base import AsyncSessionLocal
-from app.crud.scrape_session import CRUDScrapeSession
 from app.models.task_execution import ExecutionStatus
 from .common_utils import run_async_task, record_task_execution
 
 logger = logging.getLogger(__name__)
-
-
-@celery_app.task(bind=True, name='cleanup_old_sessions_task')
-def cleanup_old_sessions_task(self, days_old: int = 30) -> Dict[str, Any]:
-    """清理旧的爬取会话任务"""
-    start_time = datetime.utcnow()
-    task_id = self.request.id
-    
-    try:
-        logger.info(f"开始执行清理任务，删除{days_old}天前的会话")
-        
-        async def _execute():
-            async with AsyncSessionLocal() as db:
-                cutoff_date = datetime.utcnow() - timedelta(days=days_old)
-                
-                # 获取要删除的会话数量
-                old_sessions = await CRUDScrapeSession.get_sessions_before_date(
-                    db, cutoff_date
-                )
-                session_count = len(old_sessions)
-                
-                if session_count > 0:
-                    # 删除旧会话
-                    deleted_count = await CRUDScrapeSession.delete_sessions_before_date(
-                        db, cutoff_date
-                    )
-                    logger.info(f"成功删除 {deleted_count} 个旧会话")
-                    return {
-                        "status": "completed",
-                        "deleted_sessions": deleted_count,
-                        "cutoff_date": cutoff_date.isoformat()
-                    }
-                else:
-                    logger.info("没有找到需要清理的旧会话")
-                    return {
-                        "status": "completed",
-                        "deleted_sessions": 0,
-                        "message": "没有需要清理的会话"
-                    }
-        
-        result = run_async_task(_execute())
-        
-        # 记录成功执行
-        run_async_task(record_task_execution(
-            task_id, f"清理旧会话任务-{days_old}天前", start_time, ExecutionStatus.SUCCESS, result
-        ))
-        
-        return result
-        
-    except Exception as exc:
-        # 记录失败执行
-        run_async_task(record_task_execution(
-            task_id, f"清理旧会话任务-{days_old}天前", start_time, ExecutionStatus.FAILED, error=exc
-        ))
-        
-        logger.error(f"清理任务失败: {exc}")
-        
-        # 清理任务失败时重试
-        if self.request.retries < self.max_retries:
-            logger.info(f"第 {self.request.retries + 1} 次重试清理任务")
-            raise self.retry(countdown=300, exc=exc)  # 5分钟后重试
-        
-        return {
-            "status": "failed",
-            "reason": str(exc),
-            "retries": self.request.retries
-        }
 
 
 @celery_app.task(bind=True, name='cleanup_expired_tokens_task')

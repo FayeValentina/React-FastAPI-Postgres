@@ -6,14 +6,6 @@ from .token import Token
 from .password_reset import (
     PasswordResetRequest, PasswordResetConfirm, PasswordResetResponse
 )
-from .bot_config import (
-    BotConfigBase, BotConfigCreate, BotConfigUpdate, BotConfigResponse
-)
-from .scrape_session import (
-    ScrapeSessionBase, ScrapeSessionCreate, ScrapeSessionResponse, ScrapeSessionStats,
-    ScrapeSessionListResponse, BatchScrapeRequest, 
-    BatchScrapeResponse, BatchScrapeResult
-)
 from .reddit_content import (
     RedditPostBase, RedditPostResponse, RedditCommentBase, RedditCommentResponse,
     RedditContentListResponse, CommentSearchRequest, SubredditStats, RedditConnectionTestResponse
@@ -34,14 +26,6 @@ __all__ = [
     
     # Password reset models
     "PasswordResetRequest", "PasswordResetConfirm", "PasswordResetResponse",
-    
-    # Bot config models
-    "BotConfigBase", "BotConfigCreate", "BotConfigUpdate", "BotConfigResponse",
-    
-    # Scrape session models
-    "ScrapeSessionBase", "ScrapeSessionCreate", "ScrapeSessionResponse", "ScrapeSessionStats",
-    "ScrapeSessionListResponse", "BatchScrapeRequest", 
-    "BatchScrapeResponse", "BatchScrapeResult",
     
     # Reddit content models
     "RedditPostBase", "RedditPostResponse", "RedditCommentBase", "RedditCommentResponse",
