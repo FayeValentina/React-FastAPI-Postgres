@@ -1,3 +1,10 @@
 export { default as TaskCard } from './TaskCard';
 export { default as TaskHistoryDialog } from './TaskHistoryDialog';
+export { default as TaskDetailDialog } from './TaskDetailDialog';
 export { default as SystemHealthPanel } from './SystemHealthPanel';
+export { default as ActiveTasksPanel } from './ActiveTasksPanel';
+export { default as ScheduleEventsPanel } from './ScheduleEventsPanel';
+export { default as ExecutionStatsPanel } from './ExecutionStatsPanel';
+export { default as SystemAnalysisPanel } from './SystemAnalysisPanel';
+export { default as CleanupManagerDialog } from './CleanupManagerDialog';
+export { default as BatchUpdateDialog } from './BatchUpdateDialog';

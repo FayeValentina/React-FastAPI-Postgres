@@ -14,6 +14,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import BotManagementPage from './pages/BotManagementPage';
 import SessionManagementPage from './pages/SessionManagementPage';
 import TaskManagementPage from './pages/TaskManagementPage';
+import SystemMonitoringPage from './pages/SystemMonitoringPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -90,6 +91,11 @@ const AppRoutes: React.FC = () => {
         <Route path="/management/tasks" element={
           <ProtectedRoute>
             <TaskManagementPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/management/monitoring" element={
+          <ProtectedRoute>
+            <SystemMonitoringPage />
           </ProtectedRoute>
         } />
         

@@ -68,7 +68,7 @@ const menuSections = [
         text: '系统监控',
         icon: <DashboardIcon />,
         path: '/management/monitoring',
-        implemented: false,
+        implemented: true,
       },
       {
         text: '系统设置',

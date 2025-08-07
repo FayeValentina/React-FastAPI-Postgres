@@ -19,26 +19,30 @@ import {
   Error as ErrorIcon,
   CheckCircle as SuccessIcon,
 } from '@mui/icons-material';
-import { JobInfo } from '../../types/task';
+import { JobInfo, EnhancedSchedule } from '../../types/task';
 
 interface TaskCardProps {
   task: JobInfo;
+  schedule?: EnhancedSchedule;
   onRun: (task: JobInfo) => void;
   onPause: (task: JobInfo) => void;
   onResume: (task: JobInfo) => void;
   onDelete: (task: JobInfo) => void;
   onViewHistory: (task: JobInfo) => void;
   disabled?: boolean;
+  batchMode?: boolean;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({
   task,
+  schedule,
   onRun,
   onPause,
   onResume,
   onDelete,
   onViewHistory,
   disabled = false,
+  batchMode = false,
 }) => {
   const getStatusColor = (status: string) => {
     const statusColorMap: Record<string, any> = {
@@ -104,6 +108,39 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             函数: {task.func}
           </Typography>
+        )}
+
+        {/* 执行摘要 */}
+        {schedule?.execution_summary && (
+          <Box sx={{ mt: 2, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              执行摘要
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography variant="caption">
+                总次数: {schedule.execution_summary.total_runs}
+              </Typography>
+              <Typography variant="caption" color="success.main">
+                成功: {schedule.execution_summary.successful_runs}
+              </Typography>
+              <Typography variant="caption" color="error.main">
+                失败: {schedule.execution_summary.failed_runs}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="caption">
+                成功率: {schedule.execution_summary.success_rate.toFixed(1)}%
+              </Typography>
+              <Typography variant="caption">
+                平均耗时: {schedule.execution_summary.avg_duration.toFixed(1)}s
+              </Typography>
+            </Box>
+            {schedule.execution_summary.last_error && (
+              <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.5 }}>
+                最后错误: {schedule.execution_summary.last_error.substring(0, 50)}...
+              </Typography>
+            )}
+          </Box>
         )}
 
         {isRunning && (

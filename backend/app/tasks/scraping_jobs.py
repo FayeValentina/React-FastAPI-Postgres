@@ -13,7 +13,7 @@ from app.services.scraping_orchestrator import ScrapingOrchestrator
 from app.models.scrape_session import SessionType
 from app.crud.bot_config import CRUDBotConfig
 from app.models.task_execution import ExecutionStatus
-from .common import run_async_task, record_task_execution
+from .common_utils import run_async_task, record_task_execution
 
 logger = logging.getLogger(__name__)
 

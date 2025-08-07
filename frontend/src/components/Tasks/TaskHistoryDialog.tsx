@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -61,9 +61,9 @@ const TaskHistoryDialog: React.FC<TaskHistoryDialogProps> = ({
     if (open && jobId) {
       loadData();
     }
-  }, [open, jobId]);
+  }, [open, jobId, loadData]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!jobId) return;
     
     try {
@@ -77,7 +77,7 @@ const TaskHistoryDialog: React.FC<TaskHistoryDialogProps> = ({
     } catch (error) {
       console.error('Failed to load task history:', error);
     }
-  };
+  }, [jobId, historyUrl, statsUrl, fetchData]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
