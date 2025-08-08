@@ -7,6 +7,7 @@ from datetime import datetime
 
 from app.db.base import AsyncSessionLocal
 from app.core.task_type import TaskType, SchedulerType
+from app.models.task_config import TaskConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,18 +30,6 @@ class JobConfigManager:
     ) -> Optional[int]:
         """
         创建新的任务配置
-
-        Args:
-            name: 任务名称
-            task_type: 任务类型
-            scheduler_type: 调度器类型
-            description: 任务描述
-            parameters: 任务参数
-            schedule_config: 调度配置
-            **kwargs: 其他配置参数
-
-        Returns:
-            Optional[int]: 创建的配置ID，失败时返回None
         """
         try:
             async with AsyncSessionLocal() as db:
@@ -65,7 +54,7 @@ class JobConfigManager:
             logger.error(f"创建任务配置失败 {name}: {e}")
             return None
 
-    async def get_config(self, config_id: int) -> Optional[Dict[str, Any]]:
+    async def get_config(self, config_id: int) -> Optional[TaskConfig]:
         """
         获取任务配置
         """
@@ -73,25 +62,8 @@ class JobConfigManager:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
 
-                config = await crud_task_config.get(db, id=config_id)
-                if not config:
-                    return None
-
-                return {
-                    'id': config.id,
-                    'name': config.name,
-                    'task_type': config.task_type.value,
-                    'description': config.description,
-                    'status': config.status.value,
-                    'parameters': config.parameters,
-                    'schedule_config': config.schedule_config,
-                    'max_instances': config.max_instances,
-                    'timeout_seconds': config.timeout_seconds,
-                    'max_retries': config.max_retries,
-                    'priority': config.priority,
-                    'created_at': config.created_at.isoformat() if config.created_at else None,
-                    'updated_at': config.updated_at.isoformat() if config.updated_at else None
-                }
+                config = await crud_task_config.get(db, config_id=config_id)
+                return config
 
         except Exception as e:
             logger.error(f"获取任务配置失败 {config_id}: {e}")
@@ -106,7 +78,7 @@ class JobConfigManager:
                 from app.crud.task_config import crud_task_config
                 from app.schemas.task_config import TaskConfigUpdate
 
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id=config_id)
                 if not config:
                     logger.warning(f"尝试更新不存在的任务配置: {config_id}")
                     return False
@@ -129,7 +101,7 @@ class JobConfigManager:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
 
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id=config_id)
                 if not config:
                     logger.warning(f"尝试移除不存在的任务配置: {config_id}")
                     return False
@@ -246,7 +218,7 @@ class JobConfigManager:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
 
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id=config_id)
                 return config is not None
 
         except Exception as e:

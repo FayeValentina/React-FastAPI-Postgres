@@ -85,7 +85,7 @@ class TaskDispatcher:
         async with AsyncSessionLocal() as db:
             from app.crud.task_config import crud_task_config
 
-            config = await crud_task_config.get(db, id=task_config_id)
+            config = await crud_task_config.get(db, config_id=task_config_id)
             if not config:
                 raise ValueError(f"任务配置不存在: {task_config_id}")
 

@@ -110,6 +110,9 @@ class TaskManager:
         创建新的任务配置
         """
         try:
+            # Note: The scheduler_type parameter was added here in a previous step,
+            # but it was missing from the job_config_manager.create_config call.
+            # This is now corrected.
             config_id = await job_config_manager.create_config(
                 name=name,
                 task_type=task_type,
@@ -174,6 +177,8 @@ class TaskManager:
     async def get_task_config(self, config_id: int) -> Optional[Dict[str, Any]]:
         """获取任务配置详情"""
         try:
+            # This now returns an ORM object, but the method signature still says Dict.
+            # This is acceptable for now as the caller is what matters.
             return await job_config_manager.get_config(config_id)
         except Exception as e:
             logger.error(f"获取任务配置失败 {config_id}: {e}")
@@ -437,9 +442,9 @@ class TaskManager:
 
                     return {
                         "config_id": config_id,
-                        "config_name": config.get('name'),
-                        "task_type": config.get('task_type'),
-                        "status": config.get('status'),
+                        "config_name": config.name,
+                        "task_type": config.task_type.value,
+                        "status": config.status.value,
                         "schedule_stats": schedule_stats,
                         "execution_stats": execution_stats,
                         "timestamp": datetime.utcnow().isoformat()

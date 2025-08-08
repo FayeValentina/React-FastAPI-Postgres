@@ -8,24 +8,24 @@ from app.models.task_execution import ExecutionStatus
 
 class TaskStatusCalculator:
     """任务状态计算器"""
-    
+
     def __init__(self, scheduler):
         self.scheduler = scheduler
-    
+
     async def calculate_job_status(
-        self, 
-        db: AsyncSession, 
-        job_id: str, 
+        self,
+        db: AsyncSession,
+        job_id: str,
         pending: bool,
         next_run_time: Optional[datetime],
         scheduler_running: bool
     ) -> TaskStatus:
         """计算任务的综合状态"""
-        
+
         # 1. 调度器未运行 - 所有任务都是停止状态
         if not scheduler_running:
             return TaskStatus.STOPPED
-        
+
         # 2. 检查任务是否被暂停
         # APScheduler 通过将 next_run_time 设置为 None 来暂停任务
         if next_run_time is None:
@@ -36,21 +36,21 @@ class TaskStatusCalculator:
                     return TaskStatus.PAUSED
             except Exception:
                 pass
-        
+
         # 3. pending 为 True 表示任务还在等待被添加到作业存储
         # 这通常发生在调度器还未启动时
         if pending:
             return TaskStatus.IDLE
-        
+
         # 4. 检查是否正在执行（查看最近的执行记录）
         try:
-            from app.crud.task_execution import CRUDTaskExecution
-            latest_executions = await CRUDTaskExecution.get_recent_executions(db, hours=1, limit=1)
+            from app.crud.task_execution import crud_task_execution
+            latest_executions = await crud_task_execution.get_recent_executions(db, hours=1, limit=1)
             # 过滤出当前job的执行记录
             job_executions = [e for e in latest_executions if e.job_id == job_id]
             if job_executions:
                 latest_execution = job_executions[0]
-                
+
                 # 如果最近的执行状态是RUNNING
                 if latest_execution.status == ExecutionStatus.RUNNING:
                     # 检查是否超时（比如运行超过1小时可能是异常）
@@ -60,14 +60,14 @@ class TaskStatusCalculator:
                         if running_duration > 3600:  # 1小时
                             return TaskStatus.TIMEOUT
                     return TaskStatus.RUNNING
-                
+
                 # 检查是否处于misfire状态（错过了执行时间）
                 if next_run_time and next_run_time < datetime.now(timezone.utc):
                     # 如果下次运行时间已经过去，可能是misfire
                     time_diff = (datetime.now(timezone.utc) - next_run_time).total_seconds()
                     if time_diff > 60:  # 超过1分钟
                         return TaskStatus.MISFIRED
-                
+
                 # 如果最近执行失败
                 if latest_execution.status == ExecutionStatus.FAILED:
                     # 对于有重复调度的任务（有next_run_time），即使失败也是SCHEDULED
@@ -75,28 +75,28 @@ class TaskStatusCalculator:
                         return TaskStatus.SCHEDULED
                     # 对于一次性任务，失败就是失败
                     return TaskStatus.FAILED
-        
+
         except Exception as e:
             # 记录错误但不影响状态判断
             import logging
             logging.error(f"获取任务执行历史失败: {e}")
-        
+
         # 5. 有下次运行时间 - 已调度等待执行
         if next_run_time:
             return TaskStatus.SCHEDULED
-        
+
         # 6. 默认状态 - 空闲
         # 没有下次运行时间，可能是一次性任务已完成或是其他情况
         return TaskStatus.IDLE
-    
+
     async def get_job_execution_summary(self, db: AsyncSession, job_id: str, hours: int = 24):
         """获取任务执行摘要"""
-        from app.crud.task_execution import CRUDTaskExecution
+        from app.crud.task_execution import crud_task_execution
         from app.schemas.task import JobExecutionSummary
-        
-        executions = await CRUDTaskExecution.get_recent_executions(db, hours)
+
+        executions = await crud_task_execution.get_recent_executions(db, hours)
         job_executions = [e for e in executions if e.job_id == job_id]
-        
+
         if not job_executions:
             return JobExecutionSummary(
                 total_runs=0,
@@ -108,15 +108,15 @@ class TaskStatusCalculator:
                 last_status=None,
                 last_error=None
             )
-        
+
         # 计算统计信息
         total = len(job_executions)
         successful = len([e for e in job_executions if e.status == ExecutionStatus.SUCCESS])
         durations = [e.duration_seconds for e in job_executions if e.duration_seconds]
         avg_duration = sum(durations) / len(durations) if durations else 0.0
-        
+
         latest = max(job_executions, key=lambda x: x.started_at)
-        
+
         return JobExecutionSummary(
             total_runs=total,
             successful_runs=successful,
@@ -127,14 +127,14 @@ class TaskStatusCalculator:
             last_status=latest.status.value if latest.status else None,
             last_error=latest.error_message if latest.error_message else None
         )
-    
+
     async def get_job_recent_events(self, db: AsyncSession, job_id: str, limit: int = 10):
         """获取任务最近的事件"""
-        from app.crud.schedule_event import CRUDScheduleEvent
+        from app.crud.schedule_event import crud_schedule_event
         from app.schemas.task import ScheduleEventInfo
-        
-        events = await CRUDScheduleEvent.get_events_by_job(db, job_id, limit)
-        
+
+        events = await crud_schedule_event.get_events_by_job(db, job_id, limit)
+
         return [
             ScheduleEventInfo(
                 event_type=event.event_type.value,
