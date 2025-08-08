@@ -154,7 +154,7 @@ def get_task_status_calculator() -> TaskStatusCalculator:
     """获取任务状态计算器实例"""
     global _task_status_calculator
     if _task_status_calculator is None:
-        from app.tasks.schedulers import scheduler
+        from app.core.scheduler import scheduler
         _task_status_calculator = TaskStatusCalculator(scheduler.scheduler)
     return _task_status_calculator
 

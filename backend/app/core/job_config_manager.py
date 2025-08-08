@@ -54,7 +54,7 @@ class JobConfigManager:
             logger.error(f"创建任务配置失败 {name}: {e}")
             return None
 
-    async def get_config(self, config_id: int) -> Optional[TaskConfig]:
+    async def get_config(self, config_id: int) -> Optional[Dict[str, Any]]:
         """
         获取任务配置
         """
@@ -63,8 +63,24 @@ class JobConfigManager:
                 from app.crud.task_config import crud_task_config
 
                 config = await crud_task_config.get(db, config_id=config_id)
-                return config
+                if not config:
+                    return None
 
+                return {
+                    'id': config.id,
+                    'name': config.name,
+                    'task_type': config.task_type.value,
+                    'description': config.description,
+                    'status': config.status.value,
+                    'parameters': config.parameters,
+                    'schedule_config': config.schedule_config,
+                    'max_instances': config.max_instances,
+                    'timeout_seconds': config.timeout_seconds,
+                    'max_retries': config.max_retries,
+                    'priority': config.priority,
+                    'created_at': config.created_at.isoformat() if config.created_at else None,
+                    'updated_at': config.updated_at.isoformat() if config.updated_at else None
+                }
         except Exception as e:
             logger.error(f"获取任务配置失败 {config_id}: {e}")
             return None
@@ -106,7 +122,7 @@ class JobConfigManager:
                     logger.warning(f"尝试移除不存在的任务配置: {config_id}")
                     return False
 
-                await crud_task_config.remove(db, id=config_id)
+                await crud_task_config.delete(db, config_id=config_id)
                 logger.debug(f"已移除任务配置: {config_id}")
                 return True
 

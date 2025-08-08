@@ -38,3 +38,7 @@ flower = "^2.0.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+requests = "^2.31.0"
