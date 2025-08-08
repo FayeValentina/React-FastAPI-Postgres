@@ -32,6 +32,7 @@ class TaskConfig(Base):
     schedule_config: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default={})
     
     # 执行控制
+    max_instances: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=5)  # 1-10

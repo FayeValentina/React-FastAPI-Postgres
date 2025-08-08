@@ -21,7 +21,7 @@ class JobConfigManager:
         name: str,
         task_type: str,
         description: str = None,
-        task_params: Dict[str, Any] = None,
+        parameters: Dict[str, Any] = None,
         schedule_config: Dict[str, Any] = None,
         **kwargs
     ) -> Optional[int]:
@@ -49,7 +49,7 @@ class JobConfigManager:
                     name=name,
                     task_type=TaskType(task_type),
                     description=description,
-                    task_params=task_params or {},
+                    parameters=parameters or {},
                     schedule_config=schedule_config,
                     **kwargs
                 )
@@ -86,11 +86,11 @@ class JobConfigManager:
                     'task_type': config.task_type.value,
                     'description': config.description,
                     'status': config.status.value,
-                    'task_params': config.task_params,
+                    'parameters': config.parameters,
                     'schedule_config': config.schedule_config,
                     'max_instances': config.max_instances,
                     'timeout_seconds': config.timeout_seconds,
-                    'retry_count': config.retry_count,
+                    'max_retries': config.max_retries,
                     'priority': config.priority,
                     'created_at': config.created_at.isoformat() if config.created_at else None,
                     'updated_at': config.updated_at.isoformat() if config.updated_at else None
@@ -179,11 +179,11 @@ class JobConfigManager:
                         'task_type': config.task_type.value,
                         'description': config.description,
                         'status': config.status.value,
-                        'task_params': config.task_params,
+                        'parameters': config.parameters,
                         'schedule_config': config.schedule_config,
                         'max_instances': config.max_instances,
                         'timeout_seconds': config.timeout_seconds,
-                        'retry_count': config.retry_count,
+                        'max_retries': config.max_retries,
                         'priority': config.priority,
                         'created_at': config.created_at.isoformat() if config.created_at else None,
                         'updated_at': config.updated_at.isoformat() if config.updated_at else None
@@ -223,8 +223,12 @@ class JobConfigManager:
                         'task_type': config.task_type.value,
                         'description': config.description,
                         'status': config.status.value,
-                        'task_params': config.task_params,
-                        'schedule_config': config.schedule_config
+                        'parameters': config.parameters,
+                        'schedule_config': config.schedule_config,
+                        'max_instances': config.max_instances,
+                        'timeout_seconds': config.timeout_seconds,
+                        'max_retries': config.max_retries,
+                        'priority': config.priority
                     })
                 
                 return result
@@ -249,11 +253,11 @@ class JobConfigManager:
                         'task_type': config.task_type.value,
                         'description': config.description,
                         'status': config.status.value,
-                        'task_params': config.task_params,
+                        'parameters': config.parameters,
                         'schedule_config': config.schedule_config,
                         'max_instances': config.max_instances,
                         'timeout_seconds': config.timeout_seconds,
-                        'retry_count': config.retry_count,
+                        'max_retries': config.max_retries,
                         'priority': config.priority
                     })
                 

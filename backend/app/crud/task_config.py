@@ -173,6 +173,7 @@ class CRUDTaskConfig:
                 status=obj_in.status,
                 parameters=obj_in.parameters,
                 schedule_config=obj_in.schedule_config,
+                max_instances=obj_in.max_instances,
                 max_retries=obj_in.max_retries,
                 timeout_seconds=obj_in.timeout_seconds,
                 priority=obj_in.priority

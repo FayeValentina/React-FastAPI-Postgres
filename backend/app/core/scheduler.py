@@ -79,10 +79,10 @@ class Scheduler:
                             'name': config.name,
                             'task_type': config.task_type,
                             'schedule_config': config.schedule_config,
-                            'task_params': config.task_params,
+                            'parameters': config.parameters,
                             'max_instances': config.max_instances or 1,
                             'timeout_seconds': config.timeout_seconds or 300,
-                            'retry_count': config.retry_count or 0
+                            'max_retries': config.max_retries or 0
                         })
                 
                 logger.info(f"从数据库加载了 {len(tasks)} 个活跃任务配置")
@@ -275,10 +275,10 @@ class Scheduler:
                     'name': config.name,
                     'task_type': config.task_type,
                     'schedule_config': config.schedule_config,
-                    'task_params': config.task_params,
+                    'parameters': config.parameters,
                     'max_instances': config.max_instances or 1,
                     'timeout_seconds': config.timeout_seconds or 300,
-                    'retry_count': config.retry_count or 0
+                    'max_retries': config.max_retries or 0
                 }
                 
                 # 先移除现有任务
