@@ -4,6 +4,12 @@
 不依赖数据库，仅测试核心调度功能
 """
 
+import sys
+import os
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 import asyncio
 import logging
 from datetime import datetime, timedelta

@@ -4,6 +4,12 @@ TasksManager 完整功能测试脚本
 测试所有的任务管理功能，包括配置管理、调度管理、批量操作、统计分析等
 """
 
+import sys
+import os
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 import asyncio
 import json
 import logging
