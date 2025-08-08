@@ -1,7 +1,6 @@
-from .reddit_scraper_service import RedditScraperService
-from .scraping_orchestrator import ScrapingOrchestrator
+# 只导出tasks_manager，其他已删除的服务不再导入
+from .tasks_manager import task_manager
 
 __all__ = [
-    "RedditScraperService",
-    "ScrapingOrchestrator",
+    "task_manager",
 ]

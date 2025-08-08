@@ -7,7 +7,6 @@ from app.db.base_class import Base
 from app.models.user import User
 from app.models.token import RefreshToken
 from app.models.password_reset import PasswordReset
-from app.models.reddit_content import RedditPost, RedditComment
 from app.models.task_execution import TaskExecution
 from app.models.schedule_event import ScheduleEvent
 from app.models.task_config import TaskConfig
@@ -46,8 +45,6 @@ __all__ = [
     "User", 
     "RefreshToken", 
     "PasswordReset",
-    "RedditPost",
-    "RedditComment",
     "TaskExecution",
     "ScheduleEvent",
     "TaskConfig"

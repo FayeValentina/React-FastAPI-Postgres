@@ -1,6 +1,6 @@
 from typing import Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from datetime import timedelta
 
 from app.models.token import RefreshToken
@@ -94,18 +94,10 @@ class CRUDRefreshToken:
         self, 
         db: AsyncSession
     ) -> int:
-        """清理过期的刷新令牌"""
-        current_time = get_current_time()
+        """清理过期的刷新令牌 - 删除is_valid为False的记录"""
         result = await db.execute(
-            update(RefreshToken)
-            .where(
-                RefreshToken.expires_at < current_time,
-                RefreshToken.is_valid == True
-            )
-            .values(
-                is_valid=False,
-                revoked_at=current_time
-            )
+            delete(RefreshToken)
+            .where(RefreshToken.is_valid == False)
         )
         await db.commit()
         return result.rowcount

@@ -385,6 +385,38 @@ class CRUDTaskConfig:
         )
         
         return {status: count for status, count in result.all()}
+    
+    async def get_stats(self, db: AsyncSession) -> Dict[str, Any]:
+        """获取任务配置统计信息"""
+        try:
+            # 总配置数
+            total_result = await db.execute(
+                select(func.count(TaskConfig.id))
+            )
+            total_configs = total_result.scalar() or 0
+            
+            # 活跃配置数
+            active_result = await db.execute(
+                select(func.count(TaskConfig.id))
+                .filter(TaskConfig.status == TaskStatus.ACTIVE)
+            )
+            active_configs = active_result.scalar() or 0
+            
+            # 按类型统计
+            type_stats = await self.count_by_type(db)
+            
+            # 按状态统计
+            status_stats = await self.count_by_status(db)
+            
+            return {
+                "total_configs": total_configs,
+                "active_configs": active_configs,
+                "by_type": {str(k): v for k, v in type_stats.items()},
+                "by_status": {str(k): v for k, v in status_stats.items()}
+            }
+            
+        except Exception as e:
+            raise DatabaseError(f"获取统计信息失败: {str(e)}")
 
 
 # 全局CRUD实例

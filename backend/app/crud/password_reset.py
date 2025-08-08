@@ -1,6 +1,6 @@
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from datetime import timedelta
 from uuid import uuid4
 
@@ -87,15 +87,8 @@ class CRUDPasswordReset:
         """清理过期的密码重置令牌"""
         current_time = get_current_time()
         result = await db.execute(
-            update(PasswordReset)
-            .where(
-                PasswordReset.expires_at < current_time,
-                PasswordReset.is_used == False
-            )
-            .values(
-                is_used=True,
-                used_at=current_time
-            )
+            delete(PasswordReset)
+            .where(PasswordReset.is_valid == False)
         )
         await db.commit()
         return result.rowcount

@@ -179,7 +179,7 @@ class TaskManager:
         """
         try:
             # 先停止调度
-            await self.stop_scheduled_task(config_id)
+            self.stop_scheduled_task(config_id)
             
             # 删除配置
             success = await job_config_manager.remove_config(config_id)

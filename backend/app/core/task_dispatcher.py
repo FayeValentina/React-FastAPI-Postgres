@@ -96,7 +96,7 @@ class TaskDispatcher:
             from app.crud.task_config import crud_task_config
             
             # 获取任务配置
-            config = await crud_task_config.get(db, id=task_config_id)
+            config = await crud_task_config.get(db, task_config_id)
             if not config:
                 raise ValueError(f"任务配置不存在: {task_config_id}")
             
@@ -105,10 +105,10 @@ class TaskDispatcher:
             
             # 准备参数
             args = [task_config_id]  # 总是传递配置ID作为第一个参数
-            kwargs = config.task_params or {}
+            kwargs = config.parameters or {}
             
             # 使用配置中的队列或默认队列
-            queue = config.task_params.get('queue', 'default') if config.task_params else 'default'
+            queue = config.parameters.get('queue', 'default') if config.parameters else 'default'
             
             return self.dispatch_task(
                 task_name=celery_task,
@@ -196,7 +196,7 @@ class TaskDispatcher:
             from app.core.task_type import TaskType
             
             # 获取指定类型的所有活跃配置
-            configs = await crud_task_config.get_by_type_and_status(
+            configs = await crud_task_config.get_by_type(
                 db,
                 task_type=TaskType(task_type),
                 status=None  # 获取活跃配置

@@ -79,10 +79,10 @@ class Scheduler:
                             'name': config.name,
                             'task_type': config.task_type,
                             'schedule_config': config.schedule_config,
-                            'task_params': config.task_params,
-                            'max_instances': config.max_instances or 1,
+                            'task_params': config.parameters,
+                            'max_instances': 1,  # 默认并发数
                             'timeout_seconds': config.timeout_seconds or 300,
-                            'retry_count': config.retry_count or 0
+                            'retry_count': config.max_retries or 0
                         })
                 
                 logger.info(f"从数据库加载了 {len(tasks)} 个活跃任务配置")
@@ -265,7 +265,7 @@ class Scheduler:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
                 
-                config = await crud_task_config.get(db, id=task_config_id)
+                config = await crud_task_config.get(db, task_config_id)
                 if not config or not config.schedule_config:
                     return False
                 
@@ -275,10 +275,10 @@ class Scheduler:
                     'name': config.name,
                     'task_type': config.task_type,
                     'schedule_config': config.schedule_config,
-                    'task_params': config.task_params,
-                    'max_instances': config.max_instances or 1,
+                    'task_params': config.parameters,
+                    'max_instances': 1,  # 默认并发数
                     'timeout_seconds': config.timeout_seconds or 300,
-                    'retry_count': config.retry_count or 0
+                    'retry_count': config.max_retries or 0
                 }
                 
                 # 先移除现有任务

@@ -5,23 +5,29 @@ from typing import Dict
 
 # 任务类型到Celery任务名称的映射
 TASK_TYPE_TO_CELERY_MAPPING: Dict[str, str] = {
-    # 爬取任务
+    # 爬取相关任务
     'bot_scraping': 'execute_bot_scraping_task',
+    'manual_scraping': 'execute_manual_scraping_task',
+    'batch_scraping': 'execute_batch_scraping_task',
     
-    # 清理任务
-    'cleanup': 'cleanup_task',
+    # 清理相关任务
+    'cleanup_tokens': 'cleanup_expired_tokens_task',
+    'cleanup_content': 'cleanup_old_content_task',
+    'cleanup_events': 'cleanup_schedule_events_task',
     
-    # 邮件任务
-    'email': 'send_email_task',
-    
-    # 通知任务
-    'notification': 'send_notification_task',
+    # 通知相关任务
+    'send_email': 'send_email_task',
+    'send_notification': 'send_notification_task',
     
     # 数据处理任务
-    'data_processing': 'data_processing_task',
+    'data_export': 'data_export_task',
+    'data_backup': 'data_backup_task',
+    'data_analysis': 'data_analysis_task',
     
     # 系统维护任务
-    'system_maintenance': 'system_maintenance_task'
+    'health_check': 'health_check_task',
+    'system_monitor': 'system_monitor_task',
+    'log_rotation': 'log_rotation_task',
 }
 
 

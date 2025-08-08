@@ -49,7 +49,7 @@ class JobConfigManager:
                     name=name,
                     task_type=TaskType(task_type),
                     description=description,
-                    task_params=task_params or {},
+                    parameters=task_params or {},
                     schedule_config=schedule_config,
                     **kwargs
                 )
@@ -76,7 +76,7 @@ class JobConfigManager:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
                 
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id)
                 if not config:
                     return None
                 
@@ -86,11 +86,11 @@ class JobConfigManager:
                     'task_type': config.task_type.value,
                     'description': config.description,
                     'status': config.status.value,
-                    'task_params': config.task_params,
+                    'task_params': config.parameters,
                     'schedule_config': config.schedule_config,
-                    'max_instances': config.max_instances,
+                    'max_instances': 1,  # 默认并发数
                     'timeout_seconds': config.timeout_seconds,
-                    'retry_count': config.retry_count,
+                    'retry_count': config.max_retries,
                     'priority': config.priority,
                     'created_at': config.created_at.isoformat() if config.created_at else None,
                     'updated_at': config.updated_at.isoformat() if config.updated_at else None
@@ -117,7 +117,7 @@ class JobConfigManager:
                 from app.schemas.task_config import TaskConfigUpdate
                 
                 # 检查配置是否存在
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id)
                 if not config:
                     logger.warning(f"尝试更新不存在的任务配置: {config_id}")
                     return False
@@ -149,15 +149,16 @@ class JobConfigManager:
                 from app.crud.task_config import crud_task_config
                 
                 # 检查配置是否存在
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id)
                 if not config:
                     logger.warning(f"尝试移除不存在的任务配置: {config_id}")
                     return False
                 
                 # 删除配置
-                await crud_task_config.remove(db, id=config_id)
-                logger.debug(f"已移除任务配置: {config_id}")
-                return True
+                success = await crud_task_config.delete(db, config_id)
+                if success:
+                    logger.debug(f"已移除任务配置: {config_id}")
+                return success
             
         except Exception as e:
             logger.error(f"移除任务配置失败 {config_id}: {e}")
@@ -179,11 +180,11 @@ class JobConfigManager:
                         'task_type': config.task_type.value,
                         'description': config.description,
                         'status': config.status.value,
-                        'task_params': config.task_params,
+                        'task_params': config.parameters,
                         'schedule_config': config.schedule_config,
-                        'max_instances': config.max_instances,
+                        'max_instances': 1,  # 默认并发数
                         'timeout_seconds': config.timeout_seconds,
-                        'retry_count': config.retry_count,
+                        'retry_count': config.max_retries,
                         'priority': config.priority,
                         'created_at': config.created_at.isoformat() if config.created_at else None,
                         'updated_at': config.updated_at.isoformat() if config.updated_at else None
@@ -210,7 +211,7 @@ class JobConfigManager:
                 from app.crud.task_config import crud_task_config
                 from app.core.task_type import TaskType
                 
-                configs = await crud_task_config.get_by_type_and_status(
+                configs = await crud_task_config.get_by_type(
                     db,
                     task_type=TaskType(task_type)
                 )
@@ -223,7 +224,7 @@ class JobConfigManager:
                         'task_type': config.task_type.value,
                         'description': config.description,
                         'status': config.status.value,
-                        'task_params': config.task_params,
+                        'task_params': config.parameters,
                         'schedule_config': config.schedule_config
                     })
                 
@@ -249,11 +250,11 @@ class JobConfigManager:
                         'task_type': config.task_type.value,
                         'description': config.description,
                         'status': config.status.value,
-                        'task_params': config.task_params,
+                        'task_params': config.parameters,
                         'schedule_config': config.schedule_config,
-                        'max_instances': config.max_instances,
+                        'max_instances': 1,  # 默认并发数
                         'timeout_seconds': config.timeout_seconds,
-                        'retry_count': config.retry_count,
+                        'retry_count': config.max_retries,
                         'priority': config.priority
                     })
                 
@@ -269,7 +270,7 @@ class JobConfigManager:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
                 
-                config = await crud_task_config.get(db, id=config_id)
+                config = await crud_task_config.get(db, config_id)
                 return config is not None
                 
         except Exception as e:
