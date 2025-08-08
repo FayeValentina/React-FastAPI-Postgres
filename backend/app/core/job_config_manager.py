@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from app.db.base import AsyncSessionLocal
+from app.core.task_type import TaskType, SchedulerType
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,11 @@ class JobConfigManager:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
                 from app.schemas.task_config import TaskConfigCreate
-                from app.core.task_type import TaskType
 
                 config_data = TaskConfigCreate(
                     name=name,
                     task_type=TaskType(task_type),
-                    scheduler_type=scheduler_type,
+                    scheduler_type=SchedulerType(scheduler_type),
                     description=description,
                     parameters=parameters or {},
                     schedule_config=schedule_config,

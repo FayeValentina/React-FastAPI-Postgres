@@ -432,8 +432,8 @@ class TaskManager:
                     if not config:
                         return {"error": f"任务配置不存在: {config_id}"}
 
-                    schedule_stats = await crud_schedule_event.get_events_stats(db, config_id)
-                    execution_stats = await crud_task_execution.get_execution_stats(db, config_id)
+                    schedule_stats = await crud_schedule_event.get_events_stats(db, task_config_id=config_id)
+                    execution_stats = await crud_task_execution.get_execution_stats(db, task_config_id=config_id)
 
                     return {
                         "config_id": config_id,
