@@ -25,8 +25,8 @@ TASK_TYPE_TO_CELERY_MAPPING: Dict[str, str] = {
 }
 
 
-def get_celery_task_name(task_type: str) -> str:
-    """
+def get_celery_task_name(task_type: Union[str, TaskType]) -> str:
+        """
     根据任务类型获取对应的Celery任务名称
     
     Args:
@@ -39,7 +39,11 @@ def get_celery_task_name(task_type: str) -> str:
         ValueError: 当任务类型不支持时
     """
     # 处理枚举类型
-    task_type_str = task_type.value if hasattr(task_type, 'value') else str(task_type)
+
+    if isinstance(task_type, TaskType):
+        task_type_str = task_type.value
+    else:
+        task_type_str = str(task_type)
     
     celery_task = TASK_TYPE_TO_CELERY_MAPPING.get(task_type_str)
     if not celery_task:
@@ -80,4 +84,5 @@ def is_task_type_supported(task_type: str) -> bool:
         bool: 是否支持
     """
     task_type_str = task_type.value if hasattr(task_type, 'value') else str(task_type)
+
     return task_type_str in TASK_TYPE_TO_CELERY_MAPPING
