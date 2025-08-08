@@ -49,7 +49,7 @@ async def test_core_components():
         logger.info(f"✅ 支持的任务类型: {list(supported_types.keys())}")
         
         # 测试每种类型的支持状态
-        test_types = ['cleanup_sessions', 'cleanup_tokens', 'send_email', 'health_check']
+        test_types = ['cleanup_tokens', 'send_email', 'health_check']
         for task_type in test_types:
             is_supported = task_dispatcher.is_task_type_supported(task_type)
             status = "✅" if is_supported else "⚠️"
@@ -174,7 +174,7 @@ async def test_tasks_manager_high_level():
         # 测试创建配置
         config_id = await task_manager.create_task_config(
             name="高级测试任务",
-            task_type="cleanup_sessions",
+            task_type="cleanup_tokens",
             description="高级接口测试",
             task_params={"days_old": 7},
             schedule_config={

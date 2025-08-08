@@ -243,6 +243,154 @@ class CRUDTaskExecution:
         except Exception as e:
             await db.rollback()
             raise DatabaseError(f"清理任务执行记录时出错: {str(e)}")
+    
+    async def get_global_stats(
+        self,
+        db: AsyncSession,
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """获取全局统计数据"""
+        try:
+            start_time = datetime.utcnow() - timedelta(days=days)
+            
+            # 总执行次数
+            total_result = await db.execute(
+                select(func.count(TaskExecution.id))
+                .where(TaskExecution.started_at >= start_time)
+            )
+            total_executions = total_result.scalar() or 0
+            
+            # 各状态统计
+            status_result = await db.execute(
+                select(TaskExecution.status, func.count(TaskExecution.id))
+                .where(TaskExecution.started_at >= start_time)
+                .group_by(TaskExecution.status)
+            )
+            
+            status_stats = {}
+            for status, count in status_result.all():
+                status_stats[status.value] = count
+            
+            # 按任务类型统计
+            type_result = await db.execute(
+                select(TaskConfig.task_type, func.count(TaskExecution.id))
+                .join(TaskConfig, TaskExecution.task_config_id == TaskConfig.id)
+                .where(TaskExecution.started_at >= start_time)
+                .group_by(TaskConfig.task_type)
+            )
+            
+            type_stats = {}
+            for task_type, count in type_result.all():
+                type_stats[task_type.value] = count
+            
+            # 平均执行时间
+            avg_duration_result = await db.execute(
+                select(func.avg(TaskExecution.duration_seconds))
+                .where(
+                    and_(
+                        TaskExecution.started_at >= start_time,
+                        TaskExecution.status == ExecutionStatus.SUCCESS,
+                        TaskExecution.duration_seconds.isnot(None)
+                    )
+                )
+            )
+            avg_duration = float(avg_duration_result.scalar() or 0.0)
+            
+            # 成功率
+            success_count = status_stats.get("success", 0)
+            success_rate = (success_count / total_executions * 100) if total_executions > 0 else 0.0
+            
+            # 失败率
+            failed_count = status_stats.get("failed", 0)
+            failure_rate = (failed_count / total_executions * 100) if total_executions > 0 else 0.0
+            
+            return {
+                "period_days": days,
+                "total_executions": total_executions,
+                "status_breakdown": status_stats,
+                "type_breakdown": type_stats,
+                "success_rate": success_rate,
+                "failure_rate": failure_rate,
+                "avg_duration_seconds": avg_duration,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            raise DatabaseError(f"获取全局统计数据时出错: {str(e)}")
+    
+    async def get_stats_by_config(
+        self,
+        db: AsyncSession,
+        task_config_id: int,
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """获取特定任务配置的执行统计数据"""
+        try:
+            start_time = datetime.utcnow() - timedelta(days=days)
+            
+            # 总执行次数
+            total_result = await db.execute(
+                select(func.count(TaskExecution.id))
+                .where(
+                    and_(
+                        TaskExecution.task_config_id == task_config_id,
+                        TaskExecution.started_at >= start_time
+                    )
+                )
+            )
+            total_executions = total_result.scalar() or 0
+            
+            # 各状态统计
+            status_result = await db.execute(
+                select(TaskExecution.status, func.count(TaskExecution.id))
+                .where(
+                    and_(
+                        TaskExecution.task_config_id == task_config_id,
+                        TaskExecution.started_at >= start_time
+                    )
+                )
+                .group_by(TaskExecution.status)
+            )
+            
+            status_stats = {}
+            for status, count in status_result.all():
+                status_stats[status.value] = count
+            
+            # 平均执行时间
+            avg_duration_result = await db.execute(
+                select(func.avg(TaskExecution.duration_seconds))
+                .where(
+                    and_(
+                        TaskExecution.task_config_id == task_config_id,
+                        TaskExecution.started_at >= start_time,
+                        TaskExecution.status == ExecutionStatus.SUCCESS,
+                        TaskExecution.duration_seconds.isnot(None)
+                    )
+                )
+            )
+            avg_duration = float(avg_duration_result.scalar() or 0.0)
+            
+            # 成功率
+            success_count = status_stats.get("success", 0)
+            success_rate = (success_count / total_executions * 100) if total_executions > 0 else 0.0
+            
+            # 失败率
+            failed_count = status_stats.get("failed", 0)
+            failure_rate = (failed_count / total_executions * 100) if total_executions > 0 else 0.0
+            
+            return {
+                "task_config_id": task_config_id,
+                "period_days": days,
+                "total_executions": total_executions,
+                "status_breakdown": status_stats,
+                "success_rate": success_rate,
+                "failure_rate": failure_rate,
+                "avg_duration_seconds": avg_duration,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            raise DatabaseError(f"获取任务配置 {task_config_id} 的执行统计数据时出错: {str(e)}")
 
 
 # 全局CRUD实例

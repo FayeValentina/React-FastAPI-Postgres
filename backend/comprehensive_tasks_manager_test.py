@@ -96,7 +96,7 @@ class TasksManagerTester:
         try:
             config_id = await self.task_manager.create_task_config(
                 name="测试清理任务",
-                task_type="cleanup_sessions",
+                task_type="cleanup_tokens",
                 description="用于测试的清理任务",
                 task_params={
                     "days_old": 7
@@ -242,11 +242,11 @@ class TasksManagerTester:
         
         # 测试6: 按类型筛选任务配置
         try:
-            cleanup_configs = await self.task_manager.list_task_configs(task_type="cleanup_sessions")
+            cleanup_configs = await self.task_manager.list_task_configs(task_type="cleanup_tokens")
             results['filter_configs'] = self.print_test_result(
                 "按类型筛选任务配置",
                 len(cleanup_configs) >= 1,
-                f"找到 {len(cleanup_configs)} 个cleanup_sessions配置"
+                f"找到 {len(cleanup_configs)} 个cleanup_tokens配置"
             )
         except Exception as e:
             results['filter_configs'] = self.print_test_result(
@@ -419,11 +419,11 @@ class TasksManagerTester:
         
         # 测试3: 按类型批量执行任务
         try:
-            task_ids = await self.task_manager.execute_tasks_by_type("cleanup_sessions")
+            task_ids = await self.task_manager.execute_tasks_by_type("cleanup_tokens")
             results['execute_by_type'] = self.print_test_result(
                 "按类型批量执行任务",
                 isinstance(task_ids, list),
-                f"执行了 {len(task_ids)} 个cleanup_sessions任务"
+                f"执行了 {len(task_ids)} 个cleanup_tokens任务"
             )
         except Exception as e:
             results['execute_by_type'] = self.print_test_result(

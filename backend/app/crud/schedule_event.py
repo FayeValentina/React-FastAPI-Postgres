@@ -174,6 +174,125 @@ class CRUDScheduleEvent:
         except Exception as e:
             await db.rollback()
             raise DatabaseError(f"清理调度事件时出错: {str(e)}")
+    
+    async def get_global_stats(
+        self,
+        db: AsyncSession,
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """获取全局调度事件统计"""
+        try:
+            start_time = datetime.utcnow() - timedelta(days=days)
+            
+            # 总事件数
+            total_result = await db.execute(
+                select(func.count(ScheduleEvent.id))
+                .where(ScheduleEvent.created_at >= start_time)
+            )
+            total_events = total_result.scalar() or 0
+            
+            # 各类型统计
+            type_result = await db.execute(
+                select(ScheduleEvent.event_type, func.count(ScheduleEvent.id))
+                .where(ScheduleEvent.created_at >= start_time)
+                .group_by(ScheduleEvent.event_type)
+            )
+            
+            type_stats = {}
+            for event_type, count in type_result.all():
+                type_stats[event_type.value] = count
+            
+            # 按任务配置统计
+            config_result = await db.execute(
+                select(TaskConfig.task_type, func.count(ScheduleEvent.id))
+                .join(TaskConfig, ScheduleEvent.task_config_id == TaskConfig.id)
+                .where(ScheduleEvent.created_at >= start_time)
+                .group_by(TaskConfig.task_type)
+            )
+            
+            config_stats = {}
+            for task_type, count in config_result.all():
+                config_stats[task_type.value] = count
+            
+            # 成功率
+            success_count = type_stats.get("executed", 0)
+            success_rate = (success_count / total_events * 100) if total_events > 0 else 0.0
+            
+            # 错误率
+            error_count = type_stats.get("error", 0)
+            error_rate = (error_count / total_events * 100) if total_events > 0 else 0.0
+            
+            return {
+                "period_days": days,
+                "total_events": total_events,
+                "type_breakdown": type_stats,
+                "config_breakdown": config_stats,
+                "success_rate": success_rate,
+                "error_rate": error_rate,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            raise DatabaseError(f"获取全局调度统计数据时出错: {str(e)}")
+    
+    async def get_stats_by_config(
+        self,
+        db: AsyncSession,
+        task_config_id: int,
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """获取特定任务配置的调度事件统计"""
+        try:
+            start_time = datetime.utcnow() - timedelta(days=days)
+            
+            # 总事件数
+            total_result = await db.execute(
+                select(func.count(ScheduleEvent.id))
+                .where(
+                    and_(
+                        ScheduleEvent.task_config_id == task_config_id,
+                        ScheduleEvent.created_at >= start_time
+                    )
+                )
+            )
+            total_events = total_result.scalar() or 0
+            
+            # 各类型统计
+            type_result = await db.execute(
+                select(ScheduleEvent.event_type, func.count(ScheduleEvent.id))
+                .where(
+                    and_(
+                        ScheduleEvent.task_config_id == task_config_id,
+                        ScheduleEvent.created_at >= start_time
+                    )
+                )
+                .group_by(ScheduleEvent.event_type)
+            )
+            
+            type_stats = {}
+            for event_type, count in type_result.all():
+                type_stats[event_type.value] = count
+            
+            # 成功率
+            success_count = type_stats.get("executed", 0)
+            success_rate = (success_count / total_events * 100) if total_events > 0 else 0.0
+            
+            # 错误率
+            error_count = type_stats.get("error", 0) + type_stats.get("missed", 0)
+            error_rate = (error_count / total_events * 100) if total_events > 0 else 0.0
+            
+            return {
+                "task_config_id": task_config_id,
+                "period_days": days,
+                "total_events": total_events,
+                "type_breakdown": type_stats,
+                "success_rate": success_rate,
+                "error_rate": error_rate,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            raise DatabaseError(f"获取任务配置 {task_config_id} 的统计数据时出错: {str(e)}")
 
 
 # 全局CRUD实例

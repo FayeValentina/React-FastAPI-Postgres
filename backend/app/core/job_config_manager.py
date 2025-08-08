@@ -45,12 +45,19 @@ class JobConfigManager:
                 from app.schemas.task_config import TaskConfigCreate
                 from app.core.task_type import TaskType
                 
+                # 从schedule_config中提取scheduler_type
+                scheduler_type_value = None
+                if schedule_config and 'scheduler_type' in schedule_config:
+                    from app.core.task_type import SchedulerType
+                    scheduler_type_value = SchedulerType(schedule_config['scheduler_type'])
+                
                 config_data = TaskConfigCreate(
                     name=name,
                     task_type=TaskType(task_type),
+                    scheduler_type=scheduler_type_value,
                     description=description,
                     parameters=task_params or {},
-                    schedule_config=schedule_config,
+                    schedule_config=schedule_config or {},
                     **kwargs
                 )
                 

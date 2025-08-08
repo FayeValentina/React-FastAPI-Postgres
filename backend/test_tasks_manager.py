@@ -222,7 +222,7 @@ async def test_task_dispatcher():
         
         # 测试2: 检查特定任务类型支持
         logger.info("测试2: 检查特定任务类型支持")
-        for task_type in ['bot_scraping', 'cleanup_sessions', 'unknown_task']:
+        for task_type in ['unknown_task']:
             supported = dispatcher.is_task_type_supported(task_type)
             status = "✓" if supported else "○"
             logger.info(f"{status} 任务类型 '{task_type}' 支持状态: {supported}")

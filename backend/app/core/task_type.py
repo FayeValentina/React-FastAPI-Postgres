@@ -13,7 +13,6 @@ class TaskType(str, PyEnum):
     BATCH_SCRAPING = "batch_scraping"       # 批量爬取任务
     
     # === 清理相关任务 ===
-    CLEANUP_SESSIONS = "cleanup_sessions"   # 清理过期会话
     CLEANUP_TOKENS = "cleanup_tokens"       # 清理过期令牌  
     CLEANUP_CONTENT = "cleanup_content"     # 清理过期内容
     CLEANUP_EVENTS = "cleanup_events"       # 清理调度事件
