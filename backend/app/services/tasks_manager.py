@@ -113,9 +113,10 @@ class TaskManager:
             # Note: The scheduler_type parameter was added here in a previous step,
             # but it was missing from the job_config_manager.create_config call.
             # This is now corrected.
+            task_type_str = task_type.value if hasattr(task_type, 'value') else str(task_type)
             config_id = await job_config_manager.create_config(
                 name=name,
-                task_type=task_type,
+                task_type=task_type_str,
                 scheduler_type=scheduler_type,
                 description=description,
                 parameters=parameters or {},

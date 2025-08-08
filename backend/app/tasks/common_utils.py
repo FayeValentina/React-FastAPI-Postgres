@@ -21,11 +21,14 @@ def run_async_task(coro):
     return loop.run_until_complete(coro)
 
 
+from typing import Optional
+
 async def record_task_execution(
     task_id: str,
     job_name: str,
     start_time: datetime,
     status: ExecutionStatus,
+    task_config_id: Optional[int] = None,  # 添加此参数
     result=None,
     error=None
 ):
@@ -33,6 +36,7 @@ async def record_task_execution(
     try:
         async with AsyncSessionLocal() as db:
             execution = TaskExecution(
+                task_config_id=task_config_id,  # 添加此字段
                 job_id=task_id,
                 job_name=job_name,
                 status=status,
