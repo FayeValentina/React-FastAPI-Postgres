@@ -100,6 +100,7 @@ class TaskManager:
         self,
         name: str,
         task_type: Union[str, TaskType],
+        scheduler_type: str,
         description: str = None,
         parameters: Dict[str, Any] = None,
         schedule_config: Dict[str, Any] = None,
@@ -107,22 +108,12 @@ class TaskManager:
     ) -> Optional[int]:
         """
         创建新的任务配置
-
-        Args:
-            name: 任务名称
-            task_type: 任务类型
-            description: 任务描述
-            task_params: 任务参数
-            schedule_config: 调度配置
-            **kwargs: 其他配置参数（优先级、超时、重试等）
-
-        Returns:
-            Optional[int]: 创建的配置ID，失败时返回None
         """
         try:
             config_id = await job_config_manager.create_config(
                 name=name,
                 task_type=task_type,
+                scheduler_type=scheduler_type,
                 description=description,
                 parameters=parameters or {},
                 schedule_config=schedule_config,
@@ -145,13 +136,6 @@ class TaskManager:
     ) -> bool:
         """
         更新任务配置
-
-        Args:
-            config_id: 配置ID
-            updates: 要更新的字段
-
-        Returns:
-            bool: 更新是否成功
         """
         try:
             success = await job_config_manager.update_config(config_id, updates)
@@ -170,12 +154,6 @@ class TaskManager:
     async def delete_task_config(self, config_id: int) -> bool:
         """
         删除任务配置
-
-        Args:
-            config_id: 配置ID
-
-        Returns:
-            bool: 删除是否成功
         """
         try:
             # 先停止调度
@@ -208,13 +186,6 @@ class TaskManager:
     ) -> List[Dict[str, Any]]:
         """
         列出任务配置
-
-        Args:
-            task_type: 任务类型过滤
-            status: 状态过滤
-
-        Returns:
-            List[Dict]: 任务配置列表
         """
         try:
             if task_type:
@@ -231,12 +202,6 @@ class TaskManager:
     async def start_scheduled_task(self, config_id: int) -> bool:
         """
         启动任务调度
-
-        Args:
-            config_id: 任务配置ID
-
-        Returns:
-            bool: 启动是否成功
         """
         try:
             # 从数据库重新加载任务配置并启动调度
@@ -254,12 +219,6 @@ class TaskManager:
     def stop_scheduled_task(self, config_id: int) -> bool:
         """
         停止任务调度
-
-        Args:
-            config_id: 任务配置ID
-
-        Returns:
-            bool: 停止是否成功
         """
         try:
             success = scheduler.remove_task_by_config_id(config_id)
@@ -276,12 +235,6 @@ class TaskManager:
     def pause_scheduled_task(self, config_id: int) -> bool:
         """
         暂停任务调度
-
-        Args:
-            config_id: 任务配置ID
-
-        Returns:
-            bool: 暂停是否成功
         """
         try:
             success = scheduler.pause_job(str(config_id))
@@ -298,12 +251,6 @@ class TaskManager:
     def resume_scheduled_task(self, config_id: int) -> bool:
         """
         恢复任务调度
-
-        Args:
-            config_id: 任务配置ID
-
-        Returns:
-            bool: 恢复是否成功
         """
         try:
             success = scheduler.resume_job(str(config_id))
@@ -320,12 +267,6 @@ class TaskManager:
     async def reload_scheduled_task(self, config_id: int) -> bool:
         """
         重新加载任务调度（用于配置更新后刷新调度）
-
-        Args:
-            config_id: 任务配置ID
-
-        Returns:
-            bool: 重载是否成功
         """
         try:
             success = await scheduler.reload_task_from_database(config_id, execute_scheduled_task)
@@ -348,13 +289,6 @@ class TaskManager:
     ) -> Optional[str]:
         """
         立即执行单个任务
-
-        Args:
-            config_id: 任务配置ID
-            **options: 执行选项
-
-        Returns:
-            Optional[str]: Celery任务ID，失败时返回None
         """
         try:
             task_id = await task_dispatcher.dispatch_by_config_id(config_id, **options)
@@ -372,13 +306,6 @@ class TaskManager:
     ) -> List[str]:
         """
         批量立即执行多个任务
-
-        Args:
-            config_ids: 任务配置ID列表
-            **options: 执行选项
-
-        Returns:
-            List[str]: 成功执行的Celery任务ID列表
         """
         try:
             task_ids = await task_dispatcher.dispatch_multiple_configs(config_ids, **options)
@@ -396,13 +323,6 @@ class TaskManager:
     ) -> List[str]:
         """
         按任务类型批量执行所有活跃任务
-
-        Args:
-            task_type: 任务类型
-            **options: 执行选项
-
-        Returns:
-            List[str]: 成功执行的Celery任务ID列表
         """
         try:
             task_ids = await task_dispatcher.dispatch_by_task_type_batch(task_type, **options)
@@ -499,12 +419,6 @@ class TaskManager:
     async def get_task_health_report(self, config_id: int = None) -> Dict[str, Any]:
         """
         获取任务健康度报告
-
-        Args:
-            config_id: 指定任务配置ID，None时获取全局报告
-
-        Returns:
-            Dict: 健康度报告
         """
         try:
             from app.db.base import AsyncSessionLocal
@@ -518,11 +432,8 @@ class TaskManager:
                     if not config:
                         return {"error": f"任务配置不存在: {config_id}"}
 
-                    # 获取调度事件统计
-                    schedule_stats = await crud_schedule_event.get_stats_by_config(db, config_id)
-
-                    # 获取执行统计
-                    execution_stats = await crud_task_execution.get_stats_by_config(db, config_id)
+                    schedule_stats = await crud_schedule_event.get_events_stats(db, config_id)
+                    execution_stats = await crud_task_execution.get_execution_stats(db, config_id)
 
                     return {
                         "config_id": config_id,
@@ -537,11 +448,9 @@ class TaskManager:
                     # 全局健康度报告
                     all_configs = await job_config_manager.get_all_configs()
 
-                    # 统计概览
                     total_configs = len(all_configs)
                     active_configs = len([c for c in all_configs if c.get('status') == TaskStatus.ACTIVE.value])
 
-                    # 按类型统计
                     type_stats = {}
                     for config in all_configs:
                         task_type = config.get('task_type', 'unknown')
@@ -551,9 +460,8 @@ class TaskManager:
                         if config.get('status') == 'active':
                             type_stats[task_type]['active'] += 1
 
-                    # 获取全局执行统计
-                    global_execution_stats = await crud_task_execution.get_global_stats(db)
-                    global_schedule_stats = await crud_schedule_event.get_global_stats(db)
+                    global_execution_stats = await crud_task_execution.get_execution_stats(db)
+                    global_schedule_stats = await crud_schedule_event.get_events_stats(db)
 
                     return {
                         "total_configs": total_configs,
@@ -576,14 +484,6 @@ class TaskManager:
     ) -> List[Dict[str, Any]]:
         """
         获取任务执行历史
-
-        Args:
-            config_id: 任务配置ID，None时获取全部
-            limit: 返回记录数量限制
-            status_filter: 状态过滤
-
-        Returns:
-            List[Dict]: 执行历史列表
         """
         try:
             from app.db.base import AsyncSessionLocal
@@ -591,7 +491,7 @@ class TaskManager:
 
             async with AsyncSessionLocal() as db:
                 if config_id:
-                    executions = await crud_task_execution.get_by_config_id(
+                    executions = await crud_task_execution.get_executions_by_config(
                         db,
                         task_config_id=config_id,
                         limit=limit
@@ -604,7 +504,6 @@ class TaskManager:
 
                 result = []
                 for execution in executions:
-                    # 过滤状态
                     if status_filter and execution.status.value != status_filter:
                         continue
 
@@ -635,14 +534,6 @@ class TaskManager:
     ) -> List[Dict[str, Any]]:
         """
         获取任务调度事件
-
-        Args:
-            config_id: 任务配置ID，None时获取全部
-            limit: 返回记录数量限制
-            event_type_filter: 事件类型过滤
-
-        Returns:
-            List[Dict]: 调度事件列表
         """
         try:
             from app.db.base import AsyncSessionLocal
@@ -650,7 +541,7 @@ class TaskManager:
 
             async with AsyncSessionLocal() as db:
                 if config_id:
-                    events = await crud_schedule_event.get_by_config_id(
+                    events = await crud_schedule_event.get_events_by_config(
                         db,
                         task_config_id=config_id,
                         limit=limit
@@ -663,7 +554,6 @@ class TaskManager:
 
                 result = []
                 for event in events:
-                    # 过滤事件类型
                     if event_type_filter and event.event_type.value != event_type_filter:
                         continue
 
