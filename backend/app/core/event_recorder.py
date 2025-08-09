@@ -85,7 +85,7 @@ class EventRecorder:
                 if task_config_id is not None:
                     event_data['task_config_id'] = task_config_id
                 
-                await crud_schedule_event.create_for_config(
+                await crud_schedule_event.create(
                     db=db,
                     task_config_id=task_config_id,
                     **event_data
@@ -172,7 +172,7 @@ class EventRecorder:
                 if task_config_id is not None:
                     execution_data['task_config_id'] = task_config_id
                 
-                await crud_task_execution.create_for_config(
+                await crud_task_execution.create(
                     db=db,
                     task_config_id=task_config_id,
                     **execution_data
