@@ -272,6 +272,55 @@ class TaskManager:
             logger.error(f"立即执行任务失败 {config_id}: {e}")
             return None
     
+    async def execute_task_by_type(
+        self,
+        task_type: str,
+        task_params: Dict = None,
+        queue: str = 'default',
+        **options
+    ) -> Optional[str]:
+        """根据任务类型直接执行任务（不使用数据库配置）"""
+        try:
+            task_id = await self.dispatcher.dispatch_by_task_type(
+                task_type=task_type,
+                task_params=task_params,
+                queue=queue,
+                **options
+            )
+            logger.info(f"已执行 {task_type} 类型任务，任务ID: {task_id}")
+            return task_id
+        except Exception as e:
+            logger.error(f"执行 {task_type} 类型任务失败: {e}")
+            return None
+    
+    async def execute_multiple_configs(
+        self,
+        config_ids: List[int],
+        **options
+    ) -> List[str]:
+        """批量执行多个任务配置"""
+        try:
+            task_ids = await self.dispatcher.dispatch_multiple_configs(config_ids, **options)
+            logger.info(f"已批量执行 {len(config_ids)} 个任务配置，成功: {len(task_ids)}")
+            return task_ids
+        except Exception as e:
+            logger.error(f"批量执行任务配置失败: {e}")
+            return []
+    
+    async def execute_batch_by_task_type(
+        self,
+        task_type: str,
+        **options
+    ) -> List[str]:
+        """批量执行指定类型的所有活跃任务配置"""
+        try:
+            task_ids = await self.dispatcher.dispatch_by_task_type_batch(task_type, **options)
+            logger.info(f"已批量执行 {task_type} 类型任务，成功: {len(task_ids)}")
+            return task_ids
+        except Exception as e:
+            logger.error(f"批量执行 {task_type} 类型任务失败: {e}")
+            return []
+    
     def get_scheduled_jobs(self) -> List[Dict[str, Any]]:
         """获取所有调度中的任务"""
         try:
@@ -293,6 +342,32 @@ class TaskManager:
         except Exception as e:
             logger.error(f"获取调度任务列表失败: {e}")
             return []
+    
+    # === 任务状态和队列管理 ===
+    
+    def get_task_status(self, task_id: str) -> Dict[str, Any]:
+        """获取任务状态"""
+        return self.dispatcher.get_task_status(task_id)
+    
+    def get_queue_length(self, queue_name: str) -> int:
+        """获取队列长度"""
+        return self.dispatcher.get_queue_length(queue_name)
+    
+    def revoke_task(self, task_id: str, terminate: bool = False) -> Dict[str, Any]:
+        """撤销任务"""
+        return self.dispatcher.revoke_task(task_id, terminate)
+    
+    def get_active_tasks(self) -> List[Dict[str, Any]]:
+        """获取活跃任务列表"""
+        return self.dispatcher.get_active_tasks()
+    
+    def get_supported_task_types(self) -> Dict[str, str]:
+        """获取支持的任务类型映射"""
+        return self.dispatcher.get_supported_task_types()
+    
+    def is_task_type_supported(self, task_type: str) -> bool:
+        """检查是否支持指定的任务类型"""
+        return self.dispatcher.is_task_type_supported(task_type)
     
     # === 系统管理 ===
     

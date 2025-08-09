@@ -408,22 +408,70 @@ class TasksManagerTester:
                 f"异常: {e}"
             )
         
-        # 注意: 新架构中移除了一些批量操作方法，跳过这些测试
-        results['execute_multiple'] = self.print_test_result(
-            "批量执行多个任务",
-            True,
-            "已跳过 - 新架构中方法已简化"
-        )
-        
-        results['execute_by_type'] = self.print_test_result(
-            "按类型批量执行任务", 
-            True,
-            "已跳过 - 新架构中方法已简化"
-        )
-        
-        # 测试2: 获取活跃的任务 (使用dispatcher)
+        # 测试2: 根据任务类型直接执行任务
         try:
-            active_tasks = self.task_manager.dispatcher.get_active_tasks()
+            from app.core.task_registry import TaskType
+            task_id = await self.task_manager.execute_task_by_type(
+                task_type=TaskType.CLEANUP_TOKENS.value,
+                task_params={"days_old": 7},
+                queue='default'
+            )
+            results['execute_by_type'] = self.print_test_result(
+                "根据任务类型直接执行任务",
+                task_id is not None,
+                f"任务ID: {task_id}" if task_id else "无任务ID返回"
+            )
+        except Exception as e:
+            results['execute_by_type'] = self.print_test_result(
+                "根据任务类型直接执行任务",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试3: 批量执行多个任务配置
+        if len(self.created_config_ids) >= 2:
+            try:
+                task_ids = await self.task_manager.execute_multiple_configs(
+                    config_ids=self.created_config_ids[:2]  # 执行前两个配置
+                )
+                results['execute_multiple_configs'] = self.print_test_result(
+                    "批量执行多个任务配置",
+                    isinstance(task_ids, list) and len(task_ids) > 0,
+                    f"执行了 {len(task_ids)} 个任务" if isinstance(task_ids, list) else "返回结果异常"
+                )
+            except Exception as e:
+                results['execute_multiple_configs'] = self.print_test_result(
+                    "批量执行多个任务配置",
+                    False,
+                    f"异常: {e}"
+                )
+        else:
+            results['execute_multiple_configs'] = self.print_test_result(
+                "批量执行多个任务配置",
+                True,
+                "跳过 - 测试配置数量不足"
+            )
+        
+        # 测试4: 批量执行指定类型的所有活跃任务配置
+        try:
+            task_ids = await self.task_manager.execute_batch_by_task_type(
+                task_type=TaskType.CLEANUP_TOKENS.value
+            )
+            results['execute_batch_by_type'] = self.print_test_result(
+                "批量执行指定类型的所有活跃任务配置",
+                isinstance(task_ids, list),
+                f"执行了 {len(task_ids)} 个任务" if isinstance(task_ids, list) else "返回结果异常"
+            )
+        except Exception as e:
+            results['execute_batch_by_type'] = self.print_test_result(
+                "批量执行指定类型的所有活跃任务配置",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试5: 获取活跃的任务 (现在通过TaskManager方法调用)
+        try:
+            active_tasks = self.task_manager.get_active_tasks()
             results['get_active_tasks'] = self.print_test_result(
                 "获取活跃的Celery任务",
                 isinstance(active_tasks, list),
@@ -436,7 +484,278 @@ class TasksManagerTester:
                 f"异常: {e}"
             )
         
+        # 测试6: 获取任务状态 (如果有task_id的话)
+        test_task_id = "test-task-id-123"  # 模拟任务ID
+        try:
+            task_status = self.task_manager.get_task_status(test_task_id)
+            results['get_task_status'] = self.print_test_result(
+                "获取任务状态",
+                isinstance(task_status, dict) and 'task_id' in task_status,
+                f"状态: {task_status.get('status', 'unknown')}" if isinstance(task_status, dict) else "返回结果异常"
+            )
+        except Exception as e:
+            results['get_task_status'] = self.print_test_result(
+                "获取任务状态",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试7: 获取队列长度
+        try:
+            queue_length = self.task_manager.get_queue_length('default')
+            results['get_queue_length'] = self.print_test_result(
+                "获取队列长度",
+                isinstance(queue_length, int),
+                f"default队列长度: {queue_length}" if isinstance(queue_length, int) else "返回结果异常"
+            )
+        except Exception as e:
+            results['get_queue_length'] = self.print_test_result(
+                "获取队列长度",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试8: 获取支持的任务类型
+        try:
+            task_types = self.task_manager.get_supported_task_types()
+            results['get_supported_task_types'] = self.print_test_result(
+                "获取支持的任务类型",
+                isinstance(task_types, dict) and len(task_types) > 0,
+                f"支持 {len(task_types)} 种任务类型" if isinstance(task_types, dict) else "返回结果异常"
+            )
+            
+            # 打印支持的任务类型
+            if isinstance(task_types, dict):
+                logger.info("  📋 支持的任务类型:")
+                for task_type, description in task_types.items():
+                    logger.info(f"    {task_type}: {description}")
+                    
+        except Exception as e:
+            results['get_supported_task_types'] = self.print_test_result(
+                "获取支持的任务类型",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试9: 检查任务类型支持情况
+        try:
+            from app.core.task_registry import TaskType
+            is_supported = self.task_manager.is_task_type_supported(TaskType.CLEANUP_TOKENS.value)
+            results['is_task_type_supported'] = self.print_test_result(
+                "检查任务类型支持情况",
+                isinstance(is_supported, bool),
+                f"CLEANUP_TOKENS 支持: {is_supported}" if isinstance(is_supported, bool) else "返回结果异常"
+            )
+        except Exception as e:
+            results['is_task_type_supported'] = self.print_test_result(
+                "检查任务类型支持情况",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试10: 撤销任务 (使用模拟任务ID)
+        try:
+            revoke_result = self.task_manager.revoke_task(test_task_id, terminate=False)
+            results['revoke_task'] = self.print_test_result(
+                "撤销任务",
+                isinstance(revoke_result, dict) and 'task_id' in revoke_result,
+                f"撤销结果: {revoke_result.get('revoked', 'unknown')}" if isinstance(revoke_result, dict) else "返回结果异常"
+            )
+        except Exception as e:
+            results['revoke_task'] = self.print_test_result(
+                "撤销任务",
+                False,
+                f"异常: {e}"
+            )
+        
         self.test_results['batch_operations'] = results
+        return results
+    
+    # ================== 新增任务管理方法功能测试 ==================
+    
+    async def test_new_task_management_methods(self):
+        """测试新增的任务管理方法功能"""
+        self.print_section_header("新增任务管理方法功能测试")
+        results = {}
+        
+        # 测试1: 测试执行任务类型相关的方法
+        try:
+            from app.core.task_registry import TaskType
+            
+            # 测试 execute_task_by_type 方法 - 使用实际的任务类型
+            task_id = await self.task_manager.execute_task_by_type(
+                task_type=TaskType.CLEANUP_TOKENS.value,
+                task_params={"days_old": 30, "test_mode": True},
+                queue='test_queue',
+                countdown=10
+            )
+            results['execute_task_by_type_detailed'] = self.print_test_result(
+                "execute_task_by_type 详细测试",
+                task_id is not None,
+                f"任务ID: {task_id}" if task_id else "无任务ID返回"
+            )
+        except Exception as e:
+            results['execute_task_by_type_detailed'] = self.print_test_result(
+                "execute_task_by_type 详细测试",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试2: 测试批量执行方法 - execute_multiple_configs
+        if len(self.created_config_ids) >= 3:
+            try:
+                selected_config_ids = self.created_config_ids[:3]
+                task_ids = await self.task_manager.execute_multiple_configs(
+                    config_ids=selected_config_ids,
+                    countdown=5
+                )
+                results['execute_multiple_configs_detailed'] = self.print_test_result(
+                    "execute_multiple_configs 详细测试",
+                    isinstance(task_ids, list),
+                    f"批量执行 {len(selected_config_ids)} 个配置，返回 {len(task_ids)} 个任务ID" if isinstance(task_ids, list) else "返回结果异常"
+                )
+            except Exception as e:
+                results['execute_multiple_configs_detailed'] = self.print_test_result(
+                    "execute_multiple_configs 详细测试",
+                    False,
+                    f"异常: {e}"
+                )
+        else:
+            results['execute_multiple_configs_detailed'] = self.print_test_result(
+                "execute_multiple_configs 详细测试",
+                True,
+                "跳过 - 测试配置数量不足"
+            )
+        
+        # 测试3: 测试批量执行指定类型任务 - execute_batch_by_task_type
+        try:
+            task_ids = await self.task_manager.execute_batch_by_task_type(
+                task_type=TaskType.CLEANUP_TOKENS.value,
+                countdown=15
+            )
+            results['execute_batch_by_task_type_detailed'] = self.print_test_result(
+                "execute_batch_by_task_type 详细测试",
+                isinstance(task_ids, list),
+                f"批量执行 CLEANUP_TOKENS 类型任务，返回 {len(task_ids)} 个任务ID" if isinstance(task_ids, list) else "返回结果异常"
+            )
+        except Exception as e:
+            results['execute_batch_by_task_type_detailed'] = self.print_test_result(
+                "execute_batch_by_task_type 详细测试",
+                False,
+                f"异常: {e}"
+            )
+        
+        # 测试4: 测试任务状态管理方法
+        test_task_ids = ["test-task-001", "test-task-002", "test-task-003"]
+        
+        for i, task_id in enumerate(test_task_ids, 1):
+            try:
+                # 测试 get_task_status
+                status = self.task_manager.get_task_status(task_id)
+                results[f'get_task_status_{i}'] = self.print_test_result(
+                    f"get_task_status 测试 {i}",
+                    isinstance(status, dict) and 'task_id' in status,
+                    f"任务 {task_id} 状态: {status.get('status')}" if isinstance(status, dict) else "状态获取异常"
+                )
+            except Exception as e:
+                results[f'get_task_status_{i}'] = self.print_test_result(
+                    f"get_task_status 测试 {i}",
+                    False,
+                    f"异常: {e}"
+                )
+        
+        # 测试5: 测试队列管理方法
+        test_queues = ['default', 'high_priority', 'low_priority']
+        
+        for queue in test_queues:
+            try:
+                length = self.task_manager.get_queue_length(queue)
+                results[f'queue_length_{queue}'] = self.print_test_result(
+                    f"get_queue_length 测试 ({queue})",
+                    isinstance(length, int) and length >= -1,  # -1 表示错误但仍是有效返回
+                    f"队列 {queue} 长度: {length}"
+                )
+            except Exception as e:
+                results[f'queue_length_{queue}'] = self.print_test_result(
+                    f"get_queue_length 测试 ({queue})",
+                    False,
+                    f"异常: {e}"
+                )
+        
+        # 测试6: 测试任务类型支持检查
+        test_task_types = [
+            TaskType.CLEANUP_TOKENS.value,
+            TaskType.SEND_EMAIL.value,
+            "invalid_task_type",
+            "another_invalid_type"
+        ]
+        
+        for task_type in test_task_types:
+            try:
+                is_supported = self.task_manager.is_task_type_supported(task_type)
+                expected = task_type in [t.value for t in TaskType]
+                results[f'task_type_support_{task_type}'] = self.print_test_result(
+                    f"is_task_type_supported ({task_type})",
+                    isinstance(is_supported, bool),
+                    f"支持状态: {is_supported} (预期: {expected})"
+                )
+            except Exception as e:
+                results[f'task_type_support_{task_type}'] = self.print_test_result(
+                    f"is_task_type_supported ({task_type})",
+                    False,
+                    f"异常: {e}"
+                )
+        
+        # 测试7: 测试撤销任务功能
+        for i, task_id in enumerate(test_task_ids[:2], 1):  # 只测试前两个
+            try:
+                # 测试不终止的撤销
+                revoke_result = self.task_manager.revoke_task(task_id, terminate=False)
+                results[f'revoke_task_{i}'] = self.print_test_result(
+                    f"revoke_task 测试 {i} (不终止)",
+                    isinstance(revoke_result, dict) and 'task_id' in revoke_result,
+                    f"撤销任务 {task_id}: {revoke_result.get('revoked')}" if isinstance(revoke_result, dict) else "撤销结果异常"
+                )
+            except Exception as e:
+                results[f'revoke_task_{i}'] = self.print_test_result(
+                    f"revoke_task 测试 {i} (不终止)",
+                    False,
+                    f"异常: {e}"
+                )
+        
+        # 测试8: 测试获取支持的任务类型（详细测试）
+        try:
+            supported_types = self.task_manager.get_supported_task_types()
+            is_valid = (
+                isinstance(supported_types, dict) and 
+                len(supported_types) > 0 and
+                all(isinstance(k, str) and isinstance(v, str) for k, v in supported_types.items())
+            )
+            results['get_supported_task_types_detailed'] = self.print_test_result(
+                "get_supported_task_types 详细测试",
+                is_valid,
+                f"获取到 {len(supported_types)} 种支持的任务类型，格式正确" if is_valid else "返回格式异常"
+            )
+            
+            # 验证关键任务类型是否存在
+            expected_types = [TaskType.CLEANUP_TOKENS.value, TaskType.SEND_EMAIL.value]
+            for expected_type in expected_types:
+                if isinstance(supported_types, dict):
+                    has_type = expected_type in supported_types
+                    results[f'has_task_type_{expected_type}'] = self.print_test_result(
+                        f"检查任务类型 {expected_type} 存在性",
+                        has_type,
+                        f"类型 {expected_type} {'存在' if has_type else '不存在'}"
+                    )
+                    
+        except Exception as e:
+            results['get_supported_task_types_detailed'] = self.print_test_result(
+                "get_supported_task_types 详细测试",
+                False,
+                f"异常: {e}"
+            )
+        
+        self.test_results['new_methods'] = results
         return results
     
     # ================== 任务健康度和统计功能测试 ==================
@@ -608,6 +927,9 @@ async def main():
         await asyncio.sleep(1)
         
         await tester.test_batch_operations()
+        await asyncio.sleep(1)
+        
+        await tester.test_new_task_management_methods()
         await asyncio.sleep(1)
         
         await tester.test_health_statistics()
