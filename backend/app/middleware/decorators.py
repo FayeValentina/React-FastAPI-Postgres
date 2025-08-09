@@ -100,8 +100,12 @@ def record_task_execution(task_name: str = None):
             
             # 获取Celery任务ID
             task_id = None
-            if hasattr(wrapper, 'request'):
-                task_id = wrapper.request.id
+            try:
+                from celery import current_task
+                if current_task and hasattr(current_task, 'request'):
+                    task_id = current_task.request.id
+            except ImportError:
+                pass
             
             job_name = task_name or func.__name__
             

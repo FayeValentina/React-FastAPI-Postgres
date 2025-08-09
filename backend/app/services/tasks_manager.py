@@ -15,6 +15,7 @@ from app.crud.task_execution import crud_task_execution
 from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate
 from app.models.schedule_event import ScheduleEventType
 from app.db.base import AsyncSessionLocal
+from app.middleware.decorators import record_schedule_event
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class TaskManager:
     
     def _on_job_executed(self, event):
         """任务执行成功事件处理"""
-        asyncio.create_task(self._record_event(
+        asyncio.create_task(self._record_event_async(
             job_id=event.job_id,
             event_type=ScheduleEventType.EXECUTED,
             result={'retval': str(event.retval) if hasattr(event, 'retval') else None}
@@ -56,7 +57,7 @@ class TaskManager:
     
     def _on_job_error(self, event):
         """任务执行错误事件处理"""
-        asyncio.create_task(self._record_event(
+        asyncio.create_task(self._record_event_async(
             job_id=event.job_id,
             event_type=ScheduleEventType.ERROR,
             error_message=str(event.exception),
@@ -65,12 +66,12 @@ class TaskManager:
     
     def _on_job_missed(self, event):
         """任务错过执行事件处理"""
-        asyncio.create_task(self._record_event(
+        asyncio.create_task(self._record_event_async(
             job_id=event.job_id,
             event_type=ScheduleEventType.MISSED
         ))
     
-    async def _record_event(
+    async def _record_event_async(
         self,
         job_id: str,
         event_type: ScheduleEventType,
@@ -78,7 +79,7 @@ class TaskManager:
         error_message: Optional[str] = None,
         error_traceback: Optional[str] = None
     ):
-        """内部方法：记录调度事件"""
+        """异步记录调度事件"""
         try:
             # 解析task_config_id
             task_config_id = None
@@ -100,6 +101,7 @@ class TaskManager:
                 )
         except Exception as e:
             logger.error(f"记录调度事件失败: {e}")
+    
     
     # === 任务配置管理功能 ===
     
