@@ -10,6 +10,9 @@ import sys
 import os
 from datetime import datetime, timedelta
 
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # 设置日志
 logging.basicConfig(
     level=logging.INFO,

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name='cleanup_expired_tokens_task')
-def cleanup_expired_tokens_task(self, task_config_id: int, days_old: int = 7) -> Dict[str, Any]:
+def cleanup_expired_tokens_task(self, task_config_id: int, *, days_old: int = 7) -> Dict[str, Any]:
     """清理过期令牌任务"""
     start_time = datetime.utcnow()
     task_id = self.request.id
@@ -57,7 +57,7 @@ def cleanup_expired_tokens_task(self, task_config_id: int, days_old: int = 7) ->
 
 
 @celery_app.task(bind=True, name='cleanup_old_content_task')
-def cleanup_old_content_task(self, task_config_id: int, days_old: int = 90) -> Dict[str, Any]:
+def cleanup_old_content_task(self, task_config_id: int, *, days_old: int = 90) -> Dict[str, Any]:
     """清理旧Reddit内容任务"""
     start_time = datetime.utcnow()
     task_id = self.request.id
@@ -96,7 +96,7 @@ def cleanup_old_content_task(self, task_config_id: int, days_old: int = 90) -> D
 
 
 @celery_app.task(bind=True, name='cleanup_schedule_events_task')
-def cleanup_schedule_events_task(self, task_config_id: int, days_old: int = 30) -> Dict[str, Any]:
+def cleanup_schedule_events_task(self, task_config_id: int, *, days_old: int = 30) -> Dict[str, Any]:
     """清理旧的调度事件任务"""
     start_time = datetime.utcnow()
     task_id = self.request.id
