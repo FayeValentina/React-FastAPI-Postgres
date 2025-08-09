@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name='cleanup_expired_tokens_task')
-def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
+def cleanup_expired_tokens_task(self, task_config_id: int, days_old: int = 7) -> Dict[str, Any]:
     """清理过期令牌任务"""
     start_time = datetime.utcnow()
     task_id = self.request.id
@@ -32,14 +32,15 @@ def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
                 return {
                     "expired_refresh_tokens": expired_refresh,
                     "expired_reset_tokens": expired_reset,
-                    "total_cleaned": expired_refresh + expired_reset
+                    "total_cleaned": expired_refresh + expired_reset,
+                    "days_old": days_old
                 }
         
         result = run_async_task(_execute())
         
         # 记录成功执行
         run_async_task(record_task_execution(
-            task_id, "清理过期令牌任务", start_time, ExecutionStatus.SUCCESS, result
+            task_id, f"清理过期令牌任务-{days_old}天前 (config_id: {task_config_id})", start_time, ExecutionStatus.SUCCESS, result, None, task_config_id
         ))
         
         logger.info(f"清理过期令牌完成: {result}")
@@ -48,7 +49,7 @@ def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
     except Exception as exc:
         # 记录失败执行
         run_async_task(record_task_execution(
-            task_id, "清理过期令牌任务", start_time, ExecutionStatus.FAILED, error=exc
+            task_id, f"清理过期令牌任务-{days_old}天前 (config_id: {task_config_id})", start_time, ExecutionStatus.FAILED, None, exc, task_config_id
         ))
         
         logger.error(f"清理过期令牌失败: {exc}")
@@ -56,7 +57,7 @@ def cleanup_expired_tokens_task(self) -> Dict[str, Any]:
 
 
 @celery_app.task(bind=True, name='cleanup_old_content_task')
-def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
+def cleanup_old_content_task(self, task_config_id: int, days_old: int = 90) -> Dict[str, Any]:
     """清理旧Reddit内容任务"""
     start_time = datetime.utcnow()
     task_id = self.request.id
@@ -78,7 +79,7 @@ def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
         
         # 记录成功执行
         run_async_task(record_task_execution(
-            task_id, f"清理旧内容任务-{days_old}天前", start_time, ExecutionStatus.SUCCESS, result
+            task_id, f"清理旧内容任务-{days_old}天前 (config_id: {task_config_id})", start_time, ExecutionStatus.SUCCESS, result, None, task_config_id
         ))
         
         logger.info(f"清理旧内容完成: {result}")
@@ -87,7 +88,7 @@ def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
     except Exception as exc:
         # 记录失败执行
         run_async_task(record_task_execution(
-            task_id, f"清理旧内容任务-{days_old}天前", start_time, ExecutionStatus.FAILED, error=exc
+            task_id, f"清理旧内容任务-{days_old}天前 (config_id: {task_config_id})", start_time, ExecutionStatus.FAILED, None, exc, task_config_id
         ))
         
         logger.error(f"清理旧内容失败: {exc}")
@@ -95,7 +96,7 @@ def cleanup_old_content_task(self, days_old: int = 90) -> Dict[str, Any]:
 
 
 @celery_app.task(bind=True, name='cleanup_schedule_events_task')
-def cleanup_schedule_events_task(self, days_old: int = 30) -> Dict[str, Any]:
+def cleanup_schedule_events_task(self, task_config_id: int, days_old: int = 30) -> Dict[str, Any]:
     """清理旧的调度事件任务"""
     start_time = datetime.utcnow()
     task_id = self.request.id
@@ -114,7 +115,7 @@ def cleanup_schedule_events_task(self, days_old: int = 30) -> Dict[str, Any]:
         
         # 记录成功执行
         run_async_task(record_task_execution(
-            task_id, f"清理调度事件任务-{days_old}天前", start_time, ExecutionStatus.SUCCESS, result
+            task_id, f"清理调度事件任务-{days_old}天前 (config_id: {task_config_id})", start_time, ExecutionStatus.SUCCESS, result, None, task_config_id
         ))
         
         logger.info(f"清理调度事件完成: {result}")
@@ -123,7 +124,7 @@ def cleanup_schedule_events_task(self, days_old: int = 30) -> Dict[str, Any]:
     except Exception as exc:
         # 记录失败执行
         run_async_task(record_task_execution(
-            task_id, f"清理调度事件任务-{days_old}天前", start_time, ExecutionStatus.FAILED, error=exc
+            task_id, f"清理调度事件任务-{days_old}天前 (config_id: {task_config_id})", start_time, ExecutionStatus.FAILED, None, exc, task_config_id
         ))
         
         logger.error(f"清理调度事件失败: {exc}")

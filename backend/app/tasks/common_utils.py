@@ -27,12 +27,14 @@ async def record_task_execution(
     start_time: datetime,
     status: ExecutionStatus,
     result=None,
-    error=None
+    error=None,
+    task_config_id=None
 ):
     """记录任务执行到数据库的通用函数"""
     try:
         async with AsyncSessionLocal() as db:
             execution = TaskExecution(
+                task_config_id=task_config_id,
                 job_id=task_id,
                 job_name=job_name,
                 status=status,
