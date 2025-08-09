@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
-from app.core.task_type import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType
 
 
 class TaskConfigBase(BaseModel):

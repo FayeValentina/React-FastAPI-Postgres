@@ -6,11 +6,7 @@ import logging
 from datetime import datetime
 
 from app.db.base import AsyncSessionLocal
-from app.core.task_mapping import (
-    get_celery_task_name, 
-    register_task_type as register_mapping, 
-    is_task_type_supported
-)
+from app.core.task_registry import TaskRegistry, TaskType, get_celery_task_name, get_queue_name
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +96,13 @@ class TaskDispatcher:
             if not config:
                 raise ValueError(f"任务配置不存在: {task_config_id}")
             
-            # 获取对应的Celery任务名称
-            celery_task = get_celery_task_name(config.task_type)
+            # 使用新的TaskRegistry
+            celery_task = TaskRegistry.get_celery_task_name(config.task_type)
+            queue = TaskRegistry.get_queue_name(config.task_type)
             
             # 准备参数
-            args = [task_config_id]  # 总是传递配置ID作为第一个参数
+            args = [task_config_id]
             kwargs = config.parameters or {}
-            
-            # 使用配置中的队列或默认队列
-            queue = config.parameters.get('queue', 'default') if config.parameters else 'default'
             
             return self.dispatch_task(
                 task_name=celery_task,
@@ -138,7 +132,7 @@ class TaskDispatcher:
         Returns:
             task_id: Celery任务ID
         """
-        celery_task = get_celery_task_name(task_type)
+        celery_task = TaskRegistry.get_celery_task_name(TaskType(task_type))
         
         return self.dispatch_task(
             task_name=celery_task,
@@ -193,7 +187,6 @@ class TaskDispatcher:
         """
         async with AsyncSessionLocal() as db:
             from app.crud.task_config import crud_task_config
-            from app.core.task_type import TaskType
             
             # 获取指定类型的所有活跃配置
             configs = await crud_task_config.get_by_type(
@@ -285,23 +278,16 @@ class TaskDispatcher:
     
     # === 任务类型管理 ===
     
-    def register_task_type(
-        self,
-        task_type: str,
-        celery_task: str
-    ):
-        """注册新的任务类型映射"""
-        register_mapping(task_type, celery_task)
-        logger.info(f"已注册任务类型映射: {task_type} -> {celery_task}")
-    
     def get_supported_task_types(self) -> Dict[str, str]:
         """获取支持的任务类型映射"""
-        from app.core.task_mapping import get_all_task_types
-        return get_all_task_types()
+        return TaskRegistry.get_all_task_types()
     
     def is_task_type_supported(self, task_type: str) -> bool:
         """检查是否支持指定的任务类型"""
-        return is_task_type_supported(task_type)
+        try:
+            return TaskRegistry.is_task_supported(TaskType(task_type))
+        except ValueError:
+            return False
 
 
 # 全局任务分发器实例

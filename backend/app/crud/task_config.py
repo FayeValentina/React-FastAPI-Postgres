@@ -8,7 +8,7 @@ from app.models.task_config import TaskConfig
 from app.models.schedule_event import ScheduleEvent
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
-from app.core.task_type import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType
 from app.core.exceptions import (
     DatabaseError,
     ResourceNotFoundError,

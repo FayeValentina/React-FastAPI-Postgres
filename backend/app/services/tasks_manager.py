@@ -1,194 +1,163 @@
 """
-通用任务管理器 - 协调4个核心组件，提供统一的任务管理接口
+任务管理器 - 简化版，直接使用CRUD组件
 """
 import logging
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
+import asyncio
 
 from app.core.scheduler import scheduler
-from app.core.event_recorder import event_recorder
-from app.core.task_dispatcher import task_dispatcher
-from app.core.job_config_manager import job_config_manager
-from app.core.task_type import TaskType, TaskStatus
+from app.core.task_dispatcher import TaskDispatcher
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegistry
+from app.crud.task_config import crud_task_config
+from app.crud.schedule_event import crud_schedule_event
+from app.crud.task_execution import crud_task_execution
 from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate
+from app.models.schedule_event import ScheduleEventType
+from app.db.base import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
 
-# 通用调度任务的包装函数（避免序列化问题）
+# 全局任务执行函数
 async def execute_scheduled_task(task_config_id: int):
     """执行调度任务的通用包装函数"""
+    dispatcher = TaskDispatcher()
     try:
-        return await task_dispatcher.dispatch_by_config_id(task_config_id)
+        return await dispatcher.dispatch_by_config_id(task_config_id)
     except Exception as e:
         logger.error(f"执行调度任务失败 {task_config_id}: {e}")
         raise
 
 
 class TaskManager:
-    """通用任务管理器 - 提供完整的任务生命周期管理"""
+    """任务管理器 - 提供完整的任务生命周期管理"""
     
     def __init__(self):
-        # 设置事件监听器
+        self.scheduler = scheduler
+        self.dispatcher = TaskDispatcher()
         self._setup_event_listeners()
     
     def _setup_event_listeners(self):
         """设置调度器事件监听器"""
         from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
         
-        scheduler.add_event_listener(self._on_job_executed, EVENT_JOB_EXECUTED)
-        scheduler.add_event_listener(self._on_job_error, EVENT_JOB_ERROR)
-        scheduler.add_event_listener(self._on_job_missed, EVENT_JOB_MISSED)
+        self.scheduler.add_event_listener(self._on_job_executed, EVENT_JOB_EXECUTED)
+        self.scheduler.add_event_listener(self._on_job_error, EVENT_JOB_ERROR)
+        self.scheduler.add_event_listener(self._on_job_missed, EVENT_JOB_MISSED)
     
     def _on_job_executed(self, event):
         """任务执行成功事件处理"""
-        # 解析task_config_id
-        try:
-            task_config_id = int(event.job_id)
-        except (ValueError, TypeError):
-            task_config_id = None
-        
-        # 异步记录事件（不阻塞调度器）
-        import asyncio
-        asyncio.create_task(event_recorder.record_schedule_event(
+        asyncio.create_task(self._record_event(
             job_id=event.job_id,
-            event_type='executed',
-            task_config_id=task_config_id,
-            job_name=event.job_id,
-            result=event.retval if hasattr(event, 'retval') else None
+            event_type=ScheduleEventType.EXECUTED,
+            result={'retval': str(event.retval) if hasattr(event, 'retval') else None}
         ))
     
     def _on_job_error(self, event):
         """任务执行错误事件处理"""
-        # 解析task_config_id
-        try:
-            task_config_id = int(event.job_id)
-        except (ValueError, TypeError):
-            task_config_id = None
-        
-        # 异步记录事件
-        import asyncio
-        asyncio.create_task(event_recorder.record_schedule_event(
+        asyncio.create_task(self._record_event(
             job_id=event.job_id,
-            event_type='error',
-            task_config_id=task_config_id,
-            job_name=event.job_id,
+            event_type=ScheduleEventType.ERROR,
             error_message=str(event.exception),
             error_traceback=event.traceback if hasattr(event, 'traceback') else None
         ))
     
     def _on_job_missed(self, event):
         """任务错过执行事件处理"""
-        # 解析task_config_id
-        try:
-            task_config_id = int(event.job_id)
-        except (ValueError, TypeError):
-            task_config_id = None
-        
-        # 异步记录事件
-        import asyncio
-        asyncio.create_task(event_recorder.record_schedule_event(
+        asyncio.create_task(self._record_event(
             job_id=event.job_id,
-            event_type='missed',
-            task_config_id=task_config_id,
-            job_name=event.job_id
+            event_type=ScheduleEventType.MISSED
         ))
+    
+    async def _record_event(
+        self,
+        job_id: str,
+        event_type: ScheduleEventType,
+        result: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None,
+        error_traceback: Optional[str] = None
+    ):
+        """内部方法：记录调度事件"""
+        try:
+            # 解析task_config_id
+            task_config_id = None
+            try:
+                task_config_id = int(job_id)
+            except (ValueError, TypeError):
+                pass
+            
+            async with AsyncSessionLocal() as db:
+                await crud_schedule_event.create(
+                    db,
+                    task_config_id=task_config_id,
+                    job_id=job_id,
+                    job_name=f"Task-{job_id}",
+                    event_type=event_type,
+                    result=result,
+                    error_message=error_message,
+                    error_traceback=error_traceback
+                )
+        except Exception as e:
+            logger.error(f"记录调度事件失败: {e}")
     
     # === 任务配置管理功能 ===
     
-    async def create_task_config(
-        self,
-        name: str,
-        task_type: Union[str, TaskType],
-        description: str = None,
-        task_params: Dict[str, Any] = None,
-        schedule_config: Dict[str, Any] = None,
-        **kwargs
-    ) -> Optional[int]:
-        """
-        创建新的任务配置
-        
-        Args:
-            name: 任务名称
-            task_type: 任务类型
-            description: 任务描述
-            task_params: 任务参数
-            schedule_config: 调度配置
-            **kwargs: 其他配置参数（优先级、超时、重试等）
-            
-        Returns:
-            Optional[int]: 创建的配置ID，失败时返回None
-        """
+    async def create_task_config(self, **kwargs) -> Optional[int]:
+        """创建新的任务配置"""
         try:
-            config_id = await job_config_manager.create_config(
-                name=name,
-                task_type=task_type,
-                description=description,
-                task_params=task_params or {},
-                schedule_config=schedule_config,
-                **kwargs
-            )
-            
-            if config_id:
-                logger.info(f"已创建任务配置: {config_id} - {name}")
-            
-            return config_id
-            
+            async with AsyncSessionLocal() as db:
+                # 确保scheduler_type存在
+                if 'scheduler_type' not in kwargs and 'schedule_config' in kwargs:
+                    schedule_config = kwargs['schedule_config']
+                    if 'scheduler_type' in schedule_config:
+                        kwargs['scheduler_type'] = SchedulerType(schedule_config['scheduler_type'])
+                
+                config_data = TaskConfigCreate(**kwargs)
+                config = await crud_task_config.create(db, obj_in=config_data)
+                logger.info(f"已创建任务配置: {config.id} - {config.name}")
+                return config.id
+                
         except Exception as e:
-            logger.error(f"创建任务配置失败 {name}: {e}")
+            logger.error(f"创建任务配置失败: {e}")
             raise
     
-    async def update_task_config(
-        self,
-        config_id: int,
-        updates: Dict[str, Any]
-    ) -> bool:
-        """
-        更新任务配置
-        
-        Args:
-            config_id: 配置ID
-            updates: 要更新的字段
-            
-        Returns:
-            bool: 更新是否成功
-        """
+    async def update_task_config(self, config_id: int, updates: Dict[str, Any]) -> bool:
+        """更新任务配置"""
         try:
-            success = await job_config_manager.update_config(config_id, updates)
-            
-            if success:
-                logger.info(f"已更新任务配置: {config_id}")
-                # 如果任务正在调度中，重新加载
-                await self.reload_scheduled_task(config_id)
-            
-            return success
-            
+            async with AsyncSessionLocal() as db:
+                config = await crud_task_config.get(db, config_id)
+                if not config:
+                    logger.warning(f"任务配置不存在: {config_id}")
+                    return False
+                
+                update_data = TaskConfigUpdate(**updates)
+                updated_config = await crud_task_config.update(db, db_obj=config, obj_in=update_data)
+                
+                if updated_config:
+                    logger.info(f"已更新任务配置: {config_id}")
+                    # 如果任务正在调度中，重新加载
+                    await self.reload_scheduled_task(config_id)
+                    return True
+                    
+                return False
+                
         except Exception as e:
             logger.error(f"更新任务配置失败 {config_id}: {e}")
             return False
     
     async def delete_task_config(self, config_id: int) -> bool:
-        """
-        删除任务配置
-        
-        Args:
-            config_id: 配置ID
-            
-        Returns:
-            bool: 删除是否成功
-        """
+        """删除任务配置"""
         try:
             # 先停止调度
             self.stop_scheduled_task(config_id)
             
-            # 删除配置
-            success = await job_config_manager.remove_config(config_id)
-            
-            if success:
-                logger.info(f"已删除任务配置: {config_id}")
-            
-            return success
-            
+            async with AsyncSessionLocal() as db:
+                success = await crud_task_config.delete(db, config_id)
+                if success:
+                    logger.info(f"已删除任务配置: {config_id}")
+                return success
+                
         except Exception as e:
             logger.error(f"删除任务配置失败 {config_id}: {e}")
             return False
@@ -196,7 +165,24 @@ class TaskManager:
     async def get_task_config(self, config_id: int) -> Optional[Dict[str, Any]]:
         """获取任务配置详情"""
         try:
-            return await job_config_manager.get_config(config_id)
+            async with AsyncSessionLocal() as db:
+                config = await crud_task_config.get(db, config_id)
+                if config:
+                    return {
+                        'id': config.id,
+                        'name': config.name,
+                        'task_type': config.task_type.value,
+                        'status': config.status.value,
+                        'description': config.description,
+                        'task_params': config.parameters,
+                        'schedule_config': config.schedule_config,
+                        'priority': config.priority,
+                        'max_retries': config.max_retries,
+                        'timeout_seconds': config.timeout_seconds,
+                        'created_at': config.created_at.isoformat() if config.created_at else None,
+                        'updated_at': config.updated_at.isoformat() if config.updated_at else None
+                    }
+                return None
         except Exception as e:
             logger.error(f"获取任务配置失败 {config_id}: {e}")
             return None
@@ -206,21 +192,29 @@ class TaskManager:
         task_type: str = None,
         status: str = None
     ) -> List[Dict[str, Any]]:
-        """
-        列出任务配置
-        
-        Args:
-            task_type: 任务类型过滤
-            status: 状态过滤
-            
-        Returns:
-            List[Dict]: 任务配置列表
-        """
+        """列出任务配置"""
         try:
-            if task_type:
-                return await job_config_manager.get_configs_by_type(task_type)
-            else:
-                return await job_config_manager.get_all_configs()
+            async with AsyncSessionLocal() as db:
+                if task_type:
+                    configs = await crud_task_config.get_by_type(
+                        db,
+                        task_type=TaskType(task_type),
+                        status=TaskStatus(status) if status else None
+                    )
+                else:
+                    configs = await crud_task_config.get_multi(db)
+                
+                return [
+                    {
+                        'id': c.id,
+                        'name': c.name,
+                        'task_type': c.task_type.value,
+                        'status': c.status.value,
+                        'description': c.description,
+                        'priority': c.priority
+                    }
+                    for c in configs
+                ]
                 
         except Exception as e:
             logger.error(f"列出任务配置失败: {e}")
@@ -229,210 +223,59 @@ class TaskManager:
     # === 任务调度管理功能 ===
     
     async def start_scheduled_task(self, config_id: int) -> bool:
-        """
-        启动任务调度
-        
-        Args:
-            config_id: 任务配置ID
-            
-        Returns:
-            bool: 启动是否成功
-        """
+        """启动任务调度"""
         try:
-            # 从数据库重新加载任务配置并启动调度
-            success = await scheduler.reload_task_from_database(config_id, execute_scheduled_task)
-            
+            success = await self.scheduler.reload_task_from_database(config_id, execute_scheduled_task)
             if success:
                 logger.info(f"已启动任务调度: {config_id}")
-            
             return success
-            
         except Exception as e:
             logger.error(f"启动任务调度失败 {config_id}: {e}")
             return False
     
     def stop_scheduled_task(self, config_id: int) -> bool:
-        """
-        停止任务调度
-        
-        Args:
-            config_id: 任务配置ID
-            
-        Returns:
-            bool: 停止是否成功
-        """
+        """停止任务调度"""
         try:
-            success = scheduler.remove_task_by_config_id(config_id)
-            
+            success = self.scheduler.remove_task_by_config_id(config_id)
             if success:
                 logger.info(f"已停止任务调度: {config_id}")
-            
             return success
-            
         except Exception as e:
             logger.error(f"停止任务调度失败 {config_id}: {e}")
             return False
     
     def pause_scheduled_task(self, config_id: int) -> bool:
-        """
-        暂停任务调度
-        
-        Args:
-            config_id: 任务配置ID
-            
-        Returns:
-            bool: 暂停是否成功
-        """
-        try:
-            success = scheduler.pause_job(str(config_id))
-            
-            if success:
-                logger.info(f"已暂停任务调度: {config_id}")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"暂停任务调度失败 {config_id}: {e}")
-            return False
+        """暂停任务调度"""
+        return self.scheduler.pause_job(str(config_id))
     
     def resume_scheduled_task(self, config_id: int) -> bool:
-        """
-        恢复任务调度
-        
-        Args:
-            config_id: 任务配置ID
-            
-        Returns:
-            bool: 恢复是否成功
-        """
-        try:
-            success = scheduler.resume_job(str(config_id))
-            
-            if success:
-                logger.info(f"已恢复任务调度: {config_id}")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"恢复任务调度失败 {config_id}: {e}")
-            return False
+        """恢复任务调度"""
+        return self.scheduler.resume_job(str(config_id))
     
     async def reload_scheduled_task(self, config_id: int) -> bool:
-        """
-        重新加载任务调度（用于配置更新后刷新调度）
-        
-        Args:
-            config_id: 任务配置ID
-            
-        Returns:
-            bool: 重载是否成功
-        """
+        """重新加载任务调度"""
         try:
-            success = await scheduler.reload_task_from_database(config_id, execute_scheduled_task)
-            
-            if success:
-                logger.info(f"已重新加载任务调度: {config_id}")
-            
-            return success
-            
+            return await self.scheduler.reload_task_from_database(config_id, execute_scheduled_task)
         except Exception as e:
             logger.error(f"重新加载任务调度失败 {config_id}: {e}")
             return False
     
-    # === 批量执行和状态监控功能 ===
+    # === 任务执行功能 ===
     
-    async def execute_task_immediately(
-        self,
-        config_id: int,
-        **options
-    ) -> Optional[str]:
-        """
-        立即执行单个任务
-        
-        Args:
-            config_id: 任务配置ID
-            **options: 执行选项
-            
-        Returns:
-            Optional[str]: Celery任务ID，失败时返回None
-        """
+    async def execute_task_immediately(self, config_id: int, **options) -> Optional[str]:
+        """立即执行任务"""
         try:
-            task_id = await task_dispatcher.dispatch_by_config_id(config_id, **options)
+            task_id = await self.dispatcher.dispatch_by_config_id(config_id, **options)
             logger.info(f"已立即执行任务 {config_id}，任务ID: {task_id}")
             return task_id
-            
         except Exception as e:
             logger.error(f"立即执行任务失败 {config_id}: {e}")
             return None
     
-    async def execute_multiple_tasks(
-        self,
-        config_ids: List[int],
-        **options
-    ) -> List[str]:
-        """
-        批量立即执行多个任务
-        
-        Args:
-            config_ids: 任务配置ID列表
-            **options: 执行选项
-            
-        Returns:
-            List[str]: 成功执行的Celery任务ID列表
-        """
-        try:
-            task_ids = await task_dispatcher.dispatch_multiple_configs(config_ids, **options)
-            logger.info(f"已批量执行 {len(task_ids)}/{len(config_ids)} 个任务")
-            return task_ids
-            
-        except Exception as e:
-            logger.error(f"批量执行任务失败: {e}")
-            return []
-    
-    async def execute_tasks_by_type(
-        self,
-        task_type: str,
-        **options
-    ) -> List[str]:
-        """
-        按任务类型批量执行所有活跃任务
-        
-        Args:
-            task_type: 任务类型
-            **options: 执行选项
-            
-        Returns:
-            List[str]: 成功执行的Celery任务ID列表
-        """
-        try:
-            task_ids = await task_dispatcher.dispatch_by_task_type_batch(task_type, **options)
-            logger.info(f"已按类型 {task_type} 批量执行 {len(task_ids)} 个任务")
-            return task_ids
-            
-        except Exception as e:
-            logger.error(f"按类型批量执行任务失败 {task_type}: {e}")
-            return []
-    
-    def get_task_status(self, task_id: str) -> Dict[str, Any]:
-        """获取Celery任务状态"""
-        try:
-            return task_dispatcher.get_task_status(task_id)
-        except Exception as e:
-            logger.error(f"获取任务状态失败 {task_id}: {e}")
-            return {"task_id": task_id, "status": "UNKNOWN", "error": str(e)}
-    
-    def get_active_celery_tasks(self) -> List[Dict[str, Any]]:
-        """获取所有活跃的Celery任务"""
-        try:
-            return task_dispatcher.get_active_tasks()
-        except Exception as e:
-            logger.error(f"获取活跃任务列表失败: {e}")
-            return []
-    
     def get_scheduled_jobs(self) -> List[Dict[str, Any]]:
         """获取所有调度中的任务"""
         try:
-            jobs = scheduler.get_all_jobs()
+            jobs = self.scheduler.get_all_jobs()
             result = []
             
             for job in jobs:
@@ -455,37 +298,31 @@ class TaskManager:
     
     async def start(self):
         """启动任务管理器"""
-        # 启动调度器
-        scheduler.start()
-        
-        # 从数据库加载所有活跃的任务配置到调度器
-        await scheduler.register_tasks_from_database(execute_scheduled_task)
-        
+        self.scheduler.start()
+        await self.scheduler.register_tasks_from_database(execute_scheduled_task)
         logger.info("任务管理器已启动")
     
     def shutdown(self):
         """关闭任务管理器"""
-        scheduler.shutdown()
+        self.scheduler.shutdown()
         logger.info("任务管理器已关闭")
     
     async def get_system_status(self) -> Dict[str, Any]:
         """获取系统状态"""
         try:
-            # 获取基础状态
-            scheduled_jobs = scheduler.get_all_jobs()
-            active_tasks = task_dispatcher.get_active_tasks()
+            scheduled_jobs = self.scheduler.get_all_jobs()
+            active_tasks = self.dispatcher.get_active_tasks()
             
-            # 获取配置统计
-            config_stats = await job_config_manager.get_stats()
+            async with AsyncSessionLocal() as db:
+                config_stats = await crud_task_config.get_stats(db)
             
             return {
-                "scheduler_running": scheduler.running,
+                "scheduler_running": self.scheduler.running,
                 "total_scheduled_jobs": len(scheduled_jobs),
                 "total_active_tasks": len(active_tasks),
                 "config_stats": config_stats,
                 "timestamp": datetime.utcnow().isoformat()
             }
-            
         except Exception as e:
             logger.error(f"获取系统状态失败: {e}")
             return {
@@ -493,196 +330,6 @@ class TaskManager:
                 "error": str(e),
                 "timestamp": datetime.utcnow().isoformat()
             }
-    
-    # === 任务健康度和统计功能 ===
-    
-    async def get_task_health_report(self, config_id: int = None) -> Dict[str, Any]:
-        """
-        获取任务健康度报告
-        
-        Args:
-            config_id: 指定任务配置ID，None时获取全局报告
-            
-        Returns:
-            Dict: 健康度报告
-        """
-        try:
-            from app.db.base import AsyncSessionLocal
-            from app.crud.schedule_event import crud_schedule_event
-            from app.crud.task_execution import crud_task_execution
-            
-            async with AsyncSessionLocal() as db:
-                if config_id:
-                    # 单个任务的健康度报告
-                    config = await job_config_manager.get_config(config_id)
-                    if not config:
-                        return {"error": f"任务配置不存在: {config_id}"}
-                    
-                    # 获取调度事件统计
-                    schedule_stats = await crud_schedule_event.get_stats_by_config(db, config_id)
-                    
-                    # 获取执行统计
-                    execution_stats = await crud_task_execution.get_stats_by_config(db, config_id)
-                    
-                    return {
-                        "config_id": config_id,
-                        "config_name": config.get('name'),
-                        "task_type": config.get('task_type'),
-                        "status": config.get('status'),
-                        "schedule_stats": schedule_stats,
-                        "execution_stats": execution_stats,
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                else:
-                    # 全局健康度报告
-                    all_configs = await job_config_manager.get_all_configs()
-                    
-                    # 统计概览
-                    total_configs = len(all_configs)
-                    active_configs = len([c for c in all_configs if c.get('status') == 'active'])
-                    
-                    # 按类型统计
-                    type_stats = {}
-                    for config in all_configs:
-                        task_type = config.get('task_type', 'unknown')
-                        if task_type not in type_stats:
-                            type_stats[task_type] = {'total': 0, 'active': 0}
-                        type_stats[task_type]['total'] += 1
-                        if config.get('status') == 'active':
-                            type_stats[task_type]['active'] += 1
-                    
-                    # 获取全局执行统计
-                    global_execution_stats = await crud_task_execution.get_global_stats(db)
-                    global_schedule_stats = await crud_schedule_event.get_global_stats(db)
-                    
-                    return {
-                        "total_configs": total_configs,
-                        "active_configs": active_configs,
-                        "type_distribution": type_stats,
-                        "global_schedule_stats": global_schedule_stats,
-                        "global_execution_stats": global_execution_stats,
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                    
-        except Exception as e:
-            logger.error(f"获取健康度报告失败: {e}")
-            return {"error": str(e), "timestamp": datetime.utcnow().isoformat()}
-    
-    async def get_task_execution_history(
-        self, 
-        config_id: int = None,
-        limit: int = 100,
-        status_filter: str = None
-    ) -> List[Dict[str, Any]]:
-        """
-        获取任务执行历史
-        
-        Args:
-            config_id: 任务配置ID，None时获取全部
-            limit: 返回记录数量限制
-            status_filter: 状态过滤
-            
-        Returns:
-            List[Dict]: 执行历史列表
-        """
-        try:
-            from app.db.base import AsyncSessionLocal
-            from app.crud.task_execution import crud_task_execution
-            
-            async with AsyncSessionLocal() as db:
-                if config_id:
-                    executions = await crud_task_execution.get_by_config_id(
-                        db, 
-                        task_config_id=config_id,
-                        limit=limit
-                    )
-                else:
-                    executions = await crud_task_execution.get_recent_executions(
-                        db,
-                        limit=limit
-                    )
-                
-                result = []
-                for execution in executions:
-                    # 过滤状态
-                    if status_filter and execution.status.value != status_filter:
-                        continue
-                        
-                    result.append({
-                        "id": execution.id,
-                        "task_config_id": execution.task_config_id,
-                        "job_id": execution.job_id,
-                        "job_name": execution.job_name,
-                        "status": execution.status.value,
-                        "started_at": execution.started_at.isoformat() if execution.started_at else None,
-                        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
-                        "duration_seconds": execution.duration_seconds,
-                        "result": execution.result,
-                        "error_message": execution.error_message
-                    })
-                
-                return result
-                
-        except Exception as e:
-            logger.error(f"获取执行历史失败: {e}")
-            return []
-    
-    async def get_task_schedule_events(
-        self,
-        config_id: int = None,
-        limit: int = 100,
-        event_type_filter: str = None
-    ) -> List[Dict[str, Any]]:
-        """
-        获取任务调度事件
-        
-        Args:
-            config_id: 任务配置ID，None时获取全部
-            limit: 返回记录数量限制
-            event_type_filter: 事件类型过滤
-            
-        Returns:
-            List[Dict]: 调度事件列表
-        """
-        try:
-            from app.db.base import AsyncSessionLocal
-            from app.crud.schedule_event import crud_schedule_event
-            
-            async with AsyncSessionLocal() as db:
-                if config_id:
-                    events = await crud_schedule_event.get_by_config_id(
-                        db,
-                        task_config_id=config_id,
-                        limit=limit
-                    )
-                else:
-                    events = await crud_schedule_event.get_recent_events(
-                        db,
-                        limit=limit
-                    )
-                
-                result = []
-                for event in events:
-                    # 过滤事件类型
-                    if event_type_filter and event.event_type.value != event_type_filter:
-                        continue
-                        
-                    result.append({
-                        "id": event.id,
-                        "task_config_id": event.task_config_id,
-                        "job_id": event.job_id,
-                        "job_name": event.job_name,
-                        "event_type": event.event_type.value,
-                        "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
-                        "result": event.result,
-                        "error_message": event.error_message
-                    })
-                
-                return result
-                
-        except Exception as e:
-            logger.error(f"获取调度事件失败: {e}")
-            return []
 
 
 # 全局任务管理器实例

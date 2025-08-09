@@ -30,8 +30,8 @@ async def test_core_components():
         # 测试1: 导入核心模块
         logger.info("1️⃣ 测试核心模块导入...")
         
-        from app.core.task_type import TaskType, TaskStatus, SchedulerType
-        logger.info("✅ task_type模块导入成功")
+        from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+        logger.info("✅ task_registry模块导入成功")
         
         from app.core.scheduler import scheduler
         logger.info("✅ scheduler模块导入成功")
@@ -39,11 +39,8 @@ async def test_core_components():
         from app.core.task_dispatcher import task_dispatcher
         logger.info("✅ task_dispatcher模块导入成功")
         
-        from app.core.job_config_manager import job_config_manager
-        logger.info("✅ job_config_manager模块导入成功")
-        
-        from app.core.event_recorder import event_recorder
-        logger.info("✅ event_recorder模块导入成功")
+        from app.core.task_registry import TaskRegistry
+        logger.info("✅ TaskRegistry模块导入成功")
         
         # 测试2: 检查任务类型支持
         logger.info("2️⃣ 测试任务类型支持...")
@@ -64,64 +61,24 @@ async def test_core_components():
         scheduler.start()
         logger.info("✅ 调度器启动成功")
         
-        # 测试4: 测试数据库配置管理
-        logger.info("4️⃣ 测试数据库配置管理...")
+        # 测试4: 测试TaskRegistry功能
+        logger.info("4️⃣ 测试TaskRegistry功能...")
         
-        # 创建测试配置
-        config_id = await job_config_manager.create_config(
-            name="简单测试任务",
-            task_type="cleanup_tokens",
-            description="测试用的清理令牌任务",
-            task_params={"days_old": 30},
-            schedule_config={
-                "scheduler_type": "interval",
-                "hours": 1
-            },
-            scheduler_type="interval",  # 必需字段
-            priority=5
-        )
+        # 测试任务类型映射
+        celery_task = TaskRegistry.get_celery_task_name(TaskType.CLEANUP_TOKENS)
+        queue_name = TaskRegistry.get_queue_name(TaskType.CLEANUP_TOKENS)
+        logger.info(f"✅ CLEANUP_TOKENS -> {celery_task} (队列: {queue_name})")
         
-        if config_id:
-            logger.info(f"✅ 创建配置成功，ID: {config_id}")
-            
-            # 获取配置
-            config = await job_config_manager.get_config(config_id)
-            if config:
-                logger.info(f"✅ 获取配置成功: {config['name']}")
-                
-                # 更新配置
-                success = await job_config_manager.update_config(
-                    config_id, 
-                    {"description": "更新后的描述"}
-                )
-                if success:
-                    logger.info("✅ 更新配置成功")
-                else:
-                    logger.warning("⚠️ 更新配置失败")
-                
-                # 删除配置
-                success = await job_config_manager.remove_config(config_id)
-                if success:
-                    logger.info("✅ 删除配置成功")
-                else:
-                    logger.warning("⚠️ 删除配置失败")
-            else:
-                logger.warning("⚠️ 获取配置失败")
-        else:
-            logger.warning("⚠️ 创建配置失败")
+        # 测试支持的任务类型
+        all_types = TaskRegistry.get_all_task_types()
+        logger.info(f"✅ TaskRegistry支持 {len(all_types)} 种任务类型")
         
-        # 测试5: 列出所有配置
-        logger.info("5️⃣ 测试列出配置...")
+        # 测试任务类型支持检查
+        is_supported = TaskRegistry.is_task_supported(TaskType.BOT_SCRAPING)
+        logger.info(f"✅ BOT_SCRAPING支持状态: {is_supported}")
         
-        all_configs = await job_config_manager.get_all_configs()
-        logger.info(f"✅ 找到 {len(all_configs)} 个配置")
-        
-        # 测试6: 获取活跃配置
-        active_configs = await job_config_manager.get_active_configs()
-        logger.info(f"✅ 找到 {len(active_configs)} 个活跃配置")
-        
-        # 测试7: 从数据库加载任务到调度器
-        logger.info("6️⃣ 测试从数据库加载任务...")
+        # 测试5: 从数据库加载任务到调度器
+        logger.info("5️⃣ 测试从数据库加载任务...")
         
         # 模拟任务执行函数
         async def mock_task_func(config_id):
@@ -150,7 +107,7 @@ async def test_core_components():
         logger.info("  ✅ 模块导入: 成功")
         logger.info("  ✅ 任务类型检查: 成功")
         logger.info("  ✅ 调度器操作: 成功")
-        logger.info("  ✅ 配置管理: 成功")
+        logger.info("  ✅ TaskRegistry功能: 成功")
         logger.info("  ✅ 数据库集成: 成功")
         logger.info("=" * 60)
         

@@ -81,7 +81,7 @@ async def test_task_manager_basic_functions():
     
     # 由于TaskManager依赖数据库，我们需要先模拟其核心组件
     from app.core.scheduler import Scheduler
-    from app.core.task_type import TaskType
+    from app.core.task_registry import TaskType
     
     # 创建调度器
     scheduler = Scheduler()
@@ -217,7 +217,7 @@ async def test_task_dispatcher():
     
     try:
         from app.core.task_dispatcher import TaskDispatcher
-        from app.core.task_mapping import get_all_task_types, is_task_type_supported
+        from app.core.task_registry import TaskRegistry
         
         dispatcher = TaskDispatcher()
         

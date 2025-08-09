@@ -16,6 +16,7 @@ from datetime import datetime
 
 from .config import settings
 from app.db.base import AsyncSessionLocal
+from app.core.task_registry import SchedulerType
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,6 @@ class Scheduler:
         try:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
-                from app.core.task_type import TaskStatus
                 
                 # 获取所有活跃的任务配置
                 active_configs = await crud_task_config.get_active_configs(db)
@@ -110,7 +110,7 @@ class Scheduler:
         # 准备触发器参数
         trigger_kwargs = {}
         
-        if scheduler_type == 'interval':
+        if scheduler_type == SchedulerType.INTERVAL.value:
             trigger_type = 'interval'
             if 'seconds' in schedule_config:
                 trigger_kwargs['seconds'] = schedule_config['seconds']
@@ -121,14 +121,14 @@ class Scheduler:
             if 'days' in schedule_config:
                 trigger_kwargs['days'] = schedule_config['days']
                 
-        elif scheduler_type == 'cron':
+        elif scheduler_type == SchedulerType.CRON.value:
             trigger_type = 'cron'
             cron_fields = ['second', 'minute', 'hour', 'day', 'month', 'day_of_week', 'year']
             for field in cron_fields:
                 if field in schedule_config:
                     trigger_kwargs[field] = schedule_config[field]
                     
-        elif scheduler_type == 'date':
+        elif scheduler_type == SchedulerType.DATE.value:
             trigger_type = 'date'
             if 'run_date' in schedule_config:
                 # 解析日期字符串
