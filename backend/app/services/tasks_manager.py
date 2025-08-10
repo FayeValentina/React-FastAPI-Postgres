@@ -12,7 +12,7 @@ from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegi
 from app.crud.task_config import crud_task_config
 from app.crud.schedule_event import crud_schedule_event
 from app.crud.task_execution import crud_task_execution
-from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate
+from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
 from app.utils.common import get_current_time
 from app.models.schedule_event import ScheduleEventType
 from app.db.base import AsyncSessionLocal

@@ -7,7 +7,7 @@ from datetime import datetime
 from app.models.task_config import TaskConfig
 from app.models.schedule_event import ScheduleEvent
 from app.models.task_execution import TaskExecution
-from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
+from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
 from app.core.task_registry import TaskType, TaskStatus, SchedulerType
 from app.core.exceptions import (

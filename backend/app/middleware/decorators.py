@@ -30,7 +30,7 @@ async def _record_execution(
     
     from app.crud import task_execution as crud_task_execution
     from app.db.base import get_worker_session  # 使用 Worker 专用会话
-    from app.schemas.task import TaskExecutionCreate
+    from app.schemas.job_schemas import TaskExecutionCreate
     
     duration = completed_at - started_at
     execution_data = TaskExecutionCreate(

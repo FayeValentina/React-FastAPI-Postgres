@@ -5,7 +5,7 @@ from typing import Annotated, Any, Dict, List, Optional
 
 from app.models.user import User
 from app.dependencies.current_user import get_current_superuser
-from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate
+from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
 from app.services.tasks_manager import task_manager
 
 

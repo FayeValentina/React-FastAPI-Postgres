@@ -10,8 +10,8 @@ from .reddit_content import (
     RedditPostBase, RedditPostResponse, RedditCommentBase, RedditCommentResponse,
     RedditContentListResponse, CommentSearchRequest, SubredditStats, RedditConnectionTestResponse
 )
-from .task import (
-    TaskStatus, JobExecutionSummary, ScheduleEventInfo,
+from .job_schemas import (
+    TaskExecutionCreate, TaskStatus, JobExecutionSummary, ScheduleEventInfo,
     EnhancedJobInfo, JobDetailResponse, JobInfo,
     TaskExecutionResponse, JobStatsResponse,
     JobCreateRequest, JobScheduleUpdate, SystemStatusResponse
@@ -32,7 +32,7 @@ __all__ = [
     "RedditContentListResponse", "CommentSearchRequest", "SubredditStats", "RedditConnectionTestResponse",
     
     # Task models
-    "TaskStatus", "JobExecutionSummary", "ScheduleEventInfo",
+    "TaskExecutionCreate", "TaskStatus", "JobExecutionSummary", "ScheduleEventInfo",
     "EnhancedJobInfo", "JobDetailResponse", "JobInfo",
     "TaskExecutionResponse", "JobStatsResponse",
     "JobCreateRequest", "JobScheduleUpdate", "SystemStatusResponse"

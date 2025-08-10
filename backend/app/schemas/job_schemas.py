@@ -5,6 +5,20 @@ from app.models.task_execution import ExecutionStatus
 from enum import Enum
 
 
+class TaskExecutionCreate(BaseModel):
+    """创建任务执行记录"""
+    task_config_id: int = Field(..., description="任务配置ID")
+    job_id: str = Field(..., description="任务执行ID")
+    job_name: str = Field(..., description="任务名称")
+    status: ExecutionStatus = Field(..., description="执行状态")
+    started_at: str = Field(..., description="开始时间")
+    completed_at: Optional[str] = Field(None, description="完成时间")
+    duration_seconds: Optional[float] = Field(None, description="执行时长(秒)")
+    result: Optional[Dict[str, Any]] = Field(None, description="执行结果")
+    error_message: Optional[str] = Field(None, description="错误消息")
+    error_traceback: Optional[str] = Field(None, description="错误堆栈")
+
+
 class TaskStatus(str, Enum):
     """任务状态枚举"""
     RUNNING = "running"        # 正在执行
