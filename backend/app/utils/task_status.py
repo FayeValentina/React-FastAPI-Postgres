@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import TaskStatus
 from app.models.task_execution import ExecutionStatus
+from app.utils.common import get_current_time
 
 
 class TaskStatusCalculator:
@@ -55,7 +56,7 @@ class TaskStatusCalculator:
                 if latest_execution.status == ExecutionStatus.RUNNING:
                     # 检查是否超时（比如运行超过1小时可能是异常）
                     if latest_execution.started_at:
-                        running_duration = (datetime.utcnow() - latest_execution.started_at).total_seconds()
+                        running_duration = (get_current_time() - latest_execution.started_at).total_seconds()
                         # 可以根据不同任务类型设置不同的超时时间
                         if running_duration > 3600:  # 1小时
                             return TaskStatus.TIMEOUT

@@ -13,6 +13,7 @@ from app.crud.task_config import crud_task_config
 from app.crud.schedule_event import crud_schedule_event
 from app.crud.task_execution import crud_task_execution
 from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate
+from app.utils.common import get_current_time
 from app.models.schedule_event import ScheduleEventType
 from app.db.base import AsyncSessionLocal
 from app.middleware.decorators import task_executor
@@ -398,14 +399,14 @@ class TaskManager:
                 "total_scheduled_jobs": len(scheduled_jobs),
                 "total_active_tasks": len(active_tasks),
                 "config_stats": config_stats,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             }
         except Exception as e:
             logger.error(f"获取系统状态失败: {e}")
             return {
                 "scheduler_running": False,
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             }
 
 

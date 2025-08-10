@@ -155,4 +155,4 @@ class CRUDUser:
 
 
 # 创建CRUDUser的单例实例
-user = CRUDUser() 
+crud_user = CRUDUser() 

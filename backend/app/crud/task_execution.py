@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.task_execution import TaskExecution, ExecutionStatus
 from app.models.task_config import TaskConfig
 from app.core.exceptions import DatabaseError
+from app.utils.common import get_current_time
 
 
 class CRUDTaskExecution:
@@ -122,7 +123,7 @@ class CRUDTaskExecution:
         limit: int = 100
     ) -> List[TaskExecution]:
         """获取最近的任务执行记录"""
-        start_time = datetime.utcnow() - timedelta(hours=hours)
+        start_time = get_current_time() - timedelta(hours=hours)
         result = await db.execute(
             select(TaskExecution)
             .options(selectinload(TaskExecution.task_config))
@@ -139,7 +140,7 @@ class CRUDTaskExecution:
         limit: int = 50
     ) -> List[TaskExecution]:
         """获取失败的执行记录"""
-        start_time = datetime.utcnow() - timedelta(days=days)
+        start_time = get_current_time() - timedelta(days=days)
         result = await db.execute(
             select(TaskExecution)
             .options(selectinload(TaskExecution.task_config))
@@ -174,7 +175,7 @@ class CRUDTaskExecution:
         days: int = 7
     ) -> Dict[str, Any]:
         """获取执行统计"""
-        start_time = datetime.utcnow() - timedelta(days=days)
+        start_time = get_current_time() - timedelta(days=days)
         
         # 构建基础过滤条件
         base_filter = TaskExecution.started_at >= start_time
@@ -230,7 +231,7 @@ class CRUDTaskExecution:
     ) -> int:
         """清理旧的执行记录"""
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+            cutoff_date = get_current_time() - timedelta(days=days_to_keep)
             
             result = await db.execute(
                 delete(TaskExecution)
@@ -251,7 +252,7 @@ class CRUDTaskExecution:
     ) -> Dict[str, Any]:
         """获取全局统计数据"""
         try:
-            start_time = datetime.utcnow() - timedelta(days=days)
+            start_time = get_current_time() - timedelta(days=days)
             
             # 总执行次数
             total_result = await db.execute(
@@ -312,7 +313,7 @@ class CRUDTaskExecution:
                 "success_rate": success_rate,
                 "failure_rate": failure_rate,
                 "avg_duration_seconds": avg_duration,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             }
             
         except Exception as e:
@@ -326,7 +327,7 @@ class CRUDTaskExecution:
     ) -> Dict[str, Any]:
         """获取特定任务配置的执行统计数据"""
         try:
-            start_time = datetime.utcnow() - timedelta(days=days)
+            start_time = get_current_time() - timedelta(days=days)
             
             # 总执行次数
             total_result = await db.execute(
@@ -386,7 +387,7 @@ class CRUDTaskExecution:
                 "success_rate": success_rate,
                 "failure_rate": failure_rate,
                 "avg_duration_seconds": avg_duration,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             }
             
         except Exception as e:

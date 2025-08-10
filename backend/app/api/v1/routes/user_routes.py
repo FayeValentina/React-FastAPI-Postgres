@@ -6,7 +6,7 @@ from sqlalchemy import select, or_, and_, desc, asc
 from app.schemas.user import (
     UserCreate, UserResponse, UserUpdate
 )
-from app.crud.user import user
+from app.crud.user import crud_user
 from app.db.base import get_async_session
 from app.models.user import User
 from app.dependencies.current_user import (
@@ -33,7 +33,7 @@ async def create_user(
     需要超级管理员权限
     """
     try:
-        return await user.create_with_validation(db, obj_in=user_data)
+        return await crud_user.create_with_validation(db, obj_in=user_data)
     except Exception as e:
         raise handle_error(e)
 
@@ -54,11 +54,11 @@ async def update_user(
         if current_user.id != user_id and not current_user.is_superuser:
             raise InsufficientPermissionsError("没有足够权限更新其他用户")
             
-        db_user = await user.get(db, id=user_id)
+        db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
         
-        return await user.update(db, db_obj=db_user, obj_in=user_update)
+        return await crud_user.update(db, db_obj=db_user, obj_in=user_update)
     except Exception as e:
         raise handle_error(e)
 
@@ -154,7 +154,7 @@ async def get_user(
         if not current_user.is_superuser:
             raise InsufficientPermissionsError("没有足够权限查看其他用户详情")
             
-        db_user = await user.get(db, id=user_id)
+        db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
             
@@ -174,7 +174,7 @@ async def delete_user(
     需要超级管理员权限
     """
     try:
-        db_user = await user.get(db, id=user_id)
+        db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
             
@@ -182,6 +182,6 @@ async def delete_user(
         if current_user.id == user_id:
             raise ValueError("不能删除自己的账户")
             
-        return await user.delete(db, id=user_id)
+        return await crud_user.delete(db, id=user_id)
     except Exception as e:
         raise handle_error(e) 

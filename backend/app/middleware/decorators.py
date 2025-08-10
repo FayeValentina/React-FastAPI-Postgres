@@ -48,7 +48,13 @@ async def _record_execution(
 ):
     """
     异步地将任务执行记录保存到数据库。
+    如果 task_config_id = -1，表示是直接调用的任务，跳过数据库记录。
     """
+    # 对于直接调用的任务 (task_config_id = -1)，跳过数据库记录
+    if task_config_id == -1:
+        logger.info(f"任务 '{job_name}' (ID: {job_id}) 是直接调用任务，跳过数据库记录。")
+        return
+    
     from app.schemas.task import TaskExecutionCreate
     duration = completed_at - started_at
     execution_data = TaskExecutionCreate(
@@ -76,33 +82,31 @@ async def _record_execution(
 def task_executor(task_name: str):
     """
     一个装饰器，用于包装 Celery 任务，自动记录其执行状态。
-    它能同时处理同步和异步的任务。
+    现在所有 Celery 任务都是同步函数，所以只需要同步包装器。
     """
     def decorator(func: Callable):
-        # 检查被装饰的函数是同步还是异步
-        if asyncio.iscoroutinefunction(func):
-            # --- 异步任务的包装器 ---
-            @wraps(func)
-            async def async_wrapper(*args, **kwargs):
-                # 第一个参数是绑定的 Celery Task 实例
-                task_instance: Task = args[0]
-                job_id = task_instance.request.id
-                
-                # 从关键字参数中安全地获取 task_config_id
-                task_config_id = kwargs.get("task_config_id")
-                if not task_config_id:
-                    logger.error(f"任务 '{task_name}' (ID: {job_id}) 启动失败: 未提供 'task_config_id'。")
-                    return
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            task_instance: Task = args[0]
+            job_id = task_instance.request.id
+            
+            # 从关键字参数中安全地获取 task_config_id
+            # 对于直接调用的任务，task_config_id 是可选的
+            task_config_id = kwargs.get("task_config_id")
+            if not task_config_id:
+                logger.warning(f"任务 '{task_name}' (ID: {job_id}) 没有 task_config_id，可能是直接调用的任务。")
+                task_config_id = -1  # 使用 -1 表示直接调用的任务
 
-                logger.info(f"任务 '{task_name}' (ID: {job_id}) 开始执行。")
-                start_time = time.time()
-                
-                try:
-                    # 使用 await 调用异步任务
-                    result = await func(*args, **kwargs)
-                    end_time = time.time()
-                    logger.info(f"任务 '{task_name}' (ID: {job_id}) 成功完成。")
-                    await _record_execution(
+            logger.info(f"任务 '{task_name}' (ID: {job_id}) 开始执行。")
+            start_time = time.time()
+            
+            try:
+                # 调用同步任务（内部可能使用 asyncio.run）
+                result = func(*args, **kwargs)
+                end_time = time.time()
+                logger.info(f"任务 '{task_name}' (ID: {job_id}) 成功完成。")
+                run_async_from_sync(
+                    _record_execution(
                         task_config_id=task_config_id,
                         job_id=job_id,
                         job_name=task_name,
@@ -111,13 +115,15 @@ def task_executor(task_name: str):
                         completed_at=end_time,
                         result=result,
                     )
-                    return result
-                except Exception as e:
-                    end_time = time.time()
-                    error_msg = str(e)
-                    error_tb = traceback.format_exc()
-                    logger.error(f"任务 '{task_name}' (ID: {job_id}) 执行失败: {error_msg}", exc_info=True)
-                    await _record_execution(
+                )
+                return result
+            except Exception as e:
+                end_time = time.time()
+                error_msg = str(e)
+                error_tb = traceback.format_exc()
+                logger.error(f"任务 '{task_name}' (ID: {job_id}) 执行失败: {error_msg}", exc_info=True)
+                run_async_from_sync(
+                    _record_execution(
                         task_config_id=task_config_id,
                         job_id=job_id,
                         job_name=task_name,
@@ -127,59 +133,8 @@ def task_executor(task_name: str):
                         error_message=error_msg,
                         error_traceback=error_tb,
                     )
-                    raise
-
-            return async_wrapper
-        else:
-            # --- 同步任务的包装器 ---
-            @wraps(func)
-            def sync_wrapper(*args, **kwargs):
-                task_instance: Task = args[0]
-                job_id = task_instance.request.id
-                
-                task_config_id = kwargs.get("task_config_id")
-                if not task_config_id:
-                    logger.error(f"任务 '{task_name}' (ID: {job_id}) 启动失败: 未提供 'task_config_id'。")
-                    return
-
-                logger.info(f"任务 '{task_name}' (ID: {job_id}) 开始执行。")
-                start_time = time.time()
-                
-                try:
-                    # 直接调用同步任务
-                    result = func(*args, **kwargs)
-                    end_time = time.time()
-                    logger.info(f"任务 '{task_name}' (ID: {job_id}) 成功完成。")
-                    run_async_from_sync(
-                        _record_execution(
-                            task_config_id=task_config_id,
-                            job_id=job_id,
-                            job_name=task_name,
-                            status=ExecutionStatus.SUCCESS,
-                            started_at=start_time,
-                            completed_at=end_time,
-                            result=result,
-                        )
-                    )
-                    return result
-                except Exception as e:
-                    end_time = time.time()
-                    error_msg = str(e)
-                    error_tb = traceback.format_exc()
-                    logger.error(f"任务 '{task_name}' (ID: {job_id}) 执行失败: {error_msg}", exc_info=True)
-                    run_async_from_sync(
-                        _record_execution(
-                            task_config_id=task_config_id,
-                            job_id=job_id,
-                            job_name=task_name,
-                            status=ExecutionStatus.FAILED,
-                            started_at=start_time,
-                            completed_at=end_time,
-                            error_message=error_msg,
-                            error_traceback=error_tb,
-                        )
-                    )
-                    raise
-            
-            return sync_wrapper
+                )
+                raise
+        
+        return wrapper
     return decorator

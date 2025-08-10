@@ -1,23 +1,15 @@
 from datetime import datetime
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List
 from sqlalchemy import String, DateTime, func, Integer, Text, Boolean, ForeignKey, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
-
-if TYPE_CHECKING:
-    from .scrape_session import ScrapeSession
 
 
 class RedditPost(Base):
     __tablename__ = "reddit_posts"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)  # Reddit的帖子ID
-    scrape_session_id: Mapped[int] = mapped_column(
-        Integer, 
-        ForeignKey("scrape_sessions.id", ondelete="CASCADE"), 
-        nullable=False
-    )
     
     # 帖子基本信息
     title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -46,7 +38,6 @@ class RedditPost(Base):
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # 关联关系
-    scrape_session: Mapped["ScrapeSession"] = relationship("ScrapeSession", back_populates="reddit_posts")
     comments: Mapped[List["RedditComment"]] = relationship(
         "RedditComment", back_populates="post", cascade="all, delete-orphan"
     )
@@ -59,11 +50,6 @@ class RedditComment(Base):
     post_id: Mapped[str] = mapped_column(
         String(50), 
         ForeignKey("reddit_posts.id", ondelete="CASCADE"), 
-        nullable=False
-    )
-    scrape_session_id: Mapped[int] = mapped_column(
-        Integer, 
-        ForeignKey("scrape_sessions.id", ondelete="CASCADE"), 
         nullable=False
     )
     
@@ -86,5 +72,4 @@ class RedditComment(Base):
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # 关联关系
-    scrape_session: Mapped["ScrapeSession"] = relationship("ScrapeSession", back_populates="reddit_comments")
     post: Mapped["RedditPost"] = relationship("RedditPost", back_populates="comments")

@@ -13,9 +13,9 @@ from app.schemas.password_reset import (
 )
 from app.core.config import settings
 from app.core.security import verify_password, create_token_pair, verify_token, get_password_hash
-from app.crud.user import user as crud_user
-from app.crud.token import refresh_token as crud_refresh_token
-from app.crud.password_reset import password_reset as crud_password_reset
+from app.crud.user import crud_user
+from app.crud.token import crud_refresh_token
+from app.crud.password_reset import crud_password_reset
 from app.services.email_service import email_service
 from app.db.base import get_async_session
 from app.schemas.token import Token, RefreshTokenRequest, TokenRevocationRequest

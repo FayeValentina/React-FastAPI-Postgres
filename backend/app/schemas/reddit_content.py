@@ -23,7 +23,6 @@ class RedditPostBase(BaseModel):
 
 class RedditPostResponse(RedditPostBase):
     id: str
-    scrape_session_id: int
     scraped_at: datetime
 
     class Config:
@@ -45,7 +44,6 @@ class RedditCommentBase(BaseModel):
 class RedditCommentResponse(RedditCommentBase):
     id: str
     post_id: str
-    scrape_session_id: int
     scraped_at: datetime
 
     class Config:

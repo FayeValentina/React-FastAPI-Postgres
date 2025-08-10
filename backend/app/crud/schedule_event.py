@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.schedule_event import ScheduleEvent, ScheduleEventType
 from app.models.task_config import TaskConfig
 from app.core.exceptions import DatabaseError
+from app.utils.common import get_current_time
 
 
 class CRUDScheduleEvent:
@@ -82,7 +83,7 @@ class CRUDScheduleEvent:
         limit: int = 100
     ) -> List[ScheduleEvent]:
         """获取最近的调度事件"""
-        start_time = datetime.utcnow() - timedelta(hours=hours)
+        start_time = get_current_time() - timedelta(hours=hours)
         result = await db.execute(
             select(ScheduleEvent)
             .options(selectinload(ScheduleEvent.task_config))
@@ -99,7 +100,7 @@ class CRUDScheduleEvent:
         limit: int = 50
     ) -> List[ScheduleEvent]:
         """获取错误事件"""
-        start_time = datetime.utcnow() - timedelta(days=days)
+        start_time = get_current_time() - timedelta(days=days)
         result = await db.execute(
             select(ScheduleEvent)
             .options(selectinload(ScheduleEvent.task_config))
@@ -121,7 +122,7 @@ class CRUDScheduleEvent:
         days: int = 7
     ) -> Dict[str, Any]:
         """获取事件统计信息"""
-        start_time = datetime.utcnow() - timedelta(days=days)
+        start_time = get_current_time() - timedelta(days=days)
         
         # 构建基础查询
         base_query = select(ScheduleEvent.event_type, func.count(ScheduleEvent.id))
@@ -161,7 +162,7 @@ class CRUDScheduleEvent:
     ) -> int:
         """清理旧的调度事件"""
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+            cutoff_date = get_current_time() - timedelta(days=days_to_keep)
             
             result = await db.execute(
                 delete(ScheduleEvent)
@@ -182,7 +183,7 @@ class CRUDScheduleEvent:
     ) -> Dict[str, Any]:
         """获取全局调度事件统计"""
         try:
-            start_time = datetime.utcnow() - timedelta(days=days)
+            start_time = get_current_time() - timedelta(days=days)
             
             # 总事件数
             total_result = await db.execute(
@@ -229,7 +230,7 @@ class CRUDScheduleEvent:
                 "config_breakdown": config_stats,
                 "success_rate": success_rate,
                 "error_rate": error_rate,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             }
             
         except Exception as e:
@@ -243,7 +244,7 @@ class CRUDScheduleEvent:
     ) -> Dict[str, Any]:
         """获取特定任务配置的调度事件统计"""
         try:
-            start_time = datetime.utcnow() - timedelta(days=days)
+            start_time = get_current_time() - timedelta(days=days)
             
             # 总事件数
             total_result = await db.execute(
@@ -288,7 +289,7 @@ class CRUDScheduleEvent:
                 "type_breakdown": type_stats,
                 "success_rate": success_rate,
                 "error_rate": error_rate,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             }
             
         except Exception as e:

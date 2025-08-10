@@ -31,21 +31,9 @@ class TaskConfigCreate(TaskConfigBase):
         task_type = values.get('task_type')
         if not task_type:
             return v
-            
-        # Bot爬取任务参数验证
-        if task_type in [TaskType.BOT_SCRAPING, TaskType.MANUAL_SCRAPING, TaskType.BATCH_SCRAPING]:
-            required_fields = ['bot_config_id']
-            if task_type == TaskType.BOT_SCRAPING:
-                required_fields.append('interval_hours')
-            elif task_type == TaskType.BATCH_SCRAPING:
-                required_fields = ['bot_config_ids']
-                
-            for field in required_fields:
-                if field not in v:
-                    raise ValueError(f'{task_type}任务缺少必要参数: {field}')
         
         # 清理任务参数验证  
-        elif task_type in [TaskType.CLEANUP_CONTENT, TaskType.CLEANUP_EVENTS]:
+        if task_type in [TaskType.CLEANUP_CONTENT, TaskType.CLEANUP_EVENTS]:
             if 'days_old' not in v:
                 raise ValueError(f'{task_type}任务缺少必要参数: days_old')
             if not isinstance(v['days_old'], int) or v['days_old'] <= 0:
@@ -108,19 +96,6 @@ class TaskConfigListResponse(BaseModel):
 
 
 # === 特定任务类型的Schema ===
-
-class BotScrapingTaskConfig(BaseModel):
-    """Bot爬取任务配置"""
-    bot_config_id: int = Field(..., description="Bot配置ID", gt=0)
-    interval_hours: Optional[int] = Field(None, description="间隔小时数", gt=0, le=168)
-    session_type: str = Field("auto", description="会话类型")
-
-
-class BatchScrapingTaskConfig(BaseModel):
-    """批量爬取任务配置"""
-    bot_config_ids: list[int] = Field(..., description="Bot配置ID列表", min_items=1)
-    session_type: str = Field("batch", description="会话类型")
-
 
 class CleanupTaskConfig(BaseModel):
     """清理任务配置"""

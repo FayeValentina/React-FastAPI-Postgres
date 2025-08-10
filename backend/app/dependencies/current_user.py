@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 from app.db.base import get_async_session
-from app.crud.user import user as crud_user
+from app.crud.user import crud_user
 from app.models.user import User
 from app.core.exceptions import (
     AuthenticationError, 

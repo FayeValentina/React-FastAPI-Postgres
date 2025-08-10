@@ -8,6 +8,7 @@ from app.models.task_config import TaskConfig
 from app.models.schedule_event import ScheduleEvent
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
+from app.utils.common import get_current_time
 from app.core.task_registry import TaskType, TaskStatus, SchedulerType
 from app.core.exceptions import (
     DatabaseError,
@@ -198,7 +199,7 @@ class CRUDTaskConfig:
             update_data = obj_in.model_dump(exclude_unset=True)
             
             if update_data:
-                update_data["updated_at"] = datetime.utcnow()
+                update_data["updated_at"] = get_current_time()
                 
                 stmt = (
                     update(TaskConfig)
@@ -245,7 +246,7 @@ class CRUDTaskConfig:
             result = await db.execute(
                 update(TaskConfig)
                 .where(TaskConfig.id.in_(config_ids))
-                .values(status=status, updated_at=datetime.utcnow())
+                .values(status=status, updated_at=get_current_time())
             )
             await db.commit()
             return result.rowcount
@@ -265,7 +266,7 @@ class CRUDTaskConfig:
             stmt = (
                 update(TaskConfig)
                 .where(TaskConfig.id == config_id)
-                .values(parameters=parameters, updated_at=datetime.utcnow())
+                .values(parameters=parameters, updated_at=get_current_time())
                 .returning(TaskConfig)
             )
             
@@ -288,7 +289,7 @@ class CRUDTaskConfig:
             stmt = (
                 update(TaskConfig)
                 .where(TaskConfig.id == config_id)
-                .values(schedule_config=schedule_config, updated_at=datetime.utcnow())
+                .values(schedule_config=schedule_config, updated_at=get_current_time())
                 .returning(TaskConfig)
             )
             

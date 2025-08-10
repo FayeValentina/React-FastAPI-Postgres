@@ -1,7 +1,8 @@
+from datetime import timedelta
+from operator import and_
 from typing import Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from datetime import timedelta
 
 from app.models.token import RefreshToken
 from app.utils.common import get_current_time
@@ -90,17 +91,39 @@ class CRUDRefreshToken:
         await db.commit()
         return result.rowcount
     
-    async def cleanup_expired(
-        self, 
-        db: AsyncSession
-    ) -> int:
-        """清理过期的刷新令牌 - 删除is_valid为False的记录"""
-        result = await db.execute(
-            delete(RefreshToken)
-            .where(RefreshToken.is_valid == False)
+    async def cleanup_expired(self, db: AsyncSession, days_old: int = 7) -> int:
+        """
+        删除创建时间早于指定天数且已失效的刷新令牌。
+        
+        删除条件：
+        1. 创建时间早于 days_old 天前
+        2. is_valid 为 False (已被撤销或已过期)
+        """
+        # 计算时间阈值
+        creation_date_threshold = get_current_time() - timedelta(days=days_old)
+        current_time = get_current_time()
+        
+        # 定义失效条件 (is_valid == False)
+        # 条件1: 令牌已被撤销 (revoked_at 不为 NULL)
+        # 条件2: 令牌已过期 (expires_at < 当前时间)
+        is_invalid_condition = (
+            (RefreshToken.revoked_at.isnot(None)) | 
+            (RefreshToken.expires_at < current_time)
         )
-        await db.commit()
+
+        # 定义旧记录条件（使用 issued_at 字段）
+        is_old_condition = RefreshToken.issued_at < creation_date_threshold
+
+        # 执行删除：删除既旧又失效的令牌
+        statement = delete(RefreshToken).where(
+            and_(
+                is_old_condition,
+                is_invalid_condition
+            )
+        )
+        
+        result = await db.execute(statement)
         return result.rowcount
 
 
-refresh_token = CRUDRefreshToken() 
+crud_refresh_token = CRUDRefreshToken() 
