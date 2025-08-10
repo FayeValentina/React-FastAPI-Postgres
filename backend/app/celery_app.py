@@ -1,10 +1,10 @@
 from celery import Celery
 from kombu import Queue, Exchange
 
-# 直接导入settings，可能导致循环导入
-# 如果其他模块既导入celery_app又导入config.settings，可能出现循环导入错误
-# 常见错误: ImportError: cannot import name 'settings' from partially initialized module
 from app.core.config import settings
+
+# 导入 Worker 初始化钩子（重要！）
+import app.tasks.worker_init  # 这会注册信号处理器
 
 # 创建Celery应用实例
 celery_app = Celery(
@@ -49,9 +49,13 @@ celery_app.conf.update(
     result_expires=settings.celery.RESULT_EXPIRES,
     result_persistent=settings.celery.RESULT_PERSISTENT,
     
-    # Worker设置
+    # Worker设置 - 重要配置
     worker_prefetch_multiplier=settings.celery.WORKER_PREFETCH_MULTIPLIER,
     worker_max_tasks_per_child=settings.celery.WORKER_MAX_TASKS_PER_CHILD,
+    
+    # 添加 Worker 池配置
+    worker_pool=settings.celery.WORKER_POOL,  # 从配置读取 worker 池类型
+    worker_concurrency=settings.celery.WORKER_CONCURRENCY,  # 从配置读取并发数
     
     # 监控设置
     worker_send_task_events=settings.celery.WORKER_SEND_TASK_EVENTS,

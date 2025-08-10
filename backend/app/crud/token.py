@@ -1,8 +1,7 @@
 from datetime import timedelta
-from operator import and_
 from typing import Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, and_
 
 from app.models.token import RefreshToken
 from app.utils.common import get_current_time

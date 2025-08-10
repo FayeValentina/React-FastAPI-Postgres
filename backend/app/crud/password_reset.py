@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, and_
 from uuid import uuid4
 
 from app.models.password_reset import PasswordReset

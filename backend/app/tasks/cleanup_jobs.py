@@ -1,7 +1,7 @@
 from typing import Dict, Any
 import asyncio
 from app.celery_app import celery_app
-from app.db.base import AsyncSessionLocal
+from app.db.base import get_worker_session  # 使用 Worker 专用会话
 from app.middleware.decorators import task_executor, run_async_from_sync
 from app.crud.token import crud_refresh_token
 from app.crud.password_reset import crud_password_reset
@@ -19,13 +19,12 @@ async def _cleanup_expired_tokens_async(task_config_id: int, *, days_old: int = 
     """
     logger.info(f"开始异步清理 {days_old} 天前的过期令牌... (Config ID: {task_config_id})")
     
-    async with AsyncSessionLocal() as db:
+    # 使用 Worker 专用会话
+    async for db in get_worker_session():
         try:
             expired_refresh = await crud_refresh_token.cleanup_expired(db, days_old=days_old)
             expired_reset = await crud_password_reset.cleanup_expired(db, days_old=days_old)
             
-            await db.commit()
-
             result = {
                 "expired_refresh_tokens": expired_refresh,
                 "expired_reset_tokens": expired_reset,
@@ -35,7 +34,6 @@ async def _cleanup_expired_tokens_async(task_config_id: int, *, days_old: int = 
             logger.info(f"清理过期令牌完成: {result}")
             return result
         except Exception as e:
-            await db.rollback()
             logger.error(f"清理过期令牌时出错: {e}", exc_info=True)
             raise
 
@@ -63,12 +61,12 @@ async def _cleanup_old_content_async(task_config_id: int, *, days_old: int = 90)
     """
     logger.info(f"开始异步清理 {days_old} 天前的旧 Reddit 内容... (Config ID: {task_config_id})")
 
-    async with AsyncSessionLocal() as db:
+    # 使用 Worker 专用会话
+    async for db in get_worker_session():
         try:
             deleted_posts, deleted_comments = await crud_reddit_content.delete_old_content(
                 db, days_to_keep=days_old
             )
-            await db.commit()
 
             result = {
                 "deleted_posts": deleted_posts,
@@ -79,7 +77,6 @@ async def _cleanup_old_content_async(task_config_id: int, *, days_old: int = 90)
             logger.info(f"清理旧内容完成: {result}")
             return result
         except Exception as e:
-            await db.rollback()
             logger.error(f"清理旧内容时出错: {e}", exc_info=True)
             raise
 
@@ -103,10 +100,10 @@ async def _cleanup_schedule_events_async(task_config_id: int, *, days_old: int =
     """
     logger.info(f"开始异步清理 {days_old} 天前的旧调度事件... (Config ID: {task_config_id})")
 
-    async with AsyncSessionLocal() as db:
+    # 使用 Worker 专用会话
+    async for db in get_worker_session():
         try:
             deleted_count = await crud_schedule_event.cleanup_old_events(db, days_old)
-            await db.commit()
 
             result = {
                 "deleted_events": deleted_count,
@@ -115,7 +112,6 @@ async def _cleanup_schedule_events_async(task_config_id: int, *, days_old: int =
             logger.info(f"清理调度事件完成: {result}")
             return result
         except Exception as e:
-            await db.rollback()
             logger.error(f"清理调度事件时出错: {e}", exc_info=True)
             raise
 

@@ -232,6 +232,8 @@ class CelerySettings(BaseSettings):
     # Worker设置
     WORKER_PREFETCH_MULTIPLIER: int = 1
     WORKER_MAX_TASKS_PER_CHILD: int = 1000
+    WORKER_POOL: str = "prefork"
+    WORKER_CONCURRENCY: int = 2
     
     # 监控设置
     WORKER_SEND_TASK_EVENTS: bool = True
