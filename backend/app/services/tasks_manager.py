@@ -15,7 +15,7 @@ from app.crud.task_execution import crud_task_execution
 from app.schemas.task_config import TaskConfigCreate, TaskConfigUpdate
 from app.models.schedule_event import ScheduleEventType
 from app.db.base import AsyncSessionLocal
-from app.middleware.decorators import record_schedule_event
+from app.middleware.decorators import task_executor
 
 logger = logging.getLogger(__name__)
 

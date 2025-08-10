@@ -2,10 +2,8 @@ from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, or_, delete
-from sqlalchemy.orm import selectinload
 
 from app.models.reddit_content import RedditPost, RedditComment
-from app.models.scrape_session import ScrapeSession
 
 
 class CRUDRedditContent:
