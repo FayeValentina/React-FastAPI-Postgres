@@ -2,7 +2,7 @@ from typing import Dict, Any
 import asyncio
 from app.celery_app import celery_app
 from app.db.base import get_worker_session  # 使用 Worker 专用会话
-from app.middleware.decorators import task_executor, run_async_from_sync
+from app.middleware.decorators import task_executor
 from app.crud.token import crud_refresh_token
 from app.crud.password_reset import crud_password_reset
 from app.crud.reddit_content import crud_reddit_content
@@ -51,8 +51,7 @@ def cleanup_expired_tokens_task(self, *args: Any, **kwargs: Any) -> Dict[str, An
     # 提取特定于任务的参数
     days_old = kwargs.get("days_old", 7)
     
-    # 使用 run_async_from_sync 在同步上下文中运行异步代码
-    return run_async_from_sync(_cleanup_expired_tokens_async(task_config_id, days_old=days_old))
+    return asyncio.run(_cleanup_expired_tokens_async(task_config_id, days_old=days_old))
 
 
 async def _cleanup_old_content_async(task_config_id: int, *, days_old: int = 90) -> Dict[str, Any]:
@@ -90,8 +89,7 @@ def cleanup_old_content_task(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
     task_config_id = kwargs.get("task_config_id") or (args[0] if args else None)
     days_old = kwargs.get("days_old", 90)
     
-    # 使用 run_async_from_sync 在同步上下文中运行异步代码
-    return run_async_from_sync(_cleanup_old_content_async(task_config_id, days_old=days_old))
+    return asyncio.run(_cleanup_old_content_async(task_config_id, days_old=days_old))
 
 
 async def _cleanup_schedule_events_async(task_config_id: int, *, days_old: int = 30) -> Dict[str, Any]:
@@ -125,5 +123,4 @@ def cleanup_schedule_events_task(self, *args: Any, **kwargs: Any) -> Dict[str, A
     task_config_id = kwargs.get("task_config_id") or (args[0] if args else None)
     days_old = kwargs.get("days_old", 30)
 
-    # 使用 run_async_from_sync 在同步上下文中运行异步代码
-    return run_async_from_sync(_cleanup_schedule_events_async(task_config_id, days_old=days_old))
+    return asyncio.run(_cleanup_schedule_events_async(task_config_id, days_old=days_old))

@@ -10,33 +10,6 @@ from app.models.task_execution import ExecutionStatus
 
 logger = logging.getLogger(__name__)
 
-
-def run_async_from_sync(coro: Callable[..., Any]) -> Any:
-    """
-    一个工具函数，用于从同步代码中安全地运行异步协程。
-    
-    专门为 Celery Worker 进程优化，确保每个进程有自己的事件循环
-    """
-    try:
-        # 尝试获取当前事件循环
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # 没有运行中的事件循环，创建新的
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    if loop.is_running():
-        # 如果事件循环已在运行，创建新的事件循环在新线程中运行
-        # 这种情况不应该在 Celery Worker 中发生
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(asyncio.run, coro)
-            return future.result()
-    else:
-        # 正常情况：在当前线程的事件循环中运行
-        return loop.run_until_complete(coro)
-
-
 async def _record_execution(
     task_config_id: int,
     job_id: str,
@@ -102,7 +75,7 @@ def task_executor(task_name: str):
                 result = func(*args, **kwargs)
                 end_time = time.time()
                 logger.info(f"任务 '{task_name}' (ID: {job_id}) 成功完成。")
-                run_async_from_sync(
+                asyncio.run(
                     _record_execution(
                         task_config_id=task_config_id,
                         job_id=job_id,
@@ -119,7 +92,7 @@ def task_executor(task_name: str):
                 error_msg = str(e)
                 error_tb = traceback.format_exc()
                 logger.error(f"任务 '{task_name}' (ID: {job_id}) 执行失败: {error_msg}", exc_info=True)
-                run_async_from_sync(
+                asyncio.run(
                     _record_execution(
                         task_config_id=task_config_id,
                         job_id=job_id,
