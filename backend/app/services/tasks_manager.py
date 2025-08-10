@@ -2,21 +2,18 @@
 任务管理器 - 简化版，直接使用CRUD组件
 """
 import logging
-from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
+from typing import Dict, Any, List, Optional
 import asyncio
 
 from app.core.scheduler import scheduler
 from app.core.task_dispatcher import TaskDispatcher
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegistry
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType
 from app.crud.task_config import crud_task_config
 from app.crud.schedule_event import crud_schedule_event
-from app.crud.task_execution import crud_task_execution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
 from app.utils.common import get_current_time
 from app.models.schedule_event import ScheduleEventType
 from app.db.base import AsyncSessionLocal
-from app.middleware.decorators import task_executor
 
 logger = logging.getLogger(__name__)
 
