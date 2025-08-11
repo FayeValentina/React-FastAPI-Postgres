@@ -7,7 +7,7 @@ import asyncio
 
 from app.core.scheduler import scheduler
 from app.core.task_dispatcher import TaskDispatcher
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegistry
 from app.crud.task_config import crud_task_config
 from app.crud.schedule_event import crud_schedule_event
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
@@ -71,7 +71,7 @@ class TaskManager:
     
     async def _record_event_async(
         self,
-        job_id: str,
+        job_id: str,  # 现在是有意义的ID，如 "cleanup_tok_int_1"
         event_type: ScheduleEventType,
         result: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
@@ -79,18 +79,18 @@ class TaskManager:
     ):
         """异步记录调度事件"""
         try:
-            # 解析task_config_id
-            task_config_id = None
-            try:
-                task_config_id = int(job_id)
-            except (ValueError, TypeError):
-                pass
+            # 从job_id中提取task_config_id
+            task_config_id = TaskRegistry.extract_config_id_from_job_id(job_id)
+            
+            if task_config_id is None:
+                logger.warning(f"无法从job_id中提取config_id: {job_id}")
+                return
             
             async with AsyncSessionLocal() as db:
                 await crud_schedule_event.create(
                     db,
                     task_config_id=task_config_id,
-                    job_id=job_id,
+                    job_id=job_id,  # 现在是真正的APScheduler job_id
                     job_name=f"Task-{job_id}",
                     event_type=event_type,
                     result=result,
@@ -254,11 +254,23 @@ class TaskManager:
     
     def pause_scheduled_task(self, config_id: int) -> bool:
         """暂停任务调度"""
-        return self.scheduler.pause_job(str(config_id))
+        # 需要找到对应的job_id
+        jobs = self.scheduler.get_all_jobs()
+        for job in jobs:
+            extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
+            if extracted_config_id == config_id:
+                return self.scheduler.pause_job(job.id)
+        return False
     
     def resume_scheduled_task(self, config_id: int) -> bool:
         """恢复任务调度"""
-        return self.scheduler.resume_job(str(config_id))
+        # 需要找到对应的job_id
+        jobs = self.scheduler.get_all_jobs()
+        for job in jobs:
+            extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
+            if extracted_config_id == config_id:
+                return self.scheduler.resume_job(job.id)
+        return False
     
     async def reload_scheduled_task(self, config_id: int) -> bool:
         """重新加载任务调度"""

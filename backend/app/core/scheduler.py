@@ -16,7 +16,7 @@ from datetime import datetime
 
 from .config import settings
 from app.db.base import AsyncSessionLocal
-from app.core.task_registry import SchedulerType
+from app.core.task_registry import SchedulerType, TaskRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +73,21 @@ class Scheduler:
                 tasks = []
                 for config in active_configs:
                     if config.schedule_config:
+                        # 使用TaskRegistry生成有意义的job_id
+                        job_id = TaskRegistry.generate_job_id(
+                            task_type=config.task_type,
+                            scheduler_type=config.scheduler_type,
+                            config_id=config.id
+                        )
+                        
                         tasks.append({
                             'task_config_id': config.id,
-                            'job_id': str(config.id),
+                            'job_id': job_id,  # 现在是有意义的ID
                             'name': config.name,
                             'task_type': config.task_type,
                             'schedule_config': config.schedule_config,
                             'task_params': config.parameters,
-                            'max_instances': 1,  # 默认并发数
+                            'max_instances': 1,
                             'timeout_seconds': config.timeout_seconds or 300,
                             'retry_count': config.max_retries or 0
                         })
@@ -269,14 +276,21 @@ class Scheduler:
                 if not config or not config.schedule_config:
                     return False
                 
+                # 使用TaskRegistry生成job_id
+                job_id = TaskRegistry.generate_job_id(
+                    task_type=config.task_type,
+                    scheduler_type=config.scheduler_type,
+                    config_id=config.id
+                )
+                
                 task_data = {
                     'task_config_id': config.id,
-                    'job_id': str(config.id),
+                    'job_id': job_id,
                     'name': config.name,
                     'task_type': config.task_type,
                     'schedule_config': config.schedule_config,
                     'task_params': config.parameters,
-                    'max_instances': 1,  # 默认并发数
+                    'max_instances': 1,
                     'timeout_seconds': config.timeout_seconds or 300,
                     'retry_count': config.max_retries or 0
                 }
@@ -295,7 +309,14 @@ class Scheduler:
     
     def remove_task_by_config_id(self, task_config_id: int) -> bool:
         """根据任务配置ID移除调度任务"""
-        return self.remove_job(str(task_config_id))
+        # 需要构造job_id来移除任务
+        # 方案: 遍历所有job找到匹配的
+        jobs = self.get_all_jobs()
+        for job in jobs:
+            config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
+            if config_id == task_config_id:
+                return self.remove_job(job.id)
+        return False
     
     def print_jobs(self):
         """打印所有任务（调试用）"""

@@ -294,6 +294,28 @@ class CRUDScheduleEvent:
             
         except Exception as e:
             raise DatabaseError(f"获取任务配置 {task_config_id} 的统计数据时出错: {str(e)}")
+    
+    async def get_events_by_job_pattern(
+        self,
+        db: AsyncSession,
+        task_type_pattern: str = None,
+        scheduler_type_pattern: str = None,
+        limit: int = 50
+    ) -> List[ScheduleEvent]:
+        """根据job_id模式查询事件"""
+        query = select(ScheduleEvent).options(selectinload(ScheduleEvent.task_config)).order_by(ScheduleEvent.created_at.desc())
+        
+        if task_type_pattern:
+            # 例如: task_type_pattern = "cleanup" 匹配所有清理任务
+            query = query.where(ScheduleEvent.job_id.like(f"{task_type_pattern}%"))
+        
+        if scheduler_type_pattern:
+            # 例如: scheduler_type_pattern = "_cron_" 匹配所有cron任务
+            query = query.where(ScheduleEvent.job_id.like(f"%{scheduler_type_pattern}%"))
+        
+        query = query.limit(limit)
+        result = await db.execute(query)
+        return result.scalars().all()
 
 
 # 全局CRUD实例

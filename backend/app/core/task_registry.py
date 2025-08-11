@@ -97,6 +97,41 @@ class TaskRegistry:
         TaskType.LOG_ROTATION: 'default',
     }
     
+    # 任务类型缩写映射
+    _TASK_TYPE_SHORTCUTS: Dict[TaskType, str] = {
+        # 爬取任务
+        TaskType.BOT_SCRAPING: 'scrape_bot',
+        TaskType.MANUAL_SCRAPING: 'scrape_man',
+        TaskType.BATCH_SCRAPING: 'scrape_batch',
+        
+        # 清理任务
+        TaskType.CLEANUP_TOKENS: 'cleanup_tok',
+        TaskType.CLEANUP_CONTENT: 'cleanup_cnt',
+        TaskType.CLEANUP_EVENTS: 'cleanup_evt',
+        
+        # 通知任务
+        TaskType.SEND_EMAIL: 'email',
+        TaskType.SEND_NOTIFICATION: 'notify',
+        
+        # 数据处理任务
+        TaskType.DATA_EXPORT: 'export',
+        TaskType.DATA_BACKUP: 'backup',
+        TaskType.DATA_ANALYSIS: 'analyze',
+        
+        # 系统维护任务
+        TaskType.HEALTH_CHECK: 'health',
+        TaskType.SYSTEM_MONITOR: 'monitor',
+        TaskType.LOG_ROTATION: 'logrot',
+    }
+    
+    # 调度类型缩写映射
+    _SCHEDULER_TYPE_SHORTCUTS: Dict[SchedulerType, str] = {
+        SchedulerType.INTERVAL: 'int',
+        SchedulerType.CRON: 'cron',
+        SchedulerType.DATE: 'once',
+        SchedulerType.MANUAL: 'man',
+    }
+    
     @classmethod
     def get_celery_task_name(cls, task_type: TaskType) -> str:
         """获取Celery任务名称"""
@@ -133,6 +168,56 @@ class TaskRegistry:
     def get_supported_task_types(cls) -> Set[TaskType]:
         """获取所有支持的任务类型"""
         return set(cls._CELERY_TASK_MAPPING.keys())
+    
+    @classmethod
+    def get_task_type_shortcut(cls, task_type: TaskType) -> str:
+        """获取任务类型缩写"""
+        shortcut = cls._TASK_TYPE_SHORTCUTS.get(task_type)
+        if not shortcut:
+            # 如果没有定义缩写，使用原值并处理
+            return task_type.value.replace('_', '')[:10]
+        return shortcut
+    
+    @classmethod
+    def get_scheduler_type_shortcut(cls, scheduler_type: SchedulerType) -> str:
+        """获取调度类型缩写"""
+        shortcut = cls._SCHEDULER_TYPE_SHORTCUTS.get(scheduler_type)
+        if not shortcut:
+            return scheduler_type.value[:4]
+        return shortcut
+    
+    @classmethod
+    def generate_job_id(cls, task_type: TaskType, scheduler_type: SchedulerType, config_id: int) -> str:
+        """生成有意义的job_id
+        
+        格式: {task_short}_{schedule_short}_{config_id}
+        例如: cleanup_tok_int_1
+        """
+        task_short = cls.get_task_type_shortcut(task_type)
+        schedule_short = cls.get_scheduler_type_shortcut(scheduler_type)
+        
+        job_id = f"{task_short}_{schedule_short}_{config_id}"
+        
+        # 验证生成的job_id长度
+        if len(job_id) > 50:  # APScheduler可能有长度限制
+            raise ValueError(f"生成的job_id过长: {job_id}")
+        
+        return job_id
+    
+    @classmethod
+    def extract_config_id_from_job_id(cls, job_id: str) -> Optional[int]:
+        """从job_id中提取config_id
+        
+        job_id格式: task_short_schedule_short_config_id
+        例如: cleanup_tok_int_1 -> 1
+        """
+        try:
+            parts = job_id.split('_')
+            if len(parts) >= 3:
+                return int(parts[-1])  # 最后一部分是config_id
+        except (ValueError, AttributeError):
+            pass
+        return None
 
 
 # 导出便捷函数
