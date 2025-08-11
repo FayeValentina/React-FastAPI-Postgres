@@ -409,33 +409,6 @@ class TaskManager:
             logger.error(f"重新加载调度器任务失败 {config_id}: {e}")
             return False
     
-    # === 向后兼容的公共方法（已被manage_scheduled_task替代，但保留以兼容旧代码）===
-    
-    async def start_scheduled_task(self, config_id: int) -> bool:
-        """启动任务调度（为了向后兼容保留）"""
-        result = await self.manage_scheduled_task(config_id, ScheduleAction.START)
-        return result["success"]
-    
-    def stop_scheduled_task(self, config_id: int) -> bool:
-        """停止任务调度（为了向后兼容保留）"""
-        result = asyncio.create_task(self.manage_scheduled_task(config_id, ScheduleAction.STOP))
-        return result.result()["success"]
-    
-    async def pause_scheduled_task(self, config_id: int) -> bool:
-        """暂停任务调度（为了向后兼容保留）"""
-        result = await self.manage_scheduled_task(config_id, ScheduleAction.PAUSE)
-        return result["success"]
-    
-    async def resume_scheduled_task(self, config_id: int) -> bool:
-        """恢复任务调度（为了向后兼容保留）"""
-        result = await self.manage_scheduled_task(config_id, ScheduleAction.RESUME)
-        return result["success"]
-    
-    async def reload_scheduled_task(self, config_id: int) -> bool:
-        """重新加载任务调度（为了向后兼容保留）"""
-        result = await self.manage_scheduled_task(config_id, ScheduleAction.RELOAD)
-        return result["success"]
-    
     # === 任务执行功能 ===
     
     async def execute_task_immediately(self, config_id: int, **options) -> Optional[str]:

@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_current_time() -> datetime:
-    """获取当前UTC时间"""
-    return datetime.now(timezone.utc)
+    """获取当前UTC时间（不带时区信息，用于数据库存储）"""
+    return datetime.utcnow()
 
 
 
