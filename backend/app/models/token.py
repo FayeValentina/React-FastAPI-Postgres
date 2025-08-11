@@ -14,9 +14,9 @@ class RefreshToken(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_valid = Column(Boolean, default=True, nullable=False)
-    issued_at = Column(DateTime(timezone=True), default=get_current_time, nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    issued_at = Column(DateTime, default=get_current_time, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
     user_agent = Column(String, nullable=True)
     ip_address = Column(String, nullable=True)
     

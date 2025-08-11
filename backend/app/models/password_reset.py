@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy import String, Boolean, ForeignKey, Integer, func
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import uuid4
 
@@ -19,9 +19,9 @@ class PasswordReset(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     token: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False)
-    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    used_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # 关联关系
     user: Mapped["User"] = relationship("User", back_populates="password_resets")
@@ -30,13 +30,7 @@ class PasswordReset(Base):
     def is_expired(self) -> bool:
         """检查令牌是否已过期"""
         current_time = get_current_time()
-        expires_at = self.expires_at
-        
-        # 如果 expires_at 是 timezone-naive，转换为 UTC
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        
-        return current_time > expires_at
+        return current_time > self.expires_at
 
     @property
     def is_valid(self) -> bool:
