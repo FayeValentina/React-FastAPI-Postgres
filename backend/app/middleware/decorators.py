@@ -4,6 +4,7 @@ import traceback
 import logging
 from functools import wraps
 from typing import Callable, Any
+from datetime import datetime
 
 from celery import Task
 from app.models.task_execution import ExecutionStatus
@@ -28,27 +29,30 @@ async def _record_execution(
         logger.info(f"任务 '{job_name}' (ID: {job_id}) 是直接调用任务，跳过数据库记录。")
         return
     
-    from app.crud import task_execution as crud_task_execution
+    from app.crud.task_execution import crud_task_execution
     from app.db.base import get_worker_session  # 使用 Worker 专用会话
-    from app.schemas.job_schemas import TaskExecutionCreate
     
+    # 将时间戳转换为datetime对象
+    started_at_dt = datetime.fromtimestamp(started_at)
+    completed_at_dt = datetime.fromtimestamp(completed_at)
     duration = completed_at - started_at
-    execution_data = TaskExecutionCreate(
-        task_config_id=task_config_id,
-        job_id=job_id,
-        job_name=job_name,
-        status=status,
-        started_at=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(started_at)),
-        completed_at=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(completed_at)),
-        duration_seconds=duration,
-        result=result,
-        error_message=error_message,
-        error_traceback=error_traceback,
-    )
     
     async for db in get_worker_session():  # 使用 Worker 专用会话
         try:
-            await crud_task_execution.create(db, obj_in=execution_data)
+            await crud_task_execution.create(
+                db=db,
+                task_config_id=task_config_id,
+                job_id=job_id,
+                job_name=job_name,
+                status=status,
+                started_at=started_at_dt,
+                completed_at=completed_at_dt,
+                duration_seconds=duration,
+                result=result,
+                error_message=error_message,
+                error_traceback=error_traceback
+            )
+            logger.info(f"任务执行记录已保存: {job_name} (ID: {job_id})")
         except Exception as e:
             logger.error(f"记录任务执行失败: {e}", exc_info=True)
 
@@ -63,7 +67,8 @@ def task_executor(task_name: str):
             task_instance: Task = args[0]
             job_id = task_instance.request.id
             
-            task_config_id = kwargs.get("task_config_id")
+            # task_config_id = kwargs.get("task_config_id")
+            task_config_id = kwargs.get("task_config_id") or (args[1] if len(args) > 1 else None)
             if not task_config_id:
                 logger.warning(f"任务 '{task_name}' (ID: {job_id}) 没有 task_config_id，可能是直接调用的任务。")
                 task_config_id = -1
