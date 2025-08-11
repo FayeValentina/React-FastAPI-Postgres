@@ -51,92 +51,146 @@ class ScheduleEventInfo(BaseModel):
     result: Optional[Dict[str, Any]] = Field(None, description="执行结果")
 
 
-class EnhancedJobInfo(BaseModel):
-    """增强的任务信息"""
-    schedule_id: str = Field(..., description="调度任务ID")
-    name: str = Field(..., description="任务名称")
-    next_run_time: Optional[str] = Field(None, description="下次运行时间")
-    trigger: str = Field(..., description="触发器配置")
-    config: Optional[Dict[str, Any]] = Field(None, description="任务配置")
-    pending: bool = Field(..., description="是否等待中")
-    computed_status: TaskStatus = Field(..., description="计算的任务状态")
-    execution_summary: JobExecutionSummary = Field(..., description="执行摘要")
-
-
-class JobDetailResponse(BaseModel):
-    """任务详情响应"""
-    job_info: Dict[str, Any] = Field(..., description="基本任务信息")
-    computed_status: TaskStatus = Field(..., description="计算的任务状态")
-    execution_summary: JobExecutionSummary = Field(..., description="执行摘要")
-    recent_events: List[ScheduleEventInfo] = Field(..., description="最近事件")
-
-
-class JobInfo(BaseModel):
-    """任务信息"""
-    id: str
-    name: str
-    trigger: str
-    next_run_time: Optional[datetime] = None
-    pending: bool = False
-    status: TaskStatus = TaskStatus.IDLE  # 计算出的综合状态
-    
-    # 详细信息（可选）
-    func: Optional[str] = None
-    args: Optional[List[Any]] = None
-    kwargs: Optional[Dict[str, Any]] = None
-    executor: Optional[str] = None
-    max_instances: Optional[int] = None
-    misfire_grace_time: Optional[int] = None
-    coalesce: Optional[bool] = None
-
-
-class TaskExecutionResponse(BaseModel):
-    """任务执行历史响应"""
-    id: int
-    job_id: str
-    job_name: str
-    status: ExecutionStatus
-    started_at: datetime
-    completed_at: Optional[datetime] = None
-    duration_seconds: Optional[float] = None
-    result: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class JobStatsResponse(BaseModel):
-    """任务统计响应"""
-    total_runs: int
-    successful_runs: int
-    failed_runs: int
-    success_rate: float
-    avg_duration_seconds: float
-
-
-class JobCreateRequest(BaseModel):
-    """创建任务请求"""
-    func: str = Field(..., description="任务函数引用")
-    name: str = Field(..., description="任务名称")
-    trigger: str = Field(..., description="触发器类型: date/interval/cron")
-    trigger_args: Dict[str, Any] = Field(..., description="触发器参数")
-    args: Optional[List[Any]] = Field(None, description="函数参数")
-    kwargs: Optional[Dict[str, Any]] = Field(None, description="函数关键字参数")
-    max_retries: int = Field(0, description="最大重试次数")
-    timeout: Optional[int] = Field(None, description="超时时间（秒）")
-
-
-class JobScheduleUpdate(BaseModel):
-    """更新任务调度"""
-    trigger: Optional[str] = None
-    trigger_args: Optional[Dict[str, Any]] = None
-
 
 class SystemStatusResponse(BaseModel):
     """系统状态响应"""
+    scheduler_running: bool = Field(..., description="调度器运行状态")
+    total_scheduled_jobs: int = Field(..., description="总调度任务数")
+    total_active_tasks: int = Field(..., description="总活跃任务数")
+    timestamp: str = Field(..., description="状态时间戳")
     scheduler: Dict[str, Any] = Field(..., description="调度器状态")
     celery: Dict[str, Any] = Field(..., description="Celery状态")
     queues: Dict[str, Any] = Field(..., description="队列状态")
-    timestamp: str = Field(..., description="状态时间戳")
+
+
+class HealthCheckResponse(BaseModel):
+    """健康检查响应"""
+    status: str = Field(..., description="健康状态: healthy/degraded")
+    scheduler_running: bool = Field(..., description="调度器运行状态")
+    total_scheduled_jobs: int = Field(..., description="总调度任务数")
+    total_active_tasks: int = Field(..., description="总活跃任务数")
+    timestamp: Optional[str] = Field(None, description="状态时间戳")
+
+
+class OperationResponse(BaseModel):
+    """通用操作响应"""
+    success: bool = Field(..., description="操作是否成功")
+    message: str = Field(..., description="操作结果消息")
+
+
+class TaskExecutionResult(BaseModel):
+    """任务执行结果响应"""
+    task_id: str = Field(..., description="任务ID")
+    config_id: Optional[int] = Field(None, description="配置ID")
+    task_type: Optional[str] = Field(None, description="任务类型")
+    status: str = Field(..., description="执行状态")
+    queue: Optional[str] = Field(None, description="队列名称")
+    message: Optional[str] = Field(None, description="结果消息")
+
+
+class BatchCreateResponse(BaseModel):
+    """批量创建响应"""
+    created: List[int] = Field(..., description="成功创建的ID列表")
+    failed: List[Dict[str, Any]] = Field(..., description="失败项目列表")
+    total_created: int = Field(..., description="创建成功总数")
+    total_failed: int = Field(..., description="创建失败总数")
+
+
+class BatchDeleteResponse(BaseModel):
+    """批量删除响应"""
+    deleted: List[int] = Field(..., description="成功删除的ID列表")
+    failed: List[Dict[str, Any]] = Field(..., description="失败项目列表")
+    total_deleted: int = Field(..., description="删除成功总数")
+    total_failed: int = Field(..., description="删除失败总数")
+
+
+class BatchExecutionResponse(BaseModel):
+    """批量执行响应"""
+    task_ids: List[str] = Field(..., description="任务ID列表")
+    total_submitted: int = Field(..., description="提交任务总数")
+    config_ids: Optional[List[int]] = Field(None, description="配置ID列表")
+    task_type: Optional[str] = Field(None, description="任务类型")
+    status: str = Field(..., description="提交状态")
+
+
+class TaskRevokeResponse(BaseModel):
+    """任务撤销响应"""
+    task_id: str = Field(..., description="任务ID")
+    revoked: bool = Field(..., description="是否成功撤销")
+    message: str = Field(..., description="操作结果")
+
+
+class BatchRevokeResponse(BaseModel):
+    """批量撤销响应"""
+    total_revoked: int = Field(..., description="撤销成功总数")
+    total_failed: int = Field(..., description="撤销失败总数")
+    results: List[TaskRevokeResponse] = Field(..., description="详细结果列表")
+
+
+class QueueStatsResponse(BaseModel):
+    """队列统计响应"""
+    queues: Dict[str, Dict[str, Any]] = Field(..., description="队列统计信息")
+    total_tasks: int = Field(..., description="总任务数")
+
+
+class QueueLengthResponse(BaseModel):
+    """队列长度响应"""
+    queue_name: str = Field(..., description="队列名称")
+    length: int = Field(..., description="队列长度")
+    status: str = Field(..., description="队列状态")
+
+
+
+class TaskTypeSupportResponse(BaseModel):
+    """任务类型支持检查响应"""
+    task_type: str = Field(..., description="任务类型")
+    supported: bool = Field(..., description="是否支持")
+    celery_task_name: Optional[str] = Field(None, description="对应的Celery任务名")
+
+
+class EnumValuesResponse(BaseModel):
+    """枚举值响应"""
+    task_types: List[str] = Field(..., description="任务类型列表")
+    task_statuses: List[str] = Field(..., description="任务状态列表")
+    scheduler_types: List[str] = Field(..., description="调度器类型列表")
+
+
+class ValidationResponse(BaseModel):
+    """配置验证响应"""
+    valid: bool = Field(..., description="是否有效")
+    message: str = Field(..., description="验证消息")
+    config: Optional[Dict[str, Any]] = Field(None, description="配置数据")
+
+
+class TaskStatusResponse(BaseModel):
+    """任务状态响应"""
+    task_id: str = Field(..., description="任务ID")
+    status: str = Field(..., description="任务状态")
+    result: Optional[Dict[str, Any]] = Field(None, description="任务结果")
+    traceback: Optional[str] = Field(None, description="错误追踪")
+    name: Optional[str] = Field(None, description="任务名称")
+    args: Optional[List[Any]] = Field(None, description="任务参数")
+    kwargs: Optional[Dict[str, Any]] = Field(None, description="任务关键字参数")
+
+
+class ActiveTaskInfo(BaseModel):
+    """活跃任务信息"""
+    task_id: str = Field(..., description="任务ID")
+    name: str = Field(..., description="任务名称")
+    args: List[Any] = Field(..., description="任务参数")
+    kwargs: Dict[str, Any] = Field(..., description="任务关键字参数")
+    worker: Optional[str] = Field(None, description="执行工作者")
+    queue: Optional[str] = Field(None, description="队列名称")
+
+
+class ScheduledJobInfo(BaseModel):
+    """调度任务信息"""
+    id: str = Field(..., description="任务ID")
+    name: str = Field(..., description="任务名称")
+    next_run_time: Optional[str] = Field(None, description="下次运行时间")
+    trigger: str = Field(..., description="触发器信息")
+    pending: bool = Field(..., description="是否等待中")
+    func: Optional[str] = Field(None, description="函数名称")
+    args: Optional[List[Any]] = Field(None, description="函数参数")
+    kwargs: Optional[Dict[str, Any]] = Field(None, description="函数关键字参数")
 

@@ -87,79 +87,6 @@ class TaskConfigResponse(TaskConfigBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class TaskConfigListResponse(BaseModel):
-    """任务配置列表响应"""
-    items: list[TaskConfigResponse] = Field(..., description="配置列表")
-    total: int = Field(..., description="总数量")
-    page: int = Field(..., description="当前页码")
-    page_size: int = Field(..., description="每页大小")
-
-
-# === 特定任务类型的Schema ===
-
-class CleanupTaskConfig(BaseModel):
-    """清理任务配置"""
-    days_old: int = Field(..., description="清理天数", gt=0)
-    cleanup_type: str = Field(..., description="清理类型")
-
-
-class EmailTaskConfig(BaseModel):
-    """邮件任务配置"""
-    recipient_emails: list[str] = Field(..., description="收件人邮箱列表", min_items=1)
-    subject: str = Field(..., description="邮件主题", min_length=1, max_length=200)
-    template_name: str = Field(..., description="邮件模板名称")
-    template_data: Dict[str, Any] = Field({}, description="模板数据")
-
-
-class NotificationTaskConfig(BaseModel):
-    """通知任务配置"""
-    notification_type: str = Field(..., description="通知类型")  
-    recipients: list[str] = Field(..., description="接收者列表", min_items=1)
-    message: str = Field(..., description="通知消息", min_length=1, max_length=1000)
-    urgency: str = Field("normal", description="紧急程度: low/normal/high")
-
-
-# === 调度配置Schema ===
-
-class IntervalScheduleConfig(BaseModel):
-    """间隔调度配置"""
-    weeks: Optional[int] = Field(None, ge=0)
-    days: Optional[int] = Field(None, ge=0)
-    hours: Optional[int] = Field(None, ge=0)
-    minutes: Optional[int] = Field(None, ge=0)
-    seconds: Optional[int] = Field(None, ge=0)
-    start_date: Optional[datetime] = Field(None, description="开始时间")
-    end_date: Optional[datetime] = Field(None, description="结束时间")
-
-
-class CronScheduleConfig(BaseModel):
-    """Cron调度配置"""
-    minute: str = Field(..., description="分钟 (0-59)")
-    hour: str = Field(..., description="小时 (0-23)")
-    day: str = Field(..., description="日 (1-31)")
-    month: str = Field(..., description="月 (1-12)")
-    day_of_week: str = Field(..., description="周几 (0-6)")
-    timezone: Optional[str] = Field("UTC", description="时区")
-    start_date: Optional[datetime] = Field(None, description="开始时间")
-    end_date: Optional[datetime] = Field(None, description="结束时间")
-
-
-class DateScheduleConfig(BaseModel):
-    """日期调度配置"""
-    run_date: datetime = Field(..., description="执行时间")
-
-
-# === 批量操作Schema ===
-
-class BatchTaskConfigCreate(BaseModel):
-    """批量创建任务配置"""
-    configs: list[TaskConfigCreate] = Field(..., description="配置列表", min_items=1, max_items=100)
-
-
-class BatchTaskConfigUpdate(BaseModel):
-    """批量更新任务配置"""  
-    config_ids: list[int] = Field(..., description="配置ID列表", min_items=1)
-    updates: TaskConfigUpdate = Field(..., description="更新数据")
 
 
 class TaskConfigQuery(BaseModel):
@@ -171,3 +98,9 @@ class TaskConfigQuery(BaseModel):
     page_size: int = Field(20, description="每页大小", ge=1, le=100)
     order_by: str = Field("created_at", description="排序字段")
     order_desc: bool = Field(True, description="降序排序")
+
+
+class TaskConfigDeleteResponse(BaseModel):
+    """任务配置删除响应"""
+    success: bool = Field(..., description="删除是否成功")
+    message: str = Field(..., description="删除结果消息")
