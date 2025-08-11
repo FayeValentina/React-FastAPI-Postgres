@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.task import TaskStatus
+from app.schemas.job_schemas import TaskStatus
 from app.models.task_execution import ExecutionStatus
 from app.utils.common import get_current_time
 
@@ -93,7 +93,7 @@ class TaskStatusCalculator:
     async def get_job_execution_summary(self, db: AsyncSession, job_id: str, hours: int = 24):
         """获取任务执行摘要"""
         from app.crud.task_execution import CRUDTaskExecution
-        from app.schemas.task import JobExecutionSummary
+        from app.schemas.job_schemas import JobExecutionSummary
         
         executions = await CRUDTaskExecution.get_recent_executions(db, hours)
         job_executions = [e for e in executions if e.job_id == job_id]
@@ -132,7 +132,7 @@ class TaskStatusCalculator:
     async def get_job_recent_events(self, db: AsyncSession, job_id: str, limit: int = 10):
         """获取任务最近的事件"""
         from app.crud.schedule_event import CRUDScheduleEvent
-        from app.schemas.task import ScheduleEventInfo
+        from app.schemas.job_schemas import ScheduleEventInfo
         
         events = await CRUDScheduleEvent.get_events_by_job(db, job_id, limit)
         
@@ -155,7 +155,7 @@ def get_task_status_calculator() -> TaskStatusCalculator:
     """获取任务状态计算器实例"""
     global _task_status_calculator
     if _task_status_calculator is None:
-        from app.tasks.schedulers import scheduler
+        from app.core.scheduler import scheduler
         _task_status_calculator = TaskStatusCalculator(scheduler.scheduler)
     return _task_status_calculator
 

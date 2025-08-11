@@ -209,24 +209,40 @@ class TaskDispatcher:
                 "status": result.status,
                 "result": result.result if result.ready() else None,
                 "traceback": result.traceback if result.failed() else None,
-                "date_done": result.date_done.isoformat() if result.date_done else None,
-                "successful": result.successful(),
-                "failed": result.failed(),
-                "ready": result.ready(),
+                "name": getattr(result, 'name', None),
+                "args": getattr(result, 'args', None),
+                "kwargs": getattr(result, 'kwargs', None)
             }
         except Exception as e:
             logger.error(f"获取任务状态失败: {e}")
-            return {"task_id": task_id, "status": "UNKNOWN", "error": str(e)}
+            return {
+                "task_id": task_id, 
+                "status": "UNKNOWN", 
+                "result": None,
+                "traceback": f"获取状态失败: {str(e)}",
+                "name": None,
+                "args": None,
+                "kwargs": None
+            }
     
     def revoke_task(self, task_id: str, terminate: bool = False) -> Dict[str, Any]:
         """撤销任务"""
         try:
             self.celery_app.control.revoke(task_id, terminate=terminate)
             logger.info(f"已撤销任务 {task_id}，终止进程: {terminate}")
-            return {"task_id": task_id, "revoked": True, "terminated": terminate}
+            message = f"任务 {task_id} 已成功撤销" + (f" 并终止进程" if terminate else "")
+            return {
+                "task_id": task_id, 
+                "revoked": True, 
+                "message": message
+            }
         except Exception as e:
             logger.error(f"撤销任务失败: {e}")
-            return {"task_id": task_id, "revoked": False, "error": str(e)}
+            return {
+                "task_id": task_id, 
+                "revoked": False, 
+                "message": f"撤销任务失败: {str(e)}"
+            }
     
     def get_active_tasks(self) -> List[Dict[str, Any]]:
         """获取活跃任务列表"""

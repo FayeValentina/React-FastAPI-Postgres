@@ -171,14 +171,15 @@ class TaskManager:
                     return {
                         'id': config.id,
                         'name': config.name,
-                        'task_type': config.task_type.value,
-                        'status': config.status.value,
+                        'task_type': config.task_type.value if hasattr(config.task_type, 'value') else config.task_type,
+                        'scheduler_type': config.scheduler_type.value if hasattr(config.scheduler_type, 'value') else config.scheduler_type,
+                        'status': config.status.value if hasattr(config.status, 'value') else config.status,
                         'description': config.description,
-                        'task_params': config.parameters,
-                        'schedule_config': config.schedule_config,
-                        'priority': config.priority,
-                        'max_retries': config.max_retries,
+                        'parameters': config.parameters or {},
+                        'schedule_config': config.schedule_config or {},
+                        'max_retries': config.max_retries or 0,
                         'timeout_seconds': config.timeout_seconds,
+                        'priority': config.priority or 5,
                         'created_at': config.created_at.isoformat() if config.created_at else None,
                         'updated_at': config.updated_at.isoformat() if config.updated_at else None
                     }
@@ -208,10 +209,17 @@ class TaskManager:
                     {
                         'id': c.id,
                         'name': c.name,
-                        'task_type': c.task_type.value,
-                        'status': c.status.value,
+                        'task_type': c.task_type.value if hasattr(c.task_type, 'value') else c.task_type,
+                        'scheduler_type': c.scheduler_type.value if hasattr(c.scheduler_type, 'value') else c.scheduler_type,
+                        'status': c.status.value if hasattr(c.status, 'value') else c.status,
                         'description': c.description,
-                        'priority': c.priority
+                        'parameters': c.parameters or {},
+                        'schedule_config': c.schedule_config or {},
+                        'max_retries': c.max_retries or 0,
+                        'timeout_seconds': c.timeout_seconds,
+                        'priority': c.priority or 5,
+                        'created_at': c.created_at.isoformat() if c.created_at else None,
+                        'updated_at': c.updated_at.isoformat() if c.updated_at else None
                     }
                     for c in configs
                 ]
@@ -329,12 +337,14 @@ class TaskManager:
             
             for job in jobs:
                 result.append({
-                    'job_id': job.id,
-                    'name': job.name,
+                    'id': job.id,
+                    'name': job.name or f"Task-{job.id}",
                     'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
                     'trigger': str(job.trigger),
-                    'args': job.args,
-                    'kwargs': job.kwargs
+                    'pending': job.next_run_time is not None,
+                    'func': getattr(job.func, '__name__', str(job.func)) if job.func else None,
+                    'args': list(job.args) if job.args else [],
+                    'kwargs': dict(job.kwargs) if job.kwargs else {}
                 })
             
             return result
@@ -388,22 +398,58 @@ class TaskManager:
             scheduled_jobs = self.scheduler.get_all_jobs()
             active_tasks = self.dispatcher.get_active_tasks()
             
-            async with AsyncSessionLocal() as db:
-                config_stats = await crud_task_config.get_stats(db)
+            # 获取队列状态
+            queues = {"default", "cleanup", "scraping", "high_priority", "low_priority"}
+            queue_status = {}
+            for queue in queues:
+                try:
+                    length = self.dispatcher.get_queue_length(queue)
+                    queue_status[queue] = {"length": length, "status": "active"}
+                except Exception:
+                    queue_status[queue] = {"length": 0, "status": "unknown"}
+            
+            # 获取配置统计
+            try:
+                async with AsyncSessionLocal() as db:
+                    config_stats = await crud_task_config.get_stats(db)
+            except Exception as e:
+                logger.warning(f"获取配置统计失败: {e}")
+                config_stats = {"total": 0, "active": 0, "inactive": 0}
             
             return {
                 "scheduler_running": self.scheduler.running,
                 "total_scheduled_jobs": len(scheduled_jobs),
                 "total_active_tasks": len(active_tasks),
-                "config_stats": config_stats,
-                "timestamp": get_current_time().isoformat()
+                "timestamp": get_current_time().isoformat(),
+                "scheduler": {
+                    "running": self.scheduler.running,
+                    "job_count": len(scheduled_jobs),
+                    "uptime": "N/A"  # 可以后续添加启动时间跟踪
+                },
+                "celery": {
+                    "active_tasks": len(active_tasks),
+                    "broker_status": "connected",  # 简化版本
+                    "workers": "N/A"  # 可以后续添加worker信息
+                },
+                "queues": queue_status
             }
         except Exception as e:
             logger.error(f"获取系统状态失败: {e}")
             return {
                 "scheduler_running": False,
-                "error": str(e),
-                "timestamp": get_current_time().isoformat()
+                "total_scheduled_jobs": 0,
+                "total_active_tasks": 0,
+                "timestamp": get_current_time().isoformat(),
+                "scheduler": {
+                    "running": False,
+                    "job_count": 0,
+                    "error": str(e)
+                },
+                "celery": {
+                    "active_tasks": 0,
+                    "error": str(e)
+                },
+                "queues": {}
             }
 
 
