@@ -29,10 +29,11 @@ from app.schemas.job_schemas import (
     ValidationResponse,
     TaskStatusResponse,
     ActiveTaskInfo,
-    ScheduledJobInfo
+    ScheduledJobInfo,
+    ScheduleActionResponse
 )
 from app.services.tasks_manager import task_manager
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType, ScheduleAction
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -123,6 +124,7 @@ async def list_task_configs(
 async def get_task_config(
     config_id: int = Path(..., description="Task configuration ID"),
     include_stats: bool = Query(False, description="Include execution statistics"),
+    verify_scheduler_status: bool = Query(False, description="Verify status against APScheduler"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """
@@ -131,8 +133,9 @@ async def get_task_config(
     Parameters:
         - config_id: Task configuration ID
         - include_stats: Whether to include execution statistics
+        - verify_scheduler_status: Whether to verify status against APScheduler
     """
-    config = await task_manager.get_task_config(config_id)
+    config = await task_manager.get_task_config(config_id, verify_scheduler_status)
     if not config:
         raise HTTPException(status_code=404, detail="Task configuration not found")
     
@@ -315,69 +318,60 @@ async def batch_delete_configs(
 # Scheduling Operations
 # ---------------------------------------------------------------------------
 
-@router.post("/configs/{config_id}/schedule/start", response_model=OperationResponse)
-async def start_scheduled_task(
+@router.post("/configs/{config_id}/schedule", response_model=ScheduleActionResponse)
+async def manage_scheduled_task(
     config_id: int = Path(..., description="Task configuration ID"),
+    action: str = Query(..., description="调度操作类型: start, stop, pause, resume, reload"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """Start scheduling for a task configuration."""
-    success = await task_manager.start_scheduled_task(config_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to start scheduled task")
+    """
+    统一的任务调度管理端点，支持所有调度操作。
     
-    return {"success": True, "message": f"Task {config_id} scheduling started"}
-
-
-@router.post("/configs/{config_id}/schedule/stop", response_model=OperationResponse)
-async def stop_scheduled_task(
-    config_id: int = Path(..., description="Task configuration ID"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """Stop scheduling for a task configuration."""
-    success = task_manager.stop_scheduled_task(config_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to stop scheduled task")
+    支持的操作类型:
+    - start: 启动任务调度 (状态变为 active)
+    - stop: 停止任务调度 (状态变为 inactive)  
+    - pause: 暂停任务调度 (状态变为 paused)
+    - resume: 恢复任务调度 (状态变为 active)
+    - reload: 重新加载任务调度 (状态变为 active)
     
-    return {"success": True, "message": f"Task {config_id} scheduling stopped"}
-
-
-@router.post("/configs/{config_id}/schedule/pause", response_model=OperationResponse)
-async def pause_scheduled_task(
-    config_id: int = Path(..., description="Task configuration ID"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """Pause a scheduled task."""
-    success = task_manager.pause_scheduled_task(config_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to pause scheduled task")
+    失败时状态会自动设置为 error
     
-    return {"success": True, "message": f"Task {config_id} paused"}
-
-
-@router.post("/configs/{config_id}/schedule/resume", response_model=OperationResponse)
-async def resume_scheduled_task(
-    config_id: int = Path(..., description="Task configuration ID"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """Resume a paused task."""
-    success = task_manager.resume_scheduled_task(config_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to resume scheduled task")
+    Parameters:
+        - config_id: Task configuration ID
+        - action: 调度操作类型 (URL查询参数)
     
-    return {"success": True, "message": f"Task {config_id} resumed"}
-
-
-@router.post("/configs/{config_id}/schedule/reload", response_model=OperationResponse)
-async def reload_scheduled_task(
-    config_id: int = Path(..., description="Task configuration ID"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """Reload task schedule from database configuration."""
-    success = await task_manager.reload_scheduled_task(config_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to reload scheduled task")
-    
-    return {"success": True, "message": f"Task {config_id} reloaded"}
+    Example:
+        POST /configs/205/schedule?action=pause
+    """
+    try:
+        # 验证action类型
+        action_value = action.lower()
+        if action_value not in [e.value for e in ScheduleAction]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"不支持的操作类型: {action_value}. 支持的操作: {[e.value for e in ScheduleAction]}"
+            )
+        
+        # 转换为枚举类型
+        schedule_action = ScheduleAction(action_value)
+        
+        # 执行调度操作
+        result = await task_manager.manage_scheduled_task(config_id, schedule_action)
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=result["message"]
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"无效的操作类型: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"操作执行异常: {str(e)}")
 
 
 @router.get("/scheduled", response_model=List[ScheduledJobInfo])

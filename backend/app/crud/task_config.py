@@ -255,6 +255,26 @@ class CRUDTaskConfig:
             await db.rollback()
             raise DatabaseError(f"批量更新任务状态时出错: {str(e)}")
     
+    async def update_status(
+        self,
+        db: AsyncSession,
+        config_id: int,
+        status: TaskStatus
+    ) -> bool:
+        """更新单个任务状态"""
+        try:
+            result = await db.execute(
+                update(TaskConfig)
+                .where(TaskConfig.id == config_id)
+                .values(status=status, updated_at=get_current_time())
+            )
+            await db.commit()
+            return result.rowcount > 0
+            
+        except Exception as e:
+            await db.rollback()
+            raise DatabaseError(f"更新任务状态时出错: {str(e)}")
+    
     async def update_parameters(
         self,
         db: AsyncSession,

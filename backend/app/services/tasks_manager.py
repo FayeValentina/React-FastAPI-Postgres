@@ -7,7 +7,7 @@ import asyncio
 
 from app.core.scheduler import scheduler
 from app.core.task_dispatcher import TaskDispatcher
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegistry
+from app.core.task_registry import TaskType, TaskStatus, SchedulerType, ScheduleAction, TaskRegistry
 from app.crud.task_config import crud_task_config
 from app.crud.schedule_event import crud_schedule_event
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
@@ -162,13 +162,13 @@ class TaskManager:
             logger.error(f"删除任务配置失败 {config_id}: {e}")
             return False
     
-    async def get_task_config(self, config_id: int) -> Optional[Dict[str, Any]]:
+    async def get_task_config(self, config_id: int, verify_scheduler_status: bool = False) -> Optional[Dict[str, Any]]:
         """获取任务配置详情"""
         try:
             async with AsyncSessionLocal() as db:
                 config = await crud_task_config.get(db, config_id)
                 if config:
-                    return {
+                    result = {
                         'id': config.id,
                         'name': config.name,
                         'task_type': config.task_type.value if hasattr(config.task_type, 'value') else config.task_type,
@@ -183,10 +183,42 @@ class TaskManager:
                         'created_at': config.created_at.isoformat() if config.created_at else None,
                         'updated_at': config.updated_at.isoformat() if config.updated_at else None
                     }
+                    
+                    # 可选：验证 APScheduler 的实际状态
+                    if verify_scheduler_status:
+                        scheduler_status = self._get_scheduler_status(config_id)
+                        result['scheduler_status'] = scheduler_status
+                        
+                        # 如果发现状态不一致，记录警告
+                        db_status = config.status.value if hasattr(config.status, 'value') else config.status
+                        if scheduler_status != db_status:
+                            logger.warning(f"任务 {config_id} 状态不一致 - 数据库: {db_status}, 调度器: {scheduler_status}")
+                    
+                    return result
                 return None
         except Exception as e:
             logger.error(f"获取任务配置失败 {config_id}: {e}")
             return None
+    
+    def _get_scheduler_status(self, config_id: int) -> str:
+        """获取 APScheduler 中任务的实际状态"""
+        try:
+            jobs = self.scheduler.get_all_jobs()
+            for job in jobs:
+                extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
+                if extracted_config_id == config_id:
+                    # 检查 next_run_time 来确定是否暂停
+                    if job.next_run_time is None:
+                        return "paused"
+                    else:
+                        return "active"
+            
+            # 如果没有找到对应的调度任务
+            return "inactive"
+            
+        except Exception as e:
+            logger.error(f"获取调度器状态失败 {config_id}: {e}")
+            return "unknown"
     
     async def list_task_configs(
         self,
@@ -228,57 +260,181 @@ class TaskManager:
             logger.error(f"列出任务配置失败: {e}")
             return []
     
-    # === 任务调度管理功能 ===
-    
-    async def start_scheduled_task(self, config_id: int) -> bool:
-        """启动任务调度"""
+    # === 任务调度管理功能 ===    
+    async def manage_scheduled_task(self, config_id: int, action: ScheduleAction) -> Dict[str, Any]:
+        """统一的调度任务管理方法
+        
+        Args:
+            config_id: 任务配置ID
+            action: 调度操作类型
+            
+        Returns:
+            操作结果字典，包含success, message, status等信息
+        """
         try:
-            success = await self.scheduler.reload_task_from_database(config_id, execute_scheduled_task)
+            result = {"success": False, "message": "", "action": action.value, "config_id": config_id}
+            target_status = None
+            operation_name = ""
+            
+            # 根据action类型执行对应的调度器操作（不处理状态同步）
+            if action == ScheduleAction.START:
+                success = await self._start_scheduler_task(config_id)
+                target_status = TaskStatus.ACTIVE
+                operation_name = "启动"
+                
+            elif action == ScheduleAction.STOP:
+                success = self._stop_scheduler_task(config_id)
+                target_status = TaskStatus.INACTIVE
+                operation_name = "停止"
+                
+            elif action == ScheduleAction.PAUSE:
+                success = self._pause_scheduler_task(config_id)
+                target_status = TaskStatus.PAUSED
+                operation_name = "暂停"
+                
+            elif action == ScheduleAction.RESUME:
+                success = self._resume_scheduler_task(config_id)
+                target_status = TaskStatus.ACTIVE
+                operation_name = "恢复"
+                
+            elif action == ScheduleAction.RELOAD:
+                success = await self._reload_scheduler_task(config_id)
+                target_status = TaskStatus.ACTIVE
+                operation_name = "重新加载"
+                
+            else:
+                result["message"] = f"不支持的操作类型: {action.value}"
+                logger.error(f"不支持的调度操作: {action.value}")
+                return result
+            
+            # 统一处理状态同步
             if success:
-                logger.info(f"已启动任务调度: {config_id}")
-            return success
+                # 调度操作成功，同步更新数据库状态
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await crud_task_config.update_status(db, config_id, target_status)
+                    
+                    result["success"] = True
+                    result["message"] = f"任务 {config_id} {operation_name}成功"
+                    result["status"] = target_status.value
+                    logger.info(f"任务 {config_id} {operation_name}成功，状态同步为: {target_status.value}")
+                
+                except Exception as e:
+                    logger.error(f"任务 {config_id} {operation_name}成功但状态同步失败: {e}")
+                    result["success"] = True  # 调度操作本身成功
+                    result["message"] = f"任务 {config_id} {operation_name}成功，但状态同步失败"
+                    result["status"] = target_status.value
+            else:
+                # 调度操作失败，设置状态为ERROR
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await crud_task_config.update_status(db, config_id, TaskStatus.ERROR)
+                except Exception as e:
+                    logger.error(f"更新任务 {config_id} 状态为ERROR失败: {e}")
+                
+                result["message"] = f"任务 {config_id} {operation_name}失败"
+                result["status"] = TaskStatus.ERROR.value
+                logger.warning(f"任务 {config_id} {operation_name}失败，状态设置为ERROR")
+            
+            return result
+            
         except Exception as e:
-            logger.error(f"启动任务调度失败 {config_id}: {e}")
-            return False
+            # 异常情况下设置ERROR状态
+            logger.error(f"执行调度操作失败 {config_id}[{action.value}]: {e}")
+            try:
+                async with AsyncSessionLocal() as db:
+                    await crud_task_config.update_status(db, config_id, TaskStatus.ERROR)
+            except:
+                pass  # 忽略状态更新失败
+                
+            return {
+                "success": False,
+                "message": f"任务 {config_id} {action.value} 操作异常: {str(e)}",
+                "action": action.value,
+                "config_id": config_id,
+                "status": TaskStatus.ERROR.value
+            }
     
-    def stop_scheduled_task(self, config_id: int) -> bool:
-        """停止任务调度"""
-        try:
-            success = self.scheduler.remove_task_by_config_id(config_id)
-            if success:
-                logger.info(f"已停止任务调度: {config_id}")
-            return success
-        except Exception as e:
-            logger.error(f"停止任务调度失败 {config_id}: {e}")
-            return False
+    # === 私有调度器操作方法（仅负责调度器操作，不处理状态同步）===
     
-    def pause_scheduled_task(self, config_id: int) -> bool:
-        """暂停任务调度"""
-        # 需要找到对应的job_id
-        jobs = self.scheduler.get_all_jobs()
-        for job in jobs:
-            extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
-            if extracted_config_id == config_id:
-                return self.scheduler.pause_job(job.id)
-        return False
-    
-    def resume_scheduled_task(self, config_id: int) -> bool:
-        """恢复任务调度"""
-        # 需要找到对应的job_id
-        jobs = self.scheduler.get_all_jobs()
-        for job in jobs:
-            extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
-            if extracted_config_id == config_id:
-                return self.scheduler.resume_job(job.id)
-        return False
-    
-    async def reload_scheduled_task(self, config_id: int) -> bool:
-        """重新加载任务调度"""
+    async def _start_scheduler_task(self, config_id: int) -> bool:
+        """启动调度器中的任务（不处理状态同步）"""
         try:
             return await self.scheduler.reload_task_from_database(config_id, execute_scheduled_task)
         except Exception as e:
-            logger.error(f"重新加载任务调度失败 {config_id}: {e}")
+            logger.error(f"启动调度器任务失败 {config_id}: {e}")
             return False
+    
+    def _stop_scheduler_task(self, config_id: int) -> bool:
+        """停止调度器中的任务（不处理状态同步）"""
+        try:
+            return self.scheduler.remove_task_by_config_id(config_id)
+        except Exception as e:
+            logger.error(f"停止调度器任务失败 {config_id}: {e}")
+            return False
+    
+    def _pause_scheduler_task(self, config_id: int) -> bool:
+        """暂停调度器中的任务（不处理状态同步）"""
+        try:
+            jobs = self.scheduler.get_all_jobs()
+            for job in jobs:
+                extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
+                if extracted_config_id == config_id:
+                    return self.scheduler.pause_job(job.id)
+            logger.warning(f"未找到任务配置 {config_id} 的调度任务")
+            return False
+        except Exception as e:
+            logger.error(f"暂停调度器任务失败 {config_id}: {e}")
+            return False
+    
+    def _resume_scheduler_task(self, config_id: int) -> bool:
+        """恢复调度器中的任务（不处理状态同步）"""
+        try:
+            jobs = self.scheduler.get_all_jobs()
+            for job in jobs:
+                extracted_config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
+                if extracted_config_id == config_id:
+                    return self.scheduler.resume_job(job.id)
+            logger.warning(f"未找到任务配置 {config_id} 的调度任务")
+            return False
+        except Exception as e:
+            logger.error(f"恢复调度器任务失败 {config_id}: {e}")
+            return False
+    
+    async def _reload_scheduler_task(self, config_id: int) -> bool:
+        """重新加载调度器中的任务（不处理状态同步）"""
+        try:
+            return await self.scheduler.reload_task_from_database(config_id, execute_scheduled_task)
+        except Exception as e:
+            logger.error(f"重新加载调度器任务失败 {config_id}: {e}")
+            return False
+    
+    # === 向后兼容的公共方法（已被manage_scheduled_task替代，但保留以兼容旧代码）===
+    
+    async def start_scheduled_task(self, config_id: int) -> bool:
+        """启动任务调度（为了向后兼容保留）"""
+        result = await self.manage_scheduled_task(config_id, ScheduleAction.START)
+        return result["success"]
+    
+    def stop_scheduled_task(self, config_id: int) -> bool:
+        """停止任务调度（为了向后兼容保留）"""
+        result = asyncio.create_task(self.manage_scheduled_task(config_id, ScheduleAction.STOP))
+        return result.result()["success"]
+    
+    async def pause_scheduled_task(self, config_id: int) -> bool:
+        """暂停任务调度（为了向后兼容保留）"""
+        result = await self.manage_scheduled_task(config_id, ScheduleAction.PAUSE)
+        return result["success"]
+    
+    async def resume_scheduled_task(self, config_id: int) -> bool:
+        """恢复任务调度（为了向后兼容保留）"""
+        result = await self.manage_scheduled_task(config_id, ScheduleAction.RESUME)
+        return result["success"]
+    
+    async def reload_scheduled_task(self, config_id: int) -> bool:
+        """重新加载任务调度（为了向后兼容保留）"""
+        result = await self.manage_scheduled_task(config_id, ScheduleAction.RELOAD)
+        return result["success"]
     
     # === 任务执行功能 ===
     

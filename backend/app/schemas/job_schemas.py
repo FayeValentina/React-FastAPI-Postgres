@@ -194,3 +194,24 @@ class ScheduledJobInfo(BaseModel):
     args: Optional[List[Any]] = Field(None, description="函数参数")
     kwargs: Optional[Dict[str, Any]] = Field(None, description="函数关键字参数")
 
+
+class ScheduleActionResponse(BaseModel):
+    """统一调度操作响应"""
+    success: bool = Field(..., description="操作是否成功")
+    message: str = Field(..., description="操作结果消息")
+    action: str = Field(..., description="执行的操作类型")
+    config_id: int = Field(..., description="任务配置ID")
+    status: str = Field(..., description="任务状态")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "message": "任务 205 暂停成功",
+                "action": "pause",
+                "config_id": 205,
+                "status": "paused"
+            }
+        }
+    )
+

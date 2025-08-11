@@ -49,6 +49,15 @@ class SchedulerType(str, PyEnum):
     MANUAL = "manual"
 
 
+class ScheduleAction(str, PyEnum):
+    """调度操作类型枚举"""
+    START = "start"
+    STOP = "stop"
+    PAUSE = "pause"
+    RESUME = "resume"
+    RELOAD = "reload"
+
+
 class TaskRegistry:
     """任务注册中心"""
     
