@@ -19,16 +19,8 @@ class TaskExecutionCreate(BaseModel):
     error_traceback: Optional[str] = Field(None, description="错误堆栈")
 
 
-class TaskStatus(str, Enum):
-    """任务状态枚举"""
-    RUNNING = "running"        # 正在执行
-    SCHEDULED = "scheduled"    # 已调度等待执行
-    PAUSED = "paused"         # 已暂停
-    STOPPED = "stopped"       # 已停止（调度器未运行）
-    FAILED = "failed"         # 最近执行失败
-    IDLE = "idle"             # 空闲状态
-    TIMEOUT = "timeout"       # 执行超时
-    MISFIRED = "misfired"     # 错过执行时间
+# 删除重复的 TaskStatus 定义，改为从 task_registry 导入 RuntimeStatus
+from app.core.task_registry import RuntimeStatus
 
 
 class JobExecutionSummary(BaseModel):

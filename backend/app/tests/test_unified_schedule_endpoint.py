@@ -4,7 +4,7 @@
 import sys
 sys.path.append('.')
 
-from app.core.task_registry import ScheduleAction, TaskStatus, TaskType, SchedulerType, TaskRegistry
+from app.core.task_registry import ScheduleAction, ConfigStatus, TaskType, SchedulerType, TaskRegistry
 from unittest.mock import AsyncMock, MagicMock
 
 def test_schedule_action_enum():
@@ -19,11 +19,11 @@ def test_action_status_mapping():
     """测试操作与状态的映射关系"""
     # 根据需求定义的状态映射
     expected_mappings = {
-        ScheduleAction.START: TaskStatus.ACTIVE,
-        ScheduleAction.STOP: TaskStatus.INACTIVE,
-        ScheduleAction.PAUSE: TaskStatus.PAUSED,
-        ScheduleAction.RESUME: TaskStatus.ACTIVE,
-        ScheduleAction.RELOAD: TaskStatus.ACTIVE,
+        ScheduleAction.START: ConfigStatus.ACTIVE,
+        ScheduleAction.STOP: ConfigStatus.INACTIVE,
+        ScheduleAction.PAUSE: ConfigStatus.PAUSED,
+        ScheduleAction.RESUME: ConfigStatus.ACTIVE,
+        ScheduleAction.RELOAD: ConfigStatus.ACTIVE,
     }
     
     for action, expected_status in expected_mappings.items():

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
 
 if TYPE_CHECKING:
     from .schedule_event import ScheduleEvent
@@ -25,7 +25,7 @@ class TaskConfig(Base):
     # 任务类型和状态
     task_type: Mapped[TaskType] = mapped_column(Enum(TaskType), nullable=False, index=True)
     scheduler_type: Mapped[SchedulerType] = mapped_column(Enum(SchedulerType), nullable=False)
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), nullable=False, default=TaskStatus.ACTIVE, index=True)
+    status: Mapped[ConfigStatus] = mapped_column(Enum(ConfigStatus), nullable=False, default=ConfigStatus.ACTIVE, index=True)
     
     # 配置参数 (使用JSON存储以支持不同任务类型的不同参数)
     parameters: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default={})
@@ -61,7 +61,7 @@ class TaskConfig(Base):
     @property
     def is_active(self) -> bool:
         """判断任务是否为活跃状态"""
-        return self.status == TaskStatus.ACTIVE
+        return self.status == ConfigStatus.ACTIVE
     
     @property
     def is_scheduled(self) -> bool:

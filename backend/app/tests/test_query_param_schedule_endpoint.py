@@ -4,7 +4,7 @@
 import sys
 sys.path.append('.')
 
-from app.core.task_registry import ScheduleAction, TaskStatus, TaskType, SchedulerType, TaskRegistry
+from app.core.task_registry import ScheduleAction, ConfigStatus, TaskType, SchedulerType, TaskRegistry
 
 def test_query_parameter_format():
     """测试查询参数格式"""

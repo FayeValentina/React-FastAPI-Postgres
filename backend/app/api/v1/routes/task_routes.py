@@ -33,7 +33,7 @@ from app.schemas.job_schemas import (
     ScheduleActionResponse
 )
 from app.services.tasks_manager import task_manager
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType, ScheduleAction
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, ScheduleAction
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -98,7 +98,7 @@ async def list_task_configs(
     
     Query Parameters:
         - task_type: Filter by TaskType enum value
-        - status: Filter by TaskStatus enum value
+        - status: Filter by ConfigStatus enum value
         - name_search: Search configurations by name
         - page: Page number for pagination
         - page_size: Number of items per page
@@ -695,7 +695,7 @@ async def get_enum_values(
     """
     return {
         "task_types": [t.value for t in TaskType],
-        "task_statuses": [s.value for s in TaskStatus],
+        "task_statuses": [s.value for s in ConfigStatus],
         "scheduler_types": [s.value for s in SchedulerType]
     }
 

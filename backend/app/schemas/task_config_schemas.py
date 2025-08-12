@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
 
 
 class TaskConfigBase(BaseModel):
@@ -14,7 +14,7 @@ class TaskConfigBase(BaseModel):
     description: Optional[str] = Field(None, description="任务描述", max_length=500)
     task_type: TaskType = Field(..., description="任务类型")
     scheduler_type: SchedulerType = Field(..., description="调度器类型")
-    status: TaskStatus = Field(TaskStatus.ACTIVE, description="任务状态")
+    status: ConfigStatus = Field(ConfigStatus.ACTIVE, description="任务状态")
     parameters: Dict[str, Any] = Field({}, description="任务参数(JSON)")
     schedule_config: Dict[str, Any] = Field({}, description="调度配置(JSON)")
     max_retries: int = Field(0, description="最大重试次数", ge=0, le=10)
@@ -70,7 +70,7 @@ class TaskConfigUpdate(BaseModel):
     """更新任务配置"""
     name: Optional[str] = Field(None, description="任务名称", min_length=1, max_length=200)
     description: Optional[str] = Field(None, description="任务描述", max_length=500)
-    status: Optional[TaskStatus] = Field(None, description="任务状态")
+    status: Optional[ConfigStatus] = Field(None, description="任务状态")
     parameters: Optional[Dict[str, Any]] = Field(None, description="任务参数(JSON)")
     schedule_config: Optional[Dict[str, Any]] = Field(None, description="调度配置(JSON)")
     max_retries: Optional[int] = Field(None, description="最大重试次数", ge=0, le=10)
@@ -92,7 +92,7 @@ class TaskConfigResponse(TaskConfigBase):
 class TaskConfigQuery(BaseModel):
     """任务配置查询参数"""
     task_type: Optional[TaskType] = Field(None, description="任务类型")
-    status: Optional[TaskStatus] = Field(None, description="任务状态")
+    status: Optional[ConfigStatus] = Field(None, description="任务状态")
     name_search: Optional[str] = Field(None, description="名称搜索", max_length=100)
     page: int = Field(1, description="页码", ge=1)
     page_size: int = Field(20, description="每页大小", ge=1, le=100)

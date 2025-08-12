@@ -30,7 +30,7 @@
 #         # 测试1: 导入核心模块
 #         logger.info("1️⃣ 测试核心模块导入...")
         
-#         from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+#         from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
 #         logger.info("✅ task_registry模块导入成功")
         
 #         from app.core.scheduler import scheduler

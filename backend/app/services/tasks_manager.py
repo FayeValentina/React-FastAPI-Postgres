@@ -7,7 +7,7 @@ import asyncio
 
 from app.core.scheduler import scheduler
 from app.core.task_dispatcher import TaskDispatcher
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType, ScheduleAction, TaskRegistry
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, ScheduleAction, TaskRegistry
 from app.crud.task_config import crud_task_config
 from app.crud.schedule_event import crud_schedule_event
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
@@ -232,7 +232,7 @@ class TaskManager:
                     configs = await crud_task_config.get_by_type(
                         db,
                         task_type=TaskType(task_type),
-                        status=TaskStatus(status) if status else None
+                        status=ConfigStatus(status) if status else None
                     )
                 else:
                     configs = await crud_task_config.get_multi(db)
@@ -279,27 +279,27 @@ class TaskManager:
             # 根据action类型执行对应的调度器操作（不处理状态同步）
             if action == ScheduleAction.START:
                 success = await self._start_scheduler_task(config_id)
-                target_status = TaskStatus.ACTIVE
+                target_status = ConfigStatus.ACTIVE
                 operation_name = "启动"
                 
             elif action == ScheduleAction.STOP:
                 success = self._stop_scheduler_task(config_id)
-                target_status = TaskStatus.INACTIVE
+                target_status = ConfigStatus.INACTIVE
                 operation_name = "停止"
                 
             elif action == ScheduleAction.PAUSE:
                 success = self._pause_scheduler_task(config_id)
-                target_status = TaskStatus.PAUSED
+                target_status = ConfigStatus.PAUSED
                 operation_name = "暂停"
                 
             elif action == ScheduleAction.RESUME:
                 success = self._resume_scheduler_task(config_id)
-                target_status = TaskStatus.ACTIVE
+                target_status = ConfigStatus.ACTIVE
                 operation_name = "恢复"
                 
             elif action == ScheduleAction.RELOAD:
                 success = await self._reload_scheduler_task(config_id)
-                target_status = TaskStatus.ACTIVE
+                target_status = ConfigStatus.ACTIVE
                 operation_name = "重新加载"
                 
             else:
@@ -328,12 +328,12 @@ class TaskManager:
                 # 调度操作失败，设置状态为ERROR
                 try:
                     async with AsyncSessionLocal() as db:
-                        await crud_task_config.update_status(db, config_id, TaskStatus.ERROR)
+                        await crud_task_config.update_status(db, config_id, ConfigStatus.ERROR)
                 except Exception as e:
                     logger.error(f"更新任务 {config_id} 状态为ERROR失败: {e}")
                 
                 result["message"] = f"任务 {config_id} {operation_name}失败"
-                result["status"] = TaskStatus.ERROR.value
+                result["status"] = ConfigStatus.ERROR.value
                 logger.warning(f"任务 {config_id} {operation_name}失败，状态设置为ERROR")
             
             return result
@@ -343,7 +343,7 @@ class TaskManager:
             logger.error(f"执行调度操作失败 {config_id}[{action.value}]: {e}")
             try:
                 async with AsyncSessionLocal() as db:
-                    await crud_task_config.update_status(db, config_id, TaskStatus.ERROR)
+                    await crud_task_config.update_status(db, config_id, ConfigStatus.ERROR)
             except:
                 pass  # 忽略状态更新失败
                 
@@ -352,7 +352,7 @@ class TaskManager:
                 "message": f"任务 {config_id} {action.value} 操作异常: {str(e)}",
                 "action": action.value,
                 "config_id": config_id,
-                "status": TaskStatus.ERROR.value
+                "status": ConfigStatus.ERROR.value
             }
     
     # === 私有调度器操作方法（仅负责调度器操作，不处理状态同步）===

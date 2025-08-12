@@ -9,7 +9,7 @@ import os
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegistry
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
 
 
 class TestStatusSync:
@@ -81,7 +81,7 @@ class TestStatusSync:
         # 验证结果
         assert result is True
         self.task_manager.scheduler.pause_job.assert_called_once_with("cleanup_tok_int_205")
-        mock_crud.update_status.assert_called_once_with(mock_db, 205, TaskStatus.PAUSED)
+        mock_crud.update_status.assert_called_once_with(mock_db, 205, ConfigStatus.PAUSED)
     
     @patch('app.services.tasks_manager.AsyncSessionLocal')
     @patch('app.services.tasks_manager.crud_task_config')
@@ -102,7 +102,7 @@ class TestStatusSync:
         # 验证结果
         assert result is True
         self.task_manager.scheduler.resume_job.assert_called_once_with("cleanup_tok_int_205")
-        mock_crud.update_status.assert_called_once_with(mock_db, 205, TaskStatus.ACTIVE)
+        mock_crud.update_status.assert_called_once_with(mock_db, 205, ConfigStatus.ACTIVE)
     
     def test_pause_task_not_found(self):
         """测试暂停不存在的任务"""

@@ -9,7 +9,7 @@ from app.models.schedule_event import ScheduleEvent
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
 from app.core.exceptions import (
     DatabaseError,
     ResourceNotFoundError,
@@ -125,7 +125,7 @@ class CRUDTaskConfig:
         self,
         db: AsyncSession,
         task_type: TaskType,
-        status: Optional[TaskStatus] = None
+        status: Optional[ConfigStatus] = None
     ) -> List[TaskConfig]:
         """根据任务类型获取配置"""
         filters = [TaskConfig.task_type == task_type]
@@ -144,7 +144,7 @@ class CRUDTaskConfig:
         """获取所有活跃的任务配置"""
         result = await db.execute(
             select(TaskConfig)
-            .filter(TaskConfig.status == TaskStatus.ACTIVE)
+            .filter(TaskConfig.status == ConfigStatus.ACTIVE)
             .order_by(TaskConfig.priority.desc(), TaskConfig.created_at.desc())
         )
         return result.scalars().all()
@@ -155,7 +155,7 @@ class CRUDTaskConfig:
             select(TaskConfig)
             .filter(
                 and_(
-                    TaskConfig.status == TaskStatus.ACTIVE,
+                    TaskConfig.status == ConfigStatus.ACTIVE,
                     TaskConfig.scheduler_type != SchedulerType.MANUAL
                 )
             )
@@ -239,7 +239,7 @@ class CRUDTaskConfig:
         self,
         db: AsyncSession,
         config_ids: List[int],
-        status: TaskStatus
+        status: ConfigStatus
     ) -> int:
         """批量更新任务状态"""
         try:
@@ -259,7 +259,7 @@ class CRUDTaskConfig:
         self,
         db: AsyncSession,
         config_id: int,
-        status: TaskStatus
+        status: ConfigStatus
     ) -> bool:
         """更新单个任务状态"""
         try:
@@ -398,7 +398,7 @@ class CRUDTaskConfig:
         
         return {task_type: count for task_type, count in result.all()}
     
-    async def count_by_status(self, db: AsyncSession) -> Dict[TaskStatus, int]:
+    async def count_by_status(self, db: AsyncSession) -> Dict[ConfigStatus, int]:
         """按状态统计任务配置数量"""
         result = await db.execute(
             select(TaskConfig.status, func.count(TaskConfig.id))
@@ -419,7 +419,7 @@ class CRUDTaskConfig:
             # 活跃配置数
             active_result = await db.execute(
                 select(func.count(TaskConfig.id))
-                .filter(TaskConfig.status == TaskStatus.ACTIVE)
+                .filter(TaskConfig.status == ConfigStatus.ACTIVE)
             )
             active_configs = active_result.scalar() or 0
             

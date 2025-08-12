@@ -7,7 +7,7 @@ import os
 # 添加项目根目录到路径
 sys.path.append('.')
 
-from app.core.task_registry import TaskType, TaskStatus, SchedulerType, TaskRegistry
+from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
 
 def test_meaningful_job_id_format():
     """测试有意义的job_id格式"""

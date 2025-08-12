@@ -33,12 +33,23 @@ class TaskType(str, PyEnum):
     LOG_ROTATION = "log_rotation"
 
 
-class TaskStatus(str, PyEnum):
-    """任务状态枚举"""
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    PAUSED = "paused"
-    ERROR = "error"
+class ConfigStatus(str, PyEnum):
+    """任务配置状态"""
+    ACTIVE = "active"      # 配置激活，可以被调度
+    INACTIVE = "inactive"  # 配置未激活，不会被调度
+    PAUSED = "paused"      # 配置暂停，临时停止调度
+    ERROR = "error"        # 配置错误，需要修复
+
+
+class RuntimeStatus(str, PyEnum):
+    """任务运行时状态"""
+    IDLE = "idle"           # 空闲
+    SCHEDULED = "scheduled" # 已调度等待执行
+    RUNNING = "running"     # 正在执行
+    COMPLETED = "completed" # 执行完成
+    FAILED = "failed"       # 执行失败
+    TIMEOUT = "timeout"     # 执行超时
+    MISFIRED = "misfired"   # 错过执行时间
 
 
 class SchedulerType(str, PyEnum):
@@ -227,6 +238,20 @@ class TaskRegistry:
         except (ValueError, AttributeError):
             pass
         return None
+
+
+# 保持 ExecutionStatus 引用，但使用 models 中的定义
+from app.models.task_execution import ExecutionStatus
+
+# 导出所有状态
+__all__ = [
+    "TaskType",
+    "ConfigStatus",  # 原 TaskStatus
+    "RuntimeStatus", # 新增
+    "ExecutionStatus", # 从 models 导入
+    "SchedulerType",
+    "ScheduleAction"
+]
 
 
 # 导出便捷函数
