@@ -137,7 +137,7 @@ class TaskManager:
                 if updated_config:
                     logger.info(f"已更新任务配置: {config_id}")
                     # 如果任务正在调度中，重新加载
-                    await self._reload_scheduler_task(config_id)
+                    await self.reload_scheduled_task(config_id)
                     return True
                     
                 return False
@@ -150,7 +150,7 @@ class TaskManager:
         """删除任务配置"""
         try:
             # 先停止调度
-            self._stop_scheduler_task(config_id)
+            self.stop_scheduled_task(config_id)
             
             async with AsyncSessionLocal() as db:
                 success = await crud_task_config.delete(db, config_id)
