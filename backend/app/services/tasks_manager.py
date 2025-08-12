@@ -150,7 +150,7 @@ class TaskManager:
         """删除任务配置"""
         try:
             # 先停止调度
-            self._stop_scheduler_task(config_id)
+            await self._stop_scheduler_task(config_id)
             
             async with AsyncSessionLocal() as db:
                 success = await crud_task_config.delete(db, config_id)
@@ -283,17 +283,17 @@ class TaskManager:
                 operation_name = "启动"
                 
             elif action == ScheduleAction.STOP:
-                success = self._stop_scheduler_task(config_id)
+                success = await self._stop_scheduler_task(config_id)
                 target_status = ConfigStatus.INACTIVE
                 operation_name = "停止"
                 
             elif action == ScheduleAction.PAUSE:
-                success = self._pause_scheduler_task(config_id)
+                success = await self._pause_scheduler_task(config_id)
                 target_status = ConfigStatus.PAUSED
                 operation_name = "暂停"
                 
             elif action == ScheduleAction.RESUME:
-                success = self._resume_scheduler_task(config_id)
+                success = await self._resume_scheduler_task(config_id)
                 target_status = ConfigStatus.ACTIVE
                 operation_name = "恢复"
                 
@@ -365,7 +365,7 @@ class TaskManager:
             logger.error(f"启动调度器任务失败 {config_id}: {e}")
             return False
     
-    def _stop_scheduler_task(self, config_id: int) -> bool:
+    async def _stop_scheduler_task(self, config_id: int) -> bool:
         """停止调度器中的任务（不处理状态同步）"""
         try:
             return self.scheduler.remove_task_by_config_id(config_id)
@@ -373,7 +373,7 @@ class TaskManager:
             logger.error(f"停止调度器任务失败 {config_id}: {e}")
             return False
     
-    def _pause_scheduler_task(self, config_id: int) -> bool:
+    async def _pause_scheduler_task(self, config_id: int) -> bool:
         """暂停调度器中的任务（不处理状态同步）"""
         try:
             jobs = self.scheduler.get_all_jobs()
@@ -387,7 +387,7 @@ class TaskManager:
             logger.error(f"暂停调度器任务失败 {config_id}: {e}")
             return False
     
-    def _resume_scheduler_task(self, config_id: int) -> bool:
+    async def _resume_scheduler_task(self, config_id: int) -> bool:
         """恢复调度器中的任务（不处理状态同步）"""
         try:
             jobs = self.scheduler.get_all_jobs()
