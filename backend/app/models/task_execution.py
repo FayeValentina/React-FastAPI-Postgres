@@ -26,7 +26,7 @@ class TaskExecution(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     
     # 关联字段
-    task_config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
+    config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
     job_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # Celery任务ID，通常是UUID格式
     job_name: Mapped[str] = mapped_column(String, nullable=False)
     
@@ -47,4 +47,4 @@ class TaskExecution(Base):
     task_config: Mapped["TaskConfig"] = relationship("TaskConfig", back_populates="task_executions")
     
     def __repr__(self) -> str:
-        return f"<TaskExecution(id={self.id}, task_config_id={self.task_config_id}, status={self.status})>"
+        return f"<TaskExecution(id={self.id}, config_id={self.config_id}, status={self.status})>"

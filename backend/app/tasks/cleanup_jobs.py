@@ -13,11 +13,11 @@ import logging
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 
-async def _cleanup_expired_tokens_async(task_config_id: int, *, days_old: int = 7) -> Dict[str, Any]:
+async def _cleanup_expired_tokens_async(config_id: int, *, days_old: int = 7) -> Dict[str, Any]:
     """
     异步清理过期的刷新令牌和密码重置令牌的内部实现。
     """
-    logger.info(f"开始异步清理 {days_old} 天前的过期令牌... (Config ID: {task_config_id})")
+    logger.info(f"开始异步清理 {days_old} 天前的过期令牌... (Config ID: {config_id})")
     
     # 使用 Worker 专用会话
     async for db in get_worker_session():
@@ -44,21 +44,21 @@ def cleanup_expired_tokens_task(self, *args: Any, **kwargs: Any) -> Dict[str, An
     清理过期的刷新令牌和密码重置令牌。
     采用 *args, **kwargs 签名以避免Celery参数绑定问题。
     """
-    # 从参数中提取 task_config_id
-    # task_executor 装饰器已经保证了 task_config_id 的存在
-    task_config_id = kwargs.get("task_config_id") or (args[0] if args else None)
+    # 从参数中提取 config_id
+    # task_executor 装饰器已经保证了 config_id 的存在
+    config_id = kwargs.get("config_id") or (args[0] if args else None)
     
     # 提取特定于任务的参数
     days_old = kwargs.get("days_old", 7)
     
-    return asyncio.run(_cleanup_expired_tokens_async(task_config_id, days_old=days_old))
+    return asyncio.run(_cleanup_expired_tokens_async(config_id, days_old=days_old))
 
 
-async def _cleanup_old_content_async(task_config_id: int, *, days_old: int = 90) -> Dict[str, Any]:
+async def _cleanup_old_content_async(config_id: int, *, days_old: int = 90) -> Dict[str, Any]:
     """
     异步清理旧的 Reddit 内容（帖子和评论）的内部实现。
     """
-    logger.info(f"开始异步清理 {days_old} 天前的旧 Reddit 内容... (Config ID: {task_config_id})")
+    logger.info(f"开始异步清理 {days_old} 天前的旧 Reddit 内容... (Config ID: {config_id})")
 
     # 使用 Worker 专用会话
     async for db in get_worker_session():
@@ -86,17 +86,17 @@ def cleanup_old_content_task(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
     清理旧的 Reddit 内容（帖子和评论）。
     采用 *args, **kwargs 签名以避免Celery参数绑定问题。
     """
-    task_config_id = kwargs.get("task_config_id") or (args[0] if args else None)
+    config_id = kwargs.get("config_id") or (args[0] if args else None)
     days_old = kwargs.get("days_old", 90)
     
-    return asyncio.run(_cleanup_old_content_async(task_config_id, days_old=days_old))
+    return asyncio.run(_cleanup_old_content_async(config_id, days_old=days_old))
 
 
-async def _cleanup_schedule_events_async(task_config_id: int, *, days_old: int = 30) -> Dict[str, Any]:
+async def _cleanup_schedule_events_async(config_id: int, *, days_old: int = 30) -> Dict[str, Any]:
     """
     异步清理旧的调度事件记录的内部实现。
     """
-    logger.info(f"开始异步清理 {days_old} 天前的旧调度事件... (Config ID: {task_config_id})")
+    logger.info(f"开始异步清理 {days_old} 天前的旧调度事件... (Config ID: {config_id})")
 
     # 使用 Worker 专用会话
     async for db in get_worker_session():
@@ -120,7 +120,7 @@ def cleanup_schedule_events_task(self, *args: Any, **kwargs: Any) -> Dict[str, A
     清理旧的调度事件记录。
     采用 *args, **kwargs 签名以避免Celery参数绑定问题。
     """
-    task_config_id = kwargs.get("task_config_id") or (args[0] if args else None)
+    config_id = kwargs.get("config_id") or (args[0] if args else None)
     days_old = kwargs.get("days_old", 30)
 
-    return asyncio.run(_cleanup_schedule_events_async(task_config_id, days_old=days_old))
+    return asyncio.run(_cleanup_schedule_events_async(config_id, days_old=days_old))

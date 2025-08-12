@@ -7,7 +7,7 @@ from enum import Enum
 
 class TaskExecutionCreate(BaseModel):
     """创建任务执行记录"""
-    task_config_id: int = Field(..., description="任务配置ID")
+    config_id: int = Field(..., description="任务配置ID")
     job_id: str = Field(..., description="任务执行ID")
     job_name: str = Field(..., description="任务名称")
     status: ExecutionStatus = Field(..., description="执行状态")

@@ -66,11 +66,11 @@ class MockDatabase:
 
 
 # 模拟执行函数
-async def mock_task_execution(task_config_id: int):
+async def mock_task_execution(config_id: int):
     """模拟任务执行"""
-    logger.info(f"Mock: 执行任务配置 {task_config_id}")
+    logger.info(f"Mock: 执行任务配置 {config_id}")
     await asyncio.sleep(1)  # 模拟任务执行时间
-    return f"任务 {task_config_id} 执行完成"
+    return f"任务 {config_id} 执行完成"
 
 
 async def test_task_manager_basic_functions():

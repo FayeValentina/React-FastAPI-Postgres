@@ -75,14 +75,14 @@ class TaskDispatcher:
     
     async def dispatch_by_config_id(
         self,
-        task_config_id: int,
+        config_id: int,
         **options
     ) -> str:
         """
         根据任务配置ID分发任务
         
         Args:
-            task_config_id: 任务配置ID
+            config_id: 任务配置ID
             **options: 分发选项(countdown, eta等)
             
         Returns:
@@ -92,16 +92,16 @@ class TaskDispatcher:
             from app.crud.task_config import crud_task_config
             
             # 获取任务配置
-            config = await crud_task_config.get(db, task_config_id)
+            config = await crud_task_config.get(db, config_id)
             if not config:
-                raise ValueError(f"任务配置不存在: {task_config_id}")
+                raise ValueError(f"任务配置不存在: {config_id}")
             
             # 使用新的TaskRegistry
             celery_task = TaskRegistry.get_celery_task_name(config.task_type)
             queue = TaskRegistry.get_queue_name(config.task_type)
             
             # 准备参数
-            args = [task_config_id]
+            args = [config_id]
             kwargs = config.parameters or {}
             
             return self.dispatch_task(
@@ -146,21 +146,21 @@ class TaskDispatcher:
     
     async def dispatch_multiple_configs(
         self, 
-        task_config_ids: List[int],
+        config_ids: List[int],
         **options
     ) -> List[str]:
         """
         批量分发多个任务配置
         
         Args:
-            task_config_ids: 任务配置ID列表
+            config_ids: 任务配置ID列表
             **options: 分发选项
             
         Returns:
             List[str]: Celery任务ID列表
         """
         task_ids = []
-        for config_id in task_config_ids:
+        for config_id in config_ids:
             try:
                 task_id = await self.dispatch_by_config_id(config_id, **options)
                 task_ids.append(task_id)

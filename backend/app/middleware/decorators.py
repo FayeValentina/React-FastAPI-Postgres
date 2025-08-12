@@ -12,7 +12,7 @@ from app.models.task_execution import ExecutionStatus
 logger = logging.getLogger(__name__)
 
 async def _record_execution(
-    task_config_id: int,
+    config_id: int,
     job_id: str,
     job_name: str,
     status: ExecutionStatus,
@@ -25,7 +25,7 @@ async def _record_execution(
     """
     异步地将任务执行记录保存到数据库。
     """
-    if task_config_id == -1:
+    if config_id == -1:
         logger.info(f"任务 '{job_name}' (ID: {job_id}) 是直接调用任务，跳过数据库记录。")
         return
     
@@ -41,7 +41,7 @@ async def _record_execution(
         try:
             await crud_task_execution.create(
                 db=db,
-                task_config_id=task_config_id,
+                config_id=config_id,
                 job_id=job_id,
                 job_name=job_name,
                 status=status,
@@ -67,11 +67,11 @@ def task_executor(task_name: str):
             task_instance: Task = args[0]
             job_id = task_instance.request.id
             
-            # task_config_id = kwargs.get("task_config_id")
-            task_config_id = kwargs.get("task_config_id") or (args[1] if len(args) > 1 else None)
-            if not task_config_id:
-                logger.warning(f"任务 '{task_name}' (ID: {job_id}) 没有 task_config_id，可能是直接调用的任务。")
-                task_config_id = -1
+            # config_id = kwargs.get("config_id")
+            config_id = kwargs.get("config_id") or (args[1] if len(args) > 1 else None)
+            if not config_id:
+                logger.warning(f"任务 '{task_name}' (ID: {job_id}) 没有 config_id，可能是直接调用的任务。")
+                config_id = -1
 
             logger.info(f"任务 '{task_name}' (ID: {job_id}) 开始执行。")
             start_time = time.time()
@@ -82,7 +82,7 @@ def task_executor(task_name: str):
                 logger.info(f"任务 '{task_name}' (ID: {job_id}) 成功完成。")
                 asyncio.run(
                     _record_execution(
-                        task_config_id=task_config_id,
+                        config_id=config_id,
                         job_id=job_id,
                         job_name=task_name,
                         status=ExecutionStatus.SUCCESS,
@@ -99,7 +99,7 @@ def task_executor(task_name: str):
                 logger.error(f"任务 '{task_name}' (ID: {job_id}) 执行失败: {error_msg}", exc_info=True)
                 asyncio.run(
                     _record_execution(
-                        task_config_id=task_config_id,
+                        config_id=config_id,
                         job_id=job_id,
                         job_name=task_name,
                         status=ExecutionStatus.FAILED,

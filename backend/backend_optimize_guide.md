@@ -228,7 +228,7 @@ class TaskManager:
 ## 3. 统一命名规范
 
 ### 问题分析
-主要是 `task_config_id` vs `config_id` 的不一致。
+主要是 `config_id` vs `config_id` 的不一致。
 
 ### 实施方案
 
@@ -239,7 +239,7 @@ class TaskManager:
 **修改 `app/services/tasks_manager.py`：**
 ```python
 # 全局函数修改
-async def execute_scheduled_task(config_id: int):  # task_config_id -> config_id
+async def execute_scheduled_task(config_id: int):  # config_id -> config_id
     """执行调度任务的通用包装函数"""
     dispatcher = TaskDispatcher()
     try:
@@ -259,7 +259,7 @@ async def _record_event_async(
 ):
     """异步记录调度事件"""
     try:
-        # 从job_id中提取config_id（原 task_config_id）
+        # 从job_id中提取config_id（原 config_id）
         config_id = TaskRegistry.extract_config_id_from_job_id(job_id)
         
         if config_id is None:
@@ -269,7 +269,7 @@ async def _record_event_async(
         async with AsyncSessionLocal() as db:
             await crud_schedule_event.create(
                 db,
-                task_config_id=config_id,  # 数据库字段名保持不变
+                config_id=config_id,  # 数据库字段名保持不变
                 job_id=job_id,
                 job_name=f"Task-{job_id}",
                 event_type=event_type,
@@ -285,7 +285,7 @@ async def _record_event_async(
 ```python
 async def dispatch_by_config_id(
     self,
-    config_id: int,  # task_config_id -> config_id
+    config_id: int,  # config_id -> config_id
     **options
 ) -> str:
     """
@@ -329,8 +329,8 @@ async def _cleanup_expired_tokens_async(config_id: int, *, days_old: int = 7) ->
 @task_executor("清理过期令牌任务")
 def cleanup_expired_tokens_task(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
     """清理过期的刷新令牌和密码重置令牌。"""
-    # 从参数中提取 config_id（原 task_config_id）
-    config_id = kwargs.get("task_config_id") or (args[0] if args else None)  # 保持兼容性
+    # 从参数中提取 config_id（原 config_id）
+    config_id = kwargs.get("config_id") or (args[0] if args else None)  # 保持兼容性
     
     # 提取特定于任务的参数
     days_old = kwargs.get("days_old", 7)
@@ -343,7 +343,7 @@ def cleanup_expired_tokens_task(self, *args: Any, **kwargs: Any) -> Dict[str, An
 **修改 `app/middleware/decorators.py`：**
 ```python
 async def _record_execution(
-    config_id: int,  # task_config_id -> config_id
+    config_id: int,  # config_id -> config_id
     job_id: str,
     job_name: str,
     status: ExecutionStatus,
@@ -358,10 +358,10 @@ async def _record_execution(
         logger.info(f"任务 '{job_name}' (ID: {job_id}) 是直接调用任务，跳过数据库记录。")
         return
     
-    # ... 其他代码，但数据库字段名保持 task_config_id ...
+    # ... 其他代码，但数据库字段名保持 config_id ...
     await crud_task_execution.create(
         db=db,
-        task_config_id=config_id,  # 数据库字段名不变
+        config_id=config_id,  # 数据库字段名不变
         # ... 其他参数 ...
     )
 
@@ -374,7 +374,7 @@ def task_executor(task_name: str):
             job_id = task_instance.request.id
             
             # 变量名统一为 config_id
-            config_id = kwargs.get("task_config_id") or (args[1] if len(args) > 1 else None)
+            config_id = kwargs.get("config_id") or (args[1] if len(args) > 1 else None)
             if not config_id:
                 logger.warning(f"任务 '{task_name}' (ID: {job_id}) 没有 config_id，可能是直接调用的任务。")
                 config_id = -1
@@ -399,7 +399,7 @@ backend\app\crud\task_execution.py
 2. 在 `manage_scheduled_task` 中对应添加 `await`
 
 ### 第三步：命名规范统一
-1. 全局将 `task_config_id` 参数名替换为 `config_id`
+1. 全局将 `config_id` 参数名替换为 `config_id`
 2. 更新相关文档字符串
 
 ### 测试验证

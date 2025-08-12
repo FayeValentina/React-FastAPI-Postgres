@@ -81,7 +81,7 @@ class Scheduler:
                         )
                         
                         tasks.append({
-                            'task_config_id': config.id,
+                            'config_id': config.id,
                             'job_id': job_id,  # 现在是有意义的ID
                             'name': config.name,
                             'task_type': config.task_type,
@@ -153,7 +153,7 @@ class Scheduler:
             trigger_type=trigger_type,
             job_id=task_data['job_id'],
             name=task_data['name'],
-            args=[task_data['task_config_id']],  # 传递task_config_id作为参数
+            args=[task_data['config_id']],  # 传递config_id作为参数
             max_instances=task_data['max_instances'],
             **trigger_kwargs
         )
@@ -266,13 +266,13 @@ class Scheduler:
         """调度器是否运行中"""
         return self._running
     
-    async def reload_task_from_database(self, task_config_id: int, execution_func: Callable) -> bool:
+    async def reload_task_from_database(self, config_id: int, execution_func: Callable) -> bool:
         """从数据库重新加载指定任务配置"""
         try:
             async with AsyncSessionLocal() as db:
                 from app.crud.task_config import crud_task_config
                 
-                config = await crud_task_config.get(db, task_config_id)
+                config = await crud_task_config.get(db, config_id)
                 if not config or not config.schedule_config:
                     return False
                 
@@ -284,7 +284,7 @@ class Scheduler:
                 )
                 
                 task_data = {
-                    'task_config_id': config.id,
+                    'config_id': config.id,
                     'job_id': job_id,
                     'name': config.name,
                     'task_type': config.task_type,
@@ -300,21 +300,21 @@ class Scheduler:
                 
                 # 重新注册任务
                 await self._register_single_task(task_data, execution_func)
-                logger.info(f"已重新加载任务配置: {task_config_id}")
+                logger.info(f"已重新加载任务配置: {config_id}")
                 return True
                 
         except Exception as e:
-            logger.error(f"重新加载任务配置失败 {task_config_id}: {e}")
+            logger.error(f"重新加载任务配置失败 {config_id}: {e}")
             return False
     
-    def remove_task_by_config_id(self, task_config_id: int) -> bool:
+    def remove_task_by_config_id(self, config_id: int) -> bool:
         """根据任务配置ID移除调度任务"""
         # 需要构造job_id来移除任务
         # 方案: 遍历所有job找到匹配的
         jobs = self.get_all_jobs()
         for job in jobs:
             config_id = TaskRegistry.extract_config_id_from_job_id(job.id)
-            if config_id == task_config_id:
+            if config_id == config_id:
                 return self.remove_job(job.id)
         return False
     

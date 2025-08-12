@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 # 全局任务执行函数
-async def execute_scheduled_task(task_config_id: int):
+async def execute_scheduled_task(config_id: int):
     """执行调度任务的通用包装函数"""
     dispatcher = TaskDispatcher()
     try:
-        return await dispatcher.dispatch_by_config_id(task_config_id)
+        return await dispatcher.dispatch_by_config_id(config_id)
     except Exception as e:
-        logger.error(f"执行调度任务失败 {task_config_id}: {e}")
+        logger.error(f"执行调度任务失败 {config_id}: {e}")
         raise
 
 
@@ -79,17 +79,17 @@ class TaskManager:
     ):
         """异步记录调度事件"""
         try:
-            # 从job_id中提取task_config_id
-            task_config_id = TaskRegistry.extract_config_id_from_job_id(job_id)
+            # 从job_id中提取config_id
+            config_id = TaskRegistry.extract_config_id_from_job_id(job_id)
             
-            if task_config_id is None:
+            if config_id is None:
                 logger.warning(f"无法从job_id中提取config_id: {job_id}")
                 return
             
             async with AsyncSessionLocal() as db:
                 await crud_schedule_event.create(
                     db,
-                    task_config_id=task_config_id,
+                    config_id=config_id,
                     job_id=job_id,  # 现在是真正的APScheduler job_id
                     job_name=f"Task-{job_id}",
                     event_type=event_type,

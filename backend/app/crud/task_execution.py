@@ -16,7 +16,7 @@ class CRUDTaskExecution:
     async def create(
         self,
         db: AsyncSession,
-        task_config_id: int,
+        config_id: int,
         job_id: str,
         job_name: str,
         status: ExecutionStatus,
@@ -30,7 +30,7 @@ class CRUDTaskExecution:
         """创建任务执行记录"""
         try:
             db_obj = TaskExecution(
-                task_config_id=task_config_id,
+                config_id=config_id,
                 job_id=job_id,
                 job_name=job_name,
                 status=status,
@@ -104,13 +104,13 @@ class CRUDTaskExecution:
     async def get_executions_by_config(
         self,
         db: AsyncSession,
-        task_config_id: int,
+        config_id: int,
         limit: int = 50
     ) -> List[TaskExecution]:
         """根据任务配置ID获取执行记录"""
         result = await db.execute(
             select(TaskExecution)
-            .where(TaskExecution.task_config_id == task_config_id)
+            .where(TaskExecution.config_id == config_id)
             .order_by(TaskExecution.started_at.desc())
             .limit(limit)
         )
@@ -171,7 +171,7 @@ class CRUDTaskExecution:
     async def get_execution_stats(
         self,
         db: AsyncSession,
-        task_config_id: Optional[int] = None,
+        config_id: Optional[int] = None,
         days: int = 7
     ) -> Dict[str, Any]:
         """获取执行统计"""
@@ -179,8 +179,8 @@ class CRUDTaskExecution:
         
         # 构建基础过滤条件
         base_filter = TaskExecution.started_at >= start_time
-        if task_config_id:
-            base_filter = and_(base_filter, TaskExecution.task_config_id == task_config_id)
+        if config_id:
+            base_filter = and_(base_filter, TaskExecution.config_id == config_id)
         
         # 总执行次数
         total_result = await db.execute(
@@ -275,7 +275,7 @@ class CRUDTaskExecution:
             # 按任务类型统计
             type_result = await db.execute(
                 select(TaskConfig.task_type, func.count(TaskExecution.id))
-                .join(TaskConfig, TaskExecution.task_config_id == TaskConfig.id)
+                .join(TaskConfig, TaskExecution.config_id == TaskConfig.id)
                 .where(TaskExecution.started_at >= start_time)
                 .group_by(TaskConfig.task_type)
             )
@@ -322,7 +322,7 @@ class CRUDTaskExecution:
     async def get_stats_by_config(
         self,
         db: AsyncSession,
-        task_config_id: int,
+        config_id: int,
         days: int = 30
     ) -> Dict[str, Any]:
         """获取特定任务配置的执行统计数据"""
@@ -334,7 +334,7 @@ class CRUDTaskExecution:
                 select(func.count(TaskExecution.id))
                 .where(
                     and_(
-                        TaskExecution.task_config_id == task_config_id,
+                        TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time
                     )
                 )
@@ -346,7 +346,7 @@ class CRUDTaskExecution:
                 select(TaskExecution.status, func.count(TaskExecution.id))
                 .where(
                     and_(
-                        TaskExecution.task_config_id == task_config_id,
+                        TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time
                     )
                 )
@@ -362,7 +362,7 @@ class CRUDTaskExecution:
                 select(func.avg(TaskExecution.duration_seconds))
                 .where(
                     and_(
-                        TaskExecution.task_config_id == task_config_id,
+                        TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time,
                         TaskExecution.status == ExecutionStatus.SUCCESS,
                         TaskExecution.duration_seconds.isnot(None)
@@ -380,7 +380,7 @@ class CRUDTaskExecution:
             failure_rate = (failed_count / total_executions * 100) if total_executions > 0 else 0.0
             
             return {
-                "task_config_id": task_config_id,
+                "config_id": config_id,
                 "period_days": days,
                 "total_executions": total_executions,
                 "status_breakdown": status_stats,
@@ -391,7 +391,7 @@ class CRUDTaskExecution:
             }
             
         except Exception as e:
-            raise DatabaseError(f"获取任务配置 {task_config_id} 的执行统计数据时出错: {str(e)}")
+            raise DatabaseError(f"获取任务配置 {config_id} 的执行统计数据时出错: {str(e)}")
 
 
 # 全局CRUD实例

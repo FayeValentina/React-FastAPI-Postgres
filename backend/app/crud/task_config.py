@@ -330,7 +330,7 @@ class CRUDTaskConfig:
         # 总执行次数
         total_result = await db.execute(
             select(func.count(TaskExecution.id))
-            .filter(TaskExecution.task_config_id == config_id)
+            .filter(TaskExecution.config_id == config_id)
         )
         total_runs = total_result.scalar() or 0
         
@@ -350,7 +350,7 @@ class CRUDTaskConfig:
             select(func.count(TaskExecution.id))
             .filter(
                 and_(
-                    TaskExecution.task_config_id == config_id,
+                    TaskExecution.config_id == config_id,
                     TaskExecution.status == "success"
                 )
             )
@@ -363,7 +363,7 @@ class CRUDTaskConfig:
             select(func.avg(TaskExecution.duration_seconds))
             .filter(
                 and_(
-                    TaskExecution.task_config_id == config_id,
+                    TaskExecution.config_id == config_id,
                     TaskExecution.duration_seconds.isnot(None)
                 )
             )
@@ -373,7 +373,7 @@ class CRUDTaskConfig:
         # 最后执行信息
         last_result = await db.execute(
             select(TaskExecution.completed_at, TaskExecution.status)
-            .filter(TaskExecution.task_config_id == config_id)
+            .filter(TaskExecution.config_id == config_id)
             .order_by(TaskExecution.created_at.desc())
             .limit(1)
         )

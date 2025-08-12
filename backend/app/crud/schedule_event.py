@@ -16,7 +16,7 @@ class CRUDScheduleEvent:
     async def create(
         self,
         db: AsyncSession,
-        task_config_id: int,
+        config_id: int,
         job_id: str,
         job_name: str,
         event_type: ScheduleEventType,
@@ -27,7 +27,7 @@ class CRUDScheduleEvent:
         """创建调度事件"""
         try:
             db_obj = ScheduleEvent(
-                task_config_id=task_config_id,
+                config_id=config_id,
                 job_id=job_id,
                 job_name=job_name,
                 event_type=event_type,
@@ -64,13 +64,13 @@ class CRUDScheduleEvent:
     async def get_events_by_config(
         self,
         db: AsyncSession,
-        task_config_id: int,
+        config_id: int,
         limit: int = 50
     ) -> List[ScheduleEvent]:
         """根据任务配置ID获取事件历史"""
         result = await db.execute(
             select(ScheduleEvent)
-            .where(ScheduleEvent.task_config_id == task_config_id)
+            .where(ScheduleEvent.config_id == config_id)
             .order_by(ScheduleEvent.created_at.desc())
             .limit(limit)
         )
@@ -118,7 +118,7 @@ class CRUDScheduleEvent:
     async def get_events_stats(
         self,
         db: AsyncSession,
-        task_config_id: Optional[int] = None,
+        config_id: Optional[int] = None,
         days: int = 7
     ) -> Dict[str, Any]:
         """获取事件统计信息"""
@@ -126,10 +126,10 @@ class CRUDScheduleEvent:
         
         # 构建基础查询
         base_query = select(ScheduleEvent.event_type, func.count(ScheduleEvent.id))
-        if task_config_id:
+        if config_id:
             base_query = base_query.where(
                 and_(
-                    ScheduleEvent.task_config_id == task_config_id,
+                    ScheduleEvent.config_id == config_id,
                     ScheduleEvent.created_at >= start_time
                 )
             )
@@ -206,7 +206,7 @@ class CRUDScheduleEvent:
             # 按任务配置统计
             config_result = await db.execute(
                 select(TaskConfig.task_type, func.count(ScheduleEvent.id))
-                .join(TaskConfig, ScheduleEvent.task_config_id == TaskConfig.id)
+                .join(TaskConfig, ScheduleEvent.config_id == TaskConfig.id)
                 .where(ScheduleEvent.created_at >= start_time)
                 .group_by(TaskConfig.task_type)
             )
@@ -239,7 +239,7 @@ class CRUDScheduleEvent:
     async def get_stats_by_config(
         self,
         db: AsyncSession,
-        task_config_id: int,
+        config_id: int,
         days: int = 30
     ) -> Dict[str, Any]:
         """获取特定任务配置的调度事件统计"""
@@ -251,7 +251,7 @@ class CRUDScheduleEvent:
                 select(func.count(ScheduleEvent.id))
                 .where(
                     and_(
-                        ScheduleEvent.task_config_id == task_config_id,
+                        ScheduleEvent.config_id == config_id,
                         ScheduleEvent.created_at >= start_time
                     )
                 )
@@ -263,7 +263,7 @@ class CRUDScheduleEvent:
                 select(ScheduleEvent.event_type, func.count(ScheduleEvent.id))
                 .where(
                     and_(
-                        ScheduleEvent.task_config_id == task_config_id,
+                        ScheduleEvent.config_id == config_id,
                         ScheduleEvent.created_at >= start_time
                     )
                 )
@@ -283,7 +283,7 @@ class CRUDScheduleEvent:
             error_rate = (error_count / total_events * 100) if total_events > 0 else 0.0
             
             return {
-                "task_config_id": task_config_id,
+                "config_id": config_id,
                 "period_days": days,
                 "total_events": total_events,
                 "type_breakdown": type_stats,
@@ -293,7 +293,7 @@ class CRUDScheduleEvent:
             }
             
         except Exception as e:
-            raise DatabaseError(f"获取任务配置 {task_config_id} 的统计数据时出错: {str(e)}")
+            raise DatabaseError(f"获取任务配置 {config_id} 的统计数据时出错: {str(e)}")
     
     async def get_events_by_job_pattern(
         self,

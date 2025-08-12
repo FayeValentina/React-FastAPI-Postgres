@@ -26,8 +26,8 @@ class ScheduleEvent(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     
     # 关联字段
-    task_config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
-    job_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # APScheduler的job_id，通常是str(task_config_id)
+    config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
+    job_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # APScheduler的job_id，通常是str(config_id)
     job_name: Mapped[str] = mapped_column(String, nullable=False)
     event_type: Mapped[ScheduleEventType] = mapped_column(Enum(ScheduleEventType))
     
@@ -42,4 +42,4 @@ class ScheduleEvent(Base):
     task_config: Mapped["TaskConfig"] = relationship("TaskConfig", back_populates="schedule_events")
     
     def __repr__(self) -> str:
-        return f"<ScheduleEvent(id={self.id}, task_config_id={self.task_config_id}, event_type={self.event_type})>"
+        return f"<ScheduleEvent(id={self.id}, config_id={self.config_id}, event_type={self.event_type})>"
