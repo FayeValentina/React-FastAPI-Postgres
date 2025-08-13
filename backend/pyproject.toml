@@ -30,10 +30,9 @@ aiohttp = "^3.8.0"
 pillow = "^10.0.0"
 google-genai = "^0.3.0"
 twitter-text-parser = "^3.0.0"
-apscheduler = "^3.10.4"
-celery = {extras = ["amqp", "sqlalchemy"], version = "^5.5.0"}
-kombu = "^5.3.4"
-flower = "^2.0.1"
+taskiq = "^0.11.0"
+taskiq-aio-pika = "^0.4.0"
+taskiq-scheduler = "^1.0.0"
 
 [build-system]
 requires = ["poetry-core"]

@@ -27,8 +27,7 @@ class TaskExecution(Base):
     
     # 关联字段
     config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
-    job_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # Celery任务ID，通常是UUID格式
-    job_name: Mapped[str] = mapped_column(String, nullable=False)
+    task_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # TaskIQ任务ID，通常是UUID格式
     
     # 执行信息
     status: Mapped[ExecutionStatus] = mapped_column(Enum(ExecutionStatus))

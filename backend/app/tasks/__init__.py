@@ -1,15 +1,16 @@
 """
-Tasks package - 重构后的任务管理系统
+TaskIQ 任务定义
+所有异步任务都在这里定义
 """
-# 核心组件
-from app.core import scheduler, task_dispatcher
-from app.core.task_registry import TaskRegistry, TaskType, ConfigStatus, SchedulerType
+from app.broker import broker
+
+# 导入所有任务模块
+from app.tasks import cleanup_tasks
+from app.tasks import notification_tasks
+from app.tasks import data_tasks
 
 __all__ = [
-    "task_dispatcher",
-    "scheduler",
-    "TaskRegistry",
-    "TaskType",
-    "ConfigStatus", 
-    "SchedulerType"
+    "cleanup_tasks",
+    "notification_tasks", 
+    "data_tasks",
 ]

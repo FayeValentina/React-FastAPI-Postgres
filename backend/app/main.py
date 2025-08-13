@@ -10,7 +10,8 @@ from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
-from app.services.tasks_manager import task_manager
+from app.services.task_manager import task_manager
+from app.broker import broker
 
 # 配置日志系统
 setup_logging()
@@ -24,19 +25,20 @@ async def lifespan(app: FastAPI):
     
     try:
         # 启动时
-        await task_manager.start()
-        logger.info("任务管理器启动成功")
+        await broker.startup()
+        await task_manager.initialize()
+        logger.info("TaskIQ任务管理器启动成功")
     except Exception as e:
-        logger.error(f"任务管理器启动失败: {e}")
+        logger.error(f"TaskIQ任务管理器启动失败: {e}")
     
     yield
     
     # 关闭时
     try:
-        task_manager.shutdown()
-        logger.info("任务管理器关闭成功")
+        await broker.shutdown()
+        logger.info("TaskIQ任务管理器关闭成功")
     except Exception as e:
-        logger.error(f"任务管理器关闭失败: {e}")
+        logger.error(f"TaskIQ任务管理器关闭失败: {e}")
 
 
 app = FastAPI(

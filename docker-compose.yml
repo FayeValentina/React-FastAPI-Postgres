@@ -37,10 +37,13 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - SECRET_KEY=${SECRET_KEY}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     command: >
       bash -c "
@@ -120,7 +123,7 @@ services:
     networks:
       - dbNetWork
 
-  celery_worker:
+  taskiq_worker:
     build: ./backend
     env_file:
       - .env
@@ -132,9 +135,6 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
-      - C_FORCE_ROOT=true
-      - CELERY_WORKER_POOL=${CELERY_WORKER_POOL}  # 从环境变量读取 worker 池类型
-      - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY}  # 从环境变量读取 Worker 进程数
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,39 +144,42 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 10 &&
-        echo '启动 Celery Worker（使用 prefork 池）...' &&
-        celery -A app.celery_app worker \
-          --loglevel=info \
-          --concurrency=${CELERY_WORKER_CONCURRENCY} \
-          --pool=${CELERY_WORKER_POOL} \
-          --max-tasks-per-child=100 \
-          -Q default,cleanup,scraping
+        poetry install --no-interaction --no-ansi &&
+        poetry run taskiq worker app.broker:broker --log-level info
       "
     networks:
       - dbNetWork
     deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
+      replicas: 2
 
-  flower:
-    image: mher/flower:2.0
+  taskiq_scheduler:
+    build: ./backend
     env_file:
       - .env
-    ports:
-      - "5555:5555"
     environment:
-      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
-      - FLOWER_PORT=5555
-      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
     depends_on:
-      - rabbitmq
-      - celery_worker
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      taskiq_worker:
+        condition: service_started
+    command: >
+      bash -c "
+        echo '等待依赖服务...' &&
+        sleep 15 &&
+        poetry install --no-interaction --no-ansi &&
+        poetry run taskiq-scheduler app.scheduler:scheduler --log-level info
+      "
     networks:
       - dbNetWork
-    command: celery flower --broker=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
 
 volumes:
   postgres_data:
