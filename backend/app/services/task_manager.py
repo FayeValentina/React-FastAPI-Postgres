@@ -179,31 +179,53 @@ class TaskManager:
             return task.task_id
     
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
-        """获取任务状态（由于不使用结果后端，返回简化状态）"""
-        # 由于不使用Redis结果后端，我们从task_executions表中查询状态
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                "SELECT * FROM task_executions WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1",
-                task_id
-            )
-            execution = result.fetchone()
+        """获取任务状态"""
+        try:
+            # 从Redis结果后端获取任务状态
+            result = await self.broker.result_backend.get_result(task_id)
             
-            if execution:
+            if result:
                 return {
                     "task_id": task_id,
-                    "status": execution.status,
-                    "result": execution.result,
-                    "error": execution.error_message,
-                    "started_at": execution.started_at.isoformat() if execution.started_at else None,
-                    "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+                    "status": result.status.name.lower() if result.status else "unknown",
+                    "result": result.result,
+                    "error": result.error,
+                    "started_at": result.started_at.isoformat() if hasattr(result, 'started_at') and result.started_at else None,
+                    "completed_at": result.completed_at.isoformat() if hasattr(result, 'completed_at') and result.completed_at else None,
                 }
             else:
-                return {
-                    "task_id": task_id,
-                    "status": "unknown",
-                    "result": None,
-                    "error": None,
-                }
+                # 如果Redis中没有结果，尝试从数据库查询
+                async with AsyncSessionLocal() as db:
+                    db_result = await db.execute(
+                        "SELECT * FROM task_executions WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1",
+                        task_id
+                    )
+                    execution = db_result.fetchone()
+                    
+                    if execution:
+                        return {
+                            "task_id": task_id,
+                            "status": execution.status,
+                            "result": execution.result,
+                            "error": execution.error_message,
+                            "started_at": execution.started_at.isoformat() if execution.started_at else None,
+                            "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+                        }
+                    else:
+                        return {
+                            "task_id": task_id,
+                            "status": "unknown",
+                            "result": None,
+                            "error": None,
+                        }
+        except Exception as e:
+            logger.error(f"获取任务状态失败 {task_id}: {e}")
+            return {
+                "task_id": task_id,
+                "status": "error",
+                "result": None,
+                "error": str(e),
+            }
     
     async def list_active_tasks(self) -> List[Dict[str, Any]]:
         """列出活跃的任务执行记录"""

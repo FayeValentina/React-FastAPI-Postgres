@@ -7,6 +7,7 @@ import os
 from typing import Optional
 from taskiq import TaskiqEvents
 from taskiq_aio_pika import AioPikaBroker
+from taskiq_redis import RedisAsyncResultBackend
 
 from app.core.config import settings
 
@@ -17,8 +18,13 @@ broker = AioPikaBroker(
     task_id_generator=lambda: str(uuid.uuid4()),
 )
 
-# 不使用Redis结果后端，而是手动在task_executions中存储结果
-# broker不配置result_backend，我们将在任务执行中手动存储结果到数据库
+# 配置 Redis 作为结果后端
+broker = broker.with_result_backend(
+    RedisAsyncResultBackend(
+        redis_url=settings.redis.CONNECTION_URL,
+        result_ex_time=settings.taskiq.RESULT_EX_TIME,  # 结果过期时间（秒）
+    )
+)
 
 
 # 配置任务事件监听器

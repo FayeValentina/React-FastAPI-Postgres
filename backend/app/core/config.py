@@ -203,6 +203,33 @@ class RabbitMQSettings(BaseSettings):
     )
 
 
+class RedisSettings(BaseSettings):
+    """Redis 配置"""
+    HOST: str = "redis"
+    PORT: int = 6379
+    PASSWORD: Optional[str] = None
+    DB: int = 0
+    URL: Optional[str] = None
+    
+    @property
+    def CONNECTION_URL(self) -> str:
+        """获取 Redis 连接 URL"""
+        if self.URL:
+            return self.URL
+        
+        if self.PASSWORD:
+            return f"redis://:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB}"
+        else:
+            return f"redis://{self.HOST}:{self.PORT}/{self.DB}"
+    
+    model_config = SettingsConfigDict(
+        env_prefix="REDIS_",
+        env_file=[".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
 class TaskIQSettings(BaseSettings):
     """TaskIQ 配置"""
     # TaskIQ 基本配置
@@ -213,6 +240,9 @@ class TaskIQSettings(BaseSettings):
     
     # Worker设置
     WORKER_CONCURRENCY: int = 2
+    
+    # 结果存储设置
+    RESULT_EX_TIME: int = 3600  # 结果过期时间（秒）
     
     model_config = SettingsConfigDict(
         env_prefix="TASKIQ_",
@@ -244,6 +274,7 @@ class Settings(BaseSettings):
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
+    redis: RedisSettings = RedisSettings()
     taskiq: TaskIQSettings = TaskIQSettings()
 
     # 数据库日志

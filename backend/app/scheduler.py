@@ -5,8 +5,10 @@ TaskIQ Scheduler 配置
 from datetime import datetime, timedelta
 from taskiq import TaskiqScheduler
 from taskiq.schedule_sources import LabelScheduleSource
+from taskiq_redis import RedisScheduleSource
 
 from app.broker import broker
+from app.core.config import settings
 from app.db.base import AsyncSessionLocal
 from app.models.task_config import TaskConfig
 from app.core.task_registry import TaskType, SchedulerType
@@ -16,7 +18,9 @@ from app.core.task_registry import TaskType, SchedulerType
 scheduler = TaskiqScheduler(
     broker=broker,
     sources=[
-        # 使用基于标签的调度（不依赖Redis）
+        # 使用 Redis 存储调度任务（推荐生产环境）
+        RedisScheduleSource(url=settings.redis.CONNECTION_URL),
+        # 使用基于标签的调度（开发环境）
         LabelScheduleSource(broker=broker),
     ],
 )

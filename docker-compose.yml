@@ -40,10 +40,13 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - REDIS_URL=redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: >
       bash -c "
@@ -123,6 +126,22 @@ services:
     networks:
       - dbNetWork
 
+  redis:
+    image: redis:7-alpine
+    env_file:
+      - .env
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dbNetWork
+
   taskiq_worker:
     build: ./backend
     env_file:
@@ -135,10 +154,13 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - REDIS_URL=redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: >
       bash -c "
@@ -164,10 +186,13 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - REDIS_URL=redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       taskiq_worker:
         condition: service_started
@@ -184,6 +209,7 @@ services:
 volumes:
   postgres_data:
   rabbitmq_data:
+  redis_data:
 
 networks:
   dbNetWork:
