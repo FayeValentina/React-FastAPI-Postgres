@@ -54,10 +54,13 @@ class TaskConfigCreate(TaskConfigBase):
                 raise ValueError('间隔调度至少需要指定hours、minutes或seconds中的一个')
                 
         elif scheduler_type == SchedulerType.CRON:
+            # 支持两种cron格式
+            has_cron_expression = 'cron_expression' in v
             required = ['minute', 'hour', 'day', 'month', 'day_of_week']
-            for field in required:
-                if field not in v:
-                    raise ValueError(f'Cron调度缺少必要参数: {field}')
+            has_cron_fields = all(field in v for field in required)
+            
+            if not has_cron_expression and not has_cron_fields:
+                raise ValueError(f'Cron调度需要提供 cron_expression 或者完整的cron字段({", ".join(required)})')
                     
         elif scheduler_type == SchedulerType.DATE:
             if 'run_date' not in v:

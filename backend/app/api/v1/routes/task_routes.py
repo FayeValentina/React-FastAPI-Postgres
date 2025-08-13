@@ -861,10 +861,14 @@ async def validate_task_config(
                 }
         
         elif config.scheduler_type == SchedulerType.CRON:
-            if 'cron_expression' not in config.schedule_config:
+            # 支持两种cron格式
+            has_cron_expression = 'cron_expression' in config.schedule_config
+            has_cron_fields = all(field in config.schedule_config for field in ['minute', 'hour', 'day', 'month', 'day_of_week'])
+            
+            if not has_cron_expression and not has_cron_fields:
                 return {
                     "valid": False,
-                    "message": "Cron schedule requires cron_expression",
+                    "message": "Cron schedule requires either 'cron_expression' or individual cron fields (minute, hour, day, month, day_of_week)",
                     "config": None
                 }
         

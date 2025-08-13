@@ -45,14 +45,14 @@ class TaskConfig(Base):
         "ScheduleEvent",
         back_populates="task_config",
         cascade="all, delete-orphan",
-        lazy="dynamic"
+        lazy="select"
     )
     
     task_executions: Mapped[List["TaskExecution"]] = relationship(
         "TaskExecution", 
         back_populates="task_config",
         cascade="all, delete-orphan",
-        lazy="dynamic"
+        lazy="select"
     )
     
     def __repr__(self) -> str:

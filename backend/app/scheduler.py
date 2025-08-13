@@ -235,8 +235,19 @@ def _get_schedule_params(scheduler_type: SchedulerType, schedule_config: Dict[st
     """
     try:
         if scheduler_type == SchedulerType.CRON:
-            # Cron调度
-            cron_expression = schedule_config.get("cron_expression", "* * * * *")
+            # Cron调度 - 支持两种格式
+            if "cron_expression" in schedule_config:
+                # 格式1: 直接的cron表达式
+                cron_expression = schedule_config["cron_expression"]
+            else:
+                # 格式2: 分离的cron字段
+                minute = schedule_config.get("minute", "*")
+                hour = schedule_config.get("hour", "*")
+                day = schedule_config.get("day", "*")
+                month = schedule_config.get("month", "*")
+                day_of_week = schedule_config.get("day_of_week", "*")
+                cron_expression = f"{minute} {hour} {day} {month} {day_of_week}"
+            
             return {"cron": cron_expression}
             
         elif scheduler_type == SchedulerType.DATE:
