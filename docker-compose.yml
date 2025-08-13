@@ -37,10 +37,13 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - SECRET_KEY=${SECRET_KEY}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -110,7 +113,7 @@ services:
     env_file:
       - .env
     ports:
-      - "5672:5672"
+      - "${RABBITMQ_PORT}:5672"
       - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
@@ -131,11 +134,26 @@ services:
     env_file:
       - .env
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/data
+    command: >
+      sh -c "
+        if [ -n '${REDIS_PASSWORD}' ]; then
+          redis-server --requirepass ${REDIS_PASSWORD}
+        else
+          redis-server
+        fi
+      "
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: >
+        sh -c "
+          if [ -n '${REDIS_PASSWORD}' ]; then
+            redis-cli -a ${REDIS_PASSWORD} ping
+          else
+            redis-cli ping
+          fi
+        "
       interval: 10s
       timeout: 5s
       retries: 5
@@ -151,10 +169,13 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,12 +188,12 @@ services:
         echo '等待依赖服务...' &&
         sleep 10 &&
         poetry install --no-interaction --no-ansi &&
-        poetry run taskiq worker app.broker:broker --log-level INFO
+        poetry run taskiq worker app.broker:broker --log-level ${LOG_LEVEL:-INFO}
       "
     networks:
       - dbNetWork
     deploy:
-      replicas: 2
+      replicas: ${TASKIQ_WORKER_CONCURRENCY}
 
   taskiq_scheduler:
     build: ./backend
@@ -183,10 +204,13 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
-      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -201,7 +225,7 @@ services:
         echo '等待依赖服务...' &&
         sleep 15 &&
         poetry install --no-interaction --no-ansi &&
-        poetry run taskiq scheduler app.scheduler:scheduler --log-level INFO
+        poetry run taskiq scheduler app.scheduler:scheduler --log-level ${LOG_LEVEL:-INFO}
       "
     networks:
       - dbNetWork
