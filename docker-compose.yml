@@ -167,7 +167,7 @@ services:
         echo '等待依赖服务...' &&
         sleep 10 &&
         poetry install --no-interaction --no-ansi &&
-        poetry run taskiq worker app.broker:broker --log-level info
+        poetry run taskiq worker app.broker:broker --log-level INFO
       "
     networks:
       - dbNetWork
@@ -201,7 +201,7 @@ services:
         echo '等待依赖服务...' &&
         sleep 15 &&
         poetry install --no-interaction --no-ansi &&
-        poetry run taskiq-scheduler app.scheduler:scheduler --log-level info
+        poetry run taskiq scheduler app.scheduler:scheduler --log-level INFO
       "
     networks:
       - dbNetWork
