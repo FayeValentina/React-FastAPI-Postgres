@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from app.broker import broker
-from app.scheduler import scheduler, load_schedules_from_db, register_scheduled_task
+from app.scheduler import scheduler, load_schedules_from_db, register_scheduled_task, initialize_scheduler
 from app.db.base import AsyncSessionLocal
 from app.models.task_config import TaskConfig
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
@@ -28,6 +28,9 @@ class TaskManager:
         """初始化任务管理器"""
         if self._initialized:
             return
+        
+        # 初始化调度器
+        await initialize_scheduler()
         
         # 加载数据库中的调度任务
         await load_schedules_from_db()

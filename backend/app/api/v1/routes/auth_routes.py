@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.tasks import scheduler
 from app.schemas import (
     LoginRequest,
     UserCreate
