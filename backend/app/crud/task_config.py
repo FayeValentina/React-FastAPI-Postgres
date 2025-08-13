@@ -407,21 +407,29 @@ class CRUDTaskConfig:
         
         return {status: count for status, count in result.all()}
     
+    async def get_total_count(self, db: AsyncSession) -> int:
+        """获取任务配置总数"""
+        result = await db.execute(
+            select(func.count(TaskConfig.id))
+        )
+        return result.scalar() or 0
+    
+    async def get_active_count(self, db: AsyncSession) -> int:
+        """获取活跃任务配置数"""
+        result = await db.execute(
+            select(func.count(TaskConfig.id))
+            .filter(TaskConfig.status == ConfigStatus.ACTIVE)
+        )
+        return result.scalar() or 0
+
     async def get_stats(self, db: AsyncSession) -> Dict[str, Any]:
         """获取任务配置统计信息"""
         try:
             # 总配置数
-            total_result = await db.execute(
-                select(func.count(TaskConfig.id))
-            )
-            total_configs = total_result.scalar() or 0
+            total_configs = await self.get_total_count(db)
             
             # 活跃配置数
-            active_result = await db.execute(
-                select(func.count(TaskConfig.id))
-                .filter(TaskConfig.status == ConfigStatus.ACTIVE)
-            )
-            active_configs = active_result.scalar() or 0
+            active_configs = await self.get_active_count(db)
             
             # 按类型统计
             type_stats = await self.count_by_type(db)

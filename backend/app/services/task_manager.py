@@ -11,6 +11,8 @@ from app.scheduler import scheduler, load_schedules_from_db, register_scheduled_
 from app.db.base import AsyncSessionLocal
 from app.models.task_config import TaskConfig
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
+from app.crud.task_config import crud_task_config
+from app.crud.task_execution import crud_task_execution
 from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
 
 logger = logging.getLogger(__name__)
@@ -43,10 +45,7 @@ class TaskManager:
     ) -> int:
         """创建任务配置"""
         async with AsyncSessionLocal() as db:
-            config = TaskConfig(**config_data.dict())
-            db.add(config)
-            await db.commit()
-            await db.refresh(config)
+            config = await crud_task_config.create(db, config_data)
             
             # 如果是调度任务，注册到调度器
             if config.scheduler_type != SchedulerType.MANUAL:
@@ -62,19 +61,16 @@ class TaskManager:
     ) -> bool:
         """更新任务配置"""
         async with AsyncSessionLocal() as db:
-            config = await db.get(TaskConfig, config_id)
+            config = await crud_task_config.get(db, config_id)
             if not config:
                 return False
             
-            for key, value in update_data.dict(exclude_unset=True).items():
-                setattr(config, key, value)
-            
-            await db.commit()
+            updated_config = await crud_task_config.update(db, config, update_data)
             
             # 重新注册调度任务
-            if config.scheduler_type != SchedulerType.MANUAL:
+            if updated_config.scheduler_type != SchedulerType.MANUAL:
                 await self._unregister_scheduled_task(config_id)
-                await register_scheduled_task(config)
+                await register_scheduled_task(updated_config)
             
             logger.info(f"已更新任务配置: {config_id}")
             return True
@@ -82,22 +78,18 @@ class TaskManager:
     async def delete_task_config(self, config_id: int) -> bool:
         """删除任务配置"""
         async with AsyncSessionLocal() as db:
-            config = await db.get(TaskConfig, config_id)
-            if not config:
-                return False
-            
             # 取消调度
             await self._unregister_scheduled_task(config_id)
             
-            await db.delete(config)
-            await db.commit()
-            logger.info(f"已删除任务配置: {config_id}")
-            return True
+            success = await crud_task_config.delete(db, config_id)
+            if success:
+                logger.info(f"已删除任务配置: {config_id}")
+            return success
     
     async def get_task_config(self, config_id: int) -> Optional[Dict[str, Any]]:
         """获取任务配置详情"""
         async with AsyncSessionLocal() as db:
-            config = await db.get(TaskConfig, config_id)
+            config = await crud_task_config.get(db, config_id)
             if not config:
                 return None
             
@@ -123,28 +115,27 @@ class TaskManager:
     ) -> List[Dict[str, Any]]:
         """列出任务配置"""
         async with AsyncSessionLocal() as db:
-            query = "SELECT * FROM task_configs WHERE 1=1"
-            params = []
-            
-            if task_type:
-                query += " AND task_type = $1"
-                params.append(task_type)
-            
-            if status:
-                query += f" AND status = ${len(params)+1}"
-                params.append(status)
-            
-            result = await db.execute(query, *params)
-            configs = result.fetchall()
+            if task_type or status:
+                # 使用CRUD的查询方法
+                from app.schemas.task_config_schemas import TaskConfigQuery
+                query = TaskConfigQuery(
+                    task_type=TaskType(task_type) if task_type else None,
+                    status=ConfigStatus(status) if status else None,
+                    page=1,
+                    page_size=1000  # 获取所有结果
+                )
+                configs, _ = await crud_task_config.get_by_query(db, query)
+            else:
+                configs = await crud_task_config.get_multi(db, skip=0, limit=1000)
             
             return [
                 {
                     'id': c.id,
                     'name': c.name,
                     'description': c.description,
-                    'task_type': c.task_type,
-                    'scheduler_type': c.scheduler_type,
-                    'status': c.status,
+                    'task_type': c.task_type.value if hasattr(c.task_type, 'value') else c.task_type,
+                    'scheduler_type': c.scheduler_type.value if hasattr(c.scheduler_type, 'value') else c.scheduler_type,
+                    'status': c.status.value if hasattr(c.status, 'value') else c.status,
                     'parameters': c.parameters or {},
                     'schedule_config': c.schedule_config or {},
                     'max_retries': c.max_retries or 0,
@@ -162,7 +153,7 @@ class TaskManager:
     ) -> str:
         """立即执行任务"""
         async with AsyncSessionLocal() as db:
-            config = await db.get(TaskConfig, config_id)
+            config = await crud_task_config.get(db, config_id)
             if not config:
                 raise ValueError(f"任务配置不存在: {config_id}")
             
@@ -199,16 +190,12 @@ class TaskManager:
             else:
                 # 如果Redis中没有结果，尝试从数据库查询
                 async with AsyncSessionLocal() as db:
-                    db_result = await db.execute(
-                        "SELECT * FROM task_executions WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1",
-                        task_id
-                    )
-                    execution = db_result.fetchone()
+                    execution = await crud_task_execution.get_latest_by_task_id(db, task_id)
                     
                     if execution:
                         return {
                             "task_id": task_id,
-                            "status": execution.status,
+                            "status": execution.status.value if hasattr(execution.status, 'value') else execution.status,
                             "result": execution.result,
                             "error": execution.error_message,
                             "started_at": execution.started_at.isoformat() if execution.started_at else None,
@@ -233,16 +220,13 @@ class TaskManager:
     async def list_active_tasks(self) -> List[Dict[str, Any]]:
         """列出活跃的任务执行记录"""
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                "SELECT * FROM task_executions WHERE status = 'running' ORDER BY started_at DESC"
-            )
-            executions = result.fetchall()
+            executions = await crud_task_execution.get_running_executions(db)
             
             return [
                 {
                     "task_id": e.task_id,
                     "config_id": e.config_id,
-                    "status": e.status,
+                    "status": e.status.value if hasattr(e.status, 'value') else e.status,
                     "started_at": e.started_at.isoformat() if e.started_at else None,
                 }
                 for e in executions
@@ -272,30 +256,49 @@ class TaskManager:
         }
         return task_mapping.get(task_type)
     
+    async def _check_broker_connection(self) -> bool:
+        """检查broker连接状态"""
+        try:
+            # 尝试ping broker的连接
+            if hasattr(self.broker, 'is_started'):
+                return self.broker.is_started
+            # 备用方法：尝试获取broker状态
+            await self.broker.result_backend.is_result_ready("test")
+            return True
+        except Exception as e:
+            logger.warning(f"Broker连接检查失败: {e}")
+            return False
+
+    async def _get_scheduled_jobs_count(self) -> int:
+        """获取已调度的任务数量"""
+        try:
+            async with AsyncSessionLocal() as db:
+                # 获取所有需要调度的活跃任务配置数量
+                scheduled_configs = await crud_task_config.get_scheduled_configs(db)
+                return len(scheduled_configs)
+        except Exception as e:
+            logger.warning(f"获取调度任务数量失败: {e}")
+            return 0
+
     async def get_system_status(self) -> Dict[str, Any]:
         """获取系统状态"""
         try:
+            # 检查broker连接状态
+            broker_connected = await self._check_broker_connection()
+            
             # 获取调度任务数量
-            scheduled_count = 0
-            try:
-                # 这里可以查询调度器状态
-                pass
-            except Exception:
-                pass
+            scheduled_count = await self._get_scheduled_jobs_count()
             
             # 获取活跃任务数量
             active_tasks = await self.list_active_tasks()
             
             # 获取任务配置统计
             async with AsyncSessionLocal() as db:
-                result = await db.execute("SELECT COUNT(*) as total FROM task_configs")
-                total_configs = result.fetchone().total
-                
-                result = await db.execute("SELECT COUNT(*) as active FROM task_configs WHERE status = 'active'")
-                active_configs = result.fetchone().active
+                total_configs = await crud_task_config.get_total_count(db)
+                active_configs = await crud_task_config.get_active_count(db)
             
             return {
-                "broker_connected": True,  # 简化实现
+                "broker_connected": broker_connected,
                 "scheduler_running": self._initialized,
                 "total_configs": total_configs,
                 "active_configs": active_configs,
