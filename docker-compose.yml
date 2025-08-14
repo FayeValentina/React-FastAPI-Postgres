@@ -188,7 +188,7 @@ services:
         echo '等待依赖服务...' &&
         sleep 10 &&
         poetry install --no-interaction --no-ansi &&
-        poetry run taskiq worker app.broker:broker --log-level ${LOG_LEVEL:-INFO}
+        poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --log-level ${LOG_LEVEL:-INFO}
       "
     networks:
       - dbNetWork
