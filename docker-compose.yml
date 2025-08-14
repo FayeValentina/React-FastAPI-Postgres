@@ -230,10 +230,29 @@ services:
     networks:
       - dbNetWork
 
+  redisinsight:
+    image: redislabs/redisinsight:${REDISINSIGHT_VERSION:-2.70}
+    container_name: ${REDISINSIGHT_CONTAINER_NAME:-redisinsight}
+    env_file:
+      - .env
+    ports:
+      - "${REDISINSIGHT_PORT:-8001}:5540"
+    volumes:
+      - redisinsight_data:/db
+    environment:
+      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-8001}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dbNetWork
+
 volumes:
   postgres_data:
   rabbitmq_data:
   redis_data:
+  redisinsight_data:
 
 networks:
   dbNetWork:
