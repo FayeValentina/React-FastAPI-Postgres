@@ -51,7 +51,7 @@ class SystemStatusResponse(BaseModel):
     total_active_tasks: int = Field(..., description="总活跃任务数")
     timestamp: str = Field(..., description="状态时间戳")
     scheduler: Dict[str, Any] = Field(..., description="调度器状态")
-    celery: Dict[str, Any] = Field(..., description="Celery状态")
+    worker: Dict[str, Any] = Field(..., description="Celery状态")
     queues: Dict[str, Any] = Field(..., description="队列状态")
 
 
@@ -59,6 +59,7 @@ class HealthCheckResponse(BaseModel):
     """健康检查响应"""
     status: str = Field(..., description="健康状态: healthy/degraded")
     scheduler_running: bool = Field(..., description="调度器运行状态")
+    broker_connected: bool = Field(..., description="Broker连接状态")
     total_scheduled_jobs: int = Field(..., description="总调度任务数")
     total_active_tasks: int = Field(..., description="总活跃任务数")
     timestamp: Optional[str] = Field(None, description="状态时间戳")

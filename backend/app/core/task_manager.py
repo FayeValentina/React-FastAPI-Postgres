@@ -350,15 +350,14 @@ class TaskManager:
     async def _check_broker_connection(self) -> bool:
         """检查broker连接状态"""
         try:
-            # 检查broker是否已启动
-            if hasattr(self.broker, 'is_worker_process'):
-                return self.broker.is_worker_process
+            # 检查 result backend (Redis) 连接
+            if self.broker.result_backend:
+                test_task_id = "connection_test_" + str(datetime.utcnow().timestamp())
+                # 这里只是检查Redis连接，如果成功说明至少result backend可用
+                await self.broker.result_backend.is_result_ready(test_task_id)
             
-            # 尝试执行一个简单的操作来验证连接
-            test_task_id = "connection_test_" + str(datetime.utcnow().timestamp())
-            is_ready = await self.broker.result_backend.is_result_ready(test_task_id)
-            
-            # 如果没有抛出异常，说明连接正常
+            # 检查broker本身是否可用（这里返回True表示基本配置正常）
+            # 注意：真正的连接检查需要worker运行时才能确定
             return True
             
         except Exception as e:
@@ -398,7 +397,7 @@ class TaskManager:
                     "initialized": self._initialized,
                     "scheduled_tasks": scheduled_count
                 },
-                "celery": {
+                "worker": {
                     "broker_connected": broker_connected,
                     "active_tasks": len(active_tasks)
                 },

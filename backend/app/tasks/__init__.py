@@ -2,15 +2,13 @@
 TaskIQ 任务定义
 所有异步任务都在这里定义
 """
-from app.broker import broker
-
 # 导入所有任务模块
-from app.tasks import cleanup_tasks
-from app.tasks import notification_tasks
-from app.tasks import data_tasks
+from app.tasks.cleanup_tasks import cleanup_expired_tokens,cleanup_old_content,cleanup_schedule_events
+from app.tasks.notification_tasks import send_email
 
 __all__ = [
-    "cleanup_tasks",
-    "notification_tasks", 
-    "data_tasks",
+    "cleanup_expired_tokens",
+    "cleanup_old_content", 
+    "cleanup_schedule_events",
+    "send_email",
 ]

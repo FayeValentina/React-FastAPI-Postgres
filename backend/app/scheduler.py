@@ -28,8 +28,6 @@ scheduler = TaskiqScheduler(
     broker=broker,
     sources=[
         redis_schedule_source,
-        # 使用基于标签的调度（开发环境）
-        LabelScheduleSource(broker=broker),
     ],
 )
 

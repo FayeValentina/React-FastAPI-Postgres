@@ -15,16 +15,14 @@ from app.core.config import settings
 # 配置 RabbitMQ broker
 broker = AioPikaBroker(
     url=settings.rabbitmq.URL,
-).with_id_generator(lambda: str(uuid.uuid4()))
-
-# 配置 Redis 作为结果后端
-broker = broker.with_result_backend(
+).with_id_generator(
+    lambda: str(uuid.uuid4())
+).with_result_backend(
     RedisAsyncResultBackend(
         redis_url=settings.redis.CONNECTION_URL,
         result_ex_time=settings.taskiq.RESULT_EX_TIME,  # 结果过期时间（秒）
     )
 )
-
 
 # 配置任务事件监听器
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)

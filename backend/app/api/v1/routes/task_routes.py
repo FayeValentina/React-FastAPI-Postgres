@@ -32,7 +32,7 @@ from app.schemas.job_schemas import (
     ScheduledJobInfo,
     ScheduleActionResponse
 )
-from app.services.task_manager import task_manager
+from app.core.task_manager import task_manager
 from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, ScheduleAction, TaskRegistry
 from app.db.base import AsyncSessionLocal
 from app.crud.task_config import crud_task_config
@@ -80,6 +80,7 @@ async def get_system_health(
     return {
         "status": "healthy" if is_healthy else "degraded",
         "scheduler_running": status.get("scheduler_running", False),
+        "broker_connected": status.get("broker_connected", False),
         "total_scheduled_jobs": status.get("total_scheduled_jobs", 0),
         "total_active_tasks": status.get("total_active_tasks", 0),
         "timestamp": status.get("timestamp")

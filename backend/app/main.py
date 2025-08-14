@@ -10,7 +10,7 @@ from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
-from app.services.task_manager import task_manager
+from app.core.task_manager import task_manager
 from app.broker import broker
 
 # 配置日志系统
