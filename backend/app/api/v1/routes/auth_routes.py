@@ -331,7 +331,7 @@ async def verify_reset_token(
 @router.get("/test/cleanup-tokens")
 async def test_cleanup_tokens():
     """测试令牌清理任务"""
-    # Note: Token cleanup is now handled by Celery tasks
+    # Note: Token cleanup is now handled by worker tasks
     pass
     return {"message": "令牌清理任务执行完成"}
 
@@ -339,6 +339,6 @@ async def test_cleanup_tokens():
 @router.get("/test/auto-scraping")
 async def test_auto_scraping():
     """测试自动爬取任务"""
-    # Note: Auto scraping is now handled by Celery tasks
+    # Note: Auto scraping is now handled by worker tasks
     pass
     return {"message": "自动爬取任务执行完成"} 

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Path
 from typing import Annotated, Any, Dict, List, Optional
+from datetime import datetime
 
 from app.models.user import User
 from app.dependencies.current_user import get_current_superuser, get_current_active_user
@@ -196,39 +197,20 @@ async def update_task_config(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """
-    Update an existing task configuration.
+    更新任务配置（支持部分更新）
     
     Parameters:
         - config_id: Task configuration ID
-        - updates: Fields to update
+        - updates: Fields to update (只需提供要更新的字段)
         - reload_schedule: Whether to reload the schedule if the task is scheduled
     """
     success = await task_manager.update_task_config(
-        config_id, updates.dict(exclude_unset=True)
+        config_id, updates.dict(exclude_unset=True)  # exclude_unset支持部分更新
     )
     if not success:
         raise HTTPException(status_code=404, detail="Task configuration not found")
     
     # Return updated configuration
-    updated_config = await task_manager.get_task_config(config_id)
-    return updated_config or {"id": config_id, "updated": True}
-
-
-@router.patch("/configs/{config_id}", response_model=TaskConfigResponse)
-async def patch_task_config(
-    config_id: int = Path(..., description="Task configuration ID"),
-    updates: Dict[str, Any] = Body(..., description="Partial update data"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Partially update a task configuration (PATCH method).
-    
-    Allows updating individual fields without providing the full configuration.
-    """
-    success = await task_manager.update_task_config(config_id, updates)
-    if not success:
-        raise HTTPException(status_code=404, detail="Task configuration not found")
-    
     updated_config = await task_manager.get_task_config(config_id)
     return updated_config or {"id": config_id, "updated": True}
 
@@ -263,71 +245,177 @@ async def delete_task_config(
 
 
 # ---------------------------------------------------------------------------
-# Batch Configuration Operations
+# Batch Operations (Unified)
 # ---------------------------------------------------------------------------
 
-@router.post("/configs/batch", response_model=BatchCreateResponse)
-async def batch_create_configs(
-    configs: List[TaskConfigCreate] = Body(..., description="List of configurations to create"),
+@router.post("/batch-operations", response_model=Dict[str, Any])
+async def batch_operations(
+    operation: str = Body(..., description="Operation type: delete, execute, revoke, execute-by-type"),
+    config_ids: Optional[List[int]] = Body(None, description="Config IDs for delete/execute"),
+    task_ids: Optional[List[str]] = Body(None, description="Task IDs for revoke"),
+    task_type: Optional[str] = Body(None, description="Task type for execute-by-type"),
+    options: Optional[Dict[str, Any]] = Body(default={}, description="Additional options"),
+    page_size: Optional[int] = Body(1000, description="Page size for execute-by-type"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """
-    Create multiple task configurations in batch.
+    统一的批量操作端点
+    
+    Operations:
+        - delete: 批量删除配置（需要 config_ids）
+        - execute: 批量执行任务（需要 config_ids）
+        - revoke: 批量撤销任务（需要 task_ids）
+        - execute-by-type: 批量执行指定类型的所有活跃配置（需要 task_type）
     
     Parameters:
-        - configs: List of task configurations to create
+        - operation: Operation type
+        - config_ids: Configuration IDs for delete/execute operations
+        - task_ids: Task IDs for revoke operation
+        - task_type: Task type for execute-by-type operation
+        - options: Additional options specific to each operation
     """
-    created_ids = []
-    failed = []
+    operation = operation.lower()
     
-    for idx, config in enumerate(configs):
-        try:
-            config_id = await task_manager.create_task_config(**config.dict())
-            if config_id:
-                created_ids.append(config_id)
-            else:
-                failed.append({"index": idx, "error": "Creation failed"})
-        except Exception as e:
-            failed.append({"index": idx, "error": str(e)})
+    if operation == "delete":
+        if not config_ids:
+            raise HTTPException(status_code=400, detail="config_ids required for delete operation")
+        
+        deleted = []
+        failed = []
+        
+        for config_id in config_ids:
+            try:
+                success = await task_manager.delete_task_config(config_id)
+                if success:
+                    deleted.append(config_id)
+                else:
+                    failed.append({"id": config_id, "error": "Not found"})
+            except Exception as e:
+                failed.append({"id": config_id, "error": str(e)})
+        
+        return {
+            "operation": "delete",
+            "deleted": deleted,
+            "failed": failed,
+            "total_deleted": len(deleted),
+            "total_failed": len(failed)
+        }
     
-    return {
-        "created": created_ids,
-        "failed": failed,
-        "total_created": len(created_ids),
-        "total_failed": len(failed)
-    }
-
-
-@router.delete("/configs/batch", response_model=BatchDeleteResponse)
-async def batch_delete_configs(
-    config_ids: List[int] = Body(..., description="List of configuration IDs to delete"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Delete multiple task configurations in batch.
+    elif operation == "execute":
+        if not config_ids:
+            raise HTTPException(status_code=400, detail="config_ids required for execute operation")
+        
+        task_ids_result = []
+        failed = []
+        
+        for config_id in config_ids:
+            try:
+                task_id = await task_manager.execute_task_immediately(config_id, **options)
+                if task_id:
+                    task_ids_result.append(task_id)
+                else:
+                    failed.append({"id": config_id, "error": "Failed to execute"})
+            except Exception as e:
+                failed.append({"id": config_id, "error": str(e)})
+        
+        return {
+            "operation": "execute",
+            "task_ids": task_ids_result,
+            "failed": failed,
+            "total_submitted": len(task_ids_result),
+            "total_failed": len(failed),
+            "config_ids": config_ids,
+            "status": "submitted"
+        }
     
-    Parameters:
-        - config_ids: List of configuration IDs to delete
-    """
-    deleted = []
-    failed = []
+    elif operation == "revoke":
+        if not task_ids:
+            raise HTTPException(status_code=400, detail="task_ids required for revoke operation")
+        
+        results = []
+        terminate = options.get("terminate", False)
+        
+        for task_id in task_ids:
+            try:
+                # Use the single revoke logic from existing endpoint
+                async with AsyncSessionLocal() as db:
+                    execution = await crud_task_execution.get_by_task_id(db, task_id)
+                    if execution and execution.status == "running":
+                        await crud_task_execution.update_status(
+                            db=db,
+                            execution_id=execution.id,
+                            status="failed",
+                            completed_at=datetime.utcnow(),
+                            error_message="Task revoked by user"
+                        )
+                        
+                        results.append({
+                            "task_id": task_id, 
+                            "revoked": True, 
+                            "message": "Task marked as revoked"
+                        })
+                    else:
+                        results.append({
+                            "task_id": task_id, 
+                            "revoked": False, 
+                            "message": "Task not found or not running"
+                        })
+            except Exception as e:
+                results.append({
+                    "task_id": task_id,
+                    "revoked": False,
+                    "message": str(e)
+                })
+        
+        successful = [r for r in results if r.get("revoked")]
+        failed_results = [r for r in results if not r.get("revoked")]
+        
+        return {
+            "operation": "revoke",
+            "total_revoked": len(successful),
+            "total_failed": len(failed_results),
+            "results": results
+        }
     
-    for config_id in config_ids:
-        try:
-            success = await task_manager.delete_task_config(config_id)
-            if success:
-                deleted.append(config_id)
-            else:
-                failed.append({"id": config_id, "error": "Not found"})
-        except Exception as e:
-            failed.append({"id": config_id, "error": str(e)})
+    elif operation == "execute-by-type":
+        if not task_type:
+            raise HTTPException(status_code=400, detail="task_type required for execute-by-type operation")
+        
+        # Get all active configs of this type
+        configs = await task_manager.list_task_configs(
+            task_type=task_type,
+            status=ConfigStatus.ACTIVE.value,
+            page_size=page_size
+        )
+        
+        task_ids_result = []
+        failed = []
+        
+        for config in configs:
+            try:
+                task_id = await task_manager.execute_task_immediately(config["id"], **options)
+                if task_id:
+                    task_ids_result.append(task_id)
+                else:
+                    failed.append({"id": config["id"], "error": "Failed to execute"})
+            except Exception as e:
+                failed.append({"id": config["id"], "error": str(e)})
+        
+        return {
+            "operation": "execute-by-type",
+            "task_ids": task_ids_result,
+            "failed": failed,
+            "total_submitted": len(task_ids_result),
+            "total_failed": len(failed),
+            "task_type": task_type,
+            "status": "submitted"
+        }
     
-    return {
-        "deleted": deleted,
-        "failed": failed,
-        "total_deleted": len(deleted),
-        "total_failed": len(failed)
-    }
+    else:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid operation: {operation}. Supported operations: delete, execute, revoke, execute-by-type"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +566,7 @@ async def execute_task_by_type(
         raise HTTPException(status_code=400, detail=f"Unsupported task type: {task_type}")
     
     # Get task function
-    from app.scheduler import get_task_function
+    from app.core.task_registry import get_task_function
     task_func = get_task_function(task_type_enum)
     
     if not task_func:
@@ -486,8 +574,23 @@ async def execute_task_by_type(
     
     # Execute task directly
     try:
-        task = await task_func.kiq(**task_params, **options)
+        # Add config_id=None for direct execution if not provided
+        task_params_with_defaults = {
+            "config_id": None,  # Default for direct execution
+            **task_params  # User params override defaults
+        }
+        task = await task_func.kiq(**task_params_with_defaults, **options)
         
+        # Create a task execution record
+        async with AsyncSessionLocal() as db:
+            await crud_task_execution.create(
+                db=db,
+                config_id=None,  # No config for direct execution
+                task_id=task.task_id,
+                status="running",
+                started_at=datetime.utcnow(),
+            )
+
         return {
             "task_id": task.task_id,
             "task_type": task_type,
@@ -498,72 +601,8 @@ async def execute_task_by_type(
         raise HTTPException(status_code=500, detail=f"Failed to execute task: {str(e)}")
 
 
-@router.post("/execute/batch", response_model=BatchExecutionResponse)
-async def execute_multiple_configs(
-    config_ids: List[int] = Body(..., description="List of configuration IDs to execute"),
-    options: Dict[str, Any] = Body(default={}, description="Execution options"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Execute multiple task configurations in batch.
-    
-    Parameters:
-        - config_ids: List of configuration IDs
-        - options: Execution options for all tasks
-    """
-    task_ids = []
-    
-    for config_id in config_ids:
-        try:
-            task_id = await task_manager.execute_task_immediately(config_id, **options)
-            if task_id:
-                task_ids.append(task_id)
-        except Exception:
-            # Continue with other tasks even if one fails
-            pass
-    
-    return {
-        "task_ids": task_ids,
-        "total_submitted": len(task_ids),
-        "config_ids": config_ids,
-        "status": "submitted"
-    }
 
 
-@router.post("/execute/batch-by-type", response_model=BatchExecutionResponse)
-async def execute_batch_by_task_type(
-    task_type: str = Body(..., description="Task type"),
-    options: Dict[str, Any] = Body(default={}, description="Execution options"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Execute all active task configurations of a specific type.
-    
-    Parameters:
-        - task_type: TaskType enum value
-        - options: Execution options for all tasks
-    """
-    # Get all active configs of this type
-    configs = await task_manager.list_task_configs(
-        task_type=task_type,
-        status=ConfigStatus.ACTIVE.value
-    )
-    
-    task_ids = []
-    for config in configs:
-        try:
-            task_id = await task_manager.execute_task_immediately(config["id"], **options)
-            if task_id:
-                task_ids.append(task_id)
-        except Exception:
-            pass
-    
-    return {
-        "task_ids": task_ids,
-        "total_submitted": len(task_ids),
-        "task_type": task_type,
-        "status": "submitted"
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -609,16 +648,22 @@ async def get_active_tasks(
     """
     tasks = await task_manager.list_active_tasks()
     
-    # Convert to response format
+    # Convert to response format and apply filters
     active_tasks = []
     for t in tasks:
+        task_queue = t.get("queue", "default")
+        
+        # Apply queue filter if specified
+        if queue and task_queue != queue:
+            continue
+            
         task_info = {
             "task_id": t["task_id"],
-            "name": f"Task Config {t['config_id']}",
+            "name": f"Task Config {t['config_id']} ({t.get('task_type', 'unknown')})",
             "args": [],
             "kwargs": {},
-            "worker": worker,  # Can be populated if available
-            "queue": queue or "default"
+            "worker": worker,  # Can be populated if available from TaskIQ
+            "queue": task_queue
         }
         active_tasks.append(task_info)
     
@@ -629,51 +674,37 @@ async def get_active_tasks(
 async def get_queue_stats(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """Get statistics for all queues."""
+    """Get statistics for all queues with actual task distribution."""
     queues = ["default", "cleanup", "scraping", "high_priority", "low_priority"]
     stats = {}
     
-    # Get active tasks count
-    active_tasks = await task_manager.list_active_tasks()
-    
+    # Initialize all queues with 0 count
     for queue_name in queues:
-        # Simplified stats since TaskIQ doesn't expose queue details directly
         stats[queue_name] = {
-            "length": 0,  # TaskIQ doesn't provide queue length
+            "length": 0,
             "status": "active"
         }
     
-    # Add active tasks to default queue for now
-    if stats.get("default"):
-        stats["default"]["length"] = len(active_tasks)
+    # Get active tasks with queue information
+    active_tasks = await task_manager.list_active_tasks()
+    
+    # Count tasks by queue
+    for task in active_tasks:
+        queue_name = task.get("queue", "default")
+        
+        # Ensure the queue exists in our stats
+        if queue_name not in stats:
+            stats[queue_name] = {
+                "length": 0,
+                "status": "active"
+            }
+        
+        stats[queue_name]["length"] += 1
     
     return {
         "queues": stats,
         "total_tasks": len(active_tasks)
     }
-
-
-@router.get("/queue/{queue_name}/length", response_model=QueueLengthResponse)
-async def get_queue_length(
-    queue_name: str = Path(..., description="Queue name"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Get the current length of a specific queue.
-    
-    Parameters:
-        - queue_name: Name of the queue
-    """
-    # TaskIQ doesn't expose queue length directly
-    # Return active tasks count as approximation
-    active_tasks = await task_manager.list_active_tasks()
-    
-    return {
-        "queue_name": queue_name,
-        "length": len(active_tasks) if queue_name == "default" else 0,
-        "status": "active"
-    }
-
 
 @router.post("/revoke/{task_id}", response_model=TaskRevokeResponse)
 async def revoke_task(
@@ -716,94 +747,6 @@ async def revoke_task(
     }
 
 
-@router.post("/revoke/batch", response_model=BatchRevokeResponse)
-async def revoke_multiple_tasks(
-    task_ids: List[str] = Body(..., description="List of task IDs to revoke"),
-    terminate: bool = Body(False, description="Terminate tasks if running"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Revoke multiple tasks in batch.
-    
-    Parameters:
-        - task_ids: List of task IDs
-        - terminate: Whether to terminate if tasks are currently executing
-    """
-    results = []
-    
-    for task_id in task_ids:
-        try:
-            # Use the single revoke logic
-            result = await revoke_task(task_id, terminate, "TERM", current_user)
-            results.append(result)
-        except Exception as e:
-            results.append({
-                "task_id": task_id,
-                "revoked": False,
-                "message": str(e)
-            })
-    
-    successful = [r for r in results if r.get("revoked")]
-    failed = [r for r in results if not r.get("revoked")]
-    
-    return {
-        "total_revoked": len(successful),
-        "total_failed": len(failed),
-        "results": results
-    }
-
-
-# ---------------------------------------------------------------------------
-# Task Type Information
-# ---------------------------------------------------------------------------
-
-@router.get("/task-types", response_model=Dict[str, str])
-async def get_supported_task_types(
-    current_user: Annotated[User, Depends(get_current_active_user)] = None,
-) -> Dict[str, str]:
-    """
-    Get all supported task types and their descriptions.
-    
-    This endpoint is available to all authenticated users.
-    """
-    return {
-        task_type.value: f"Task type for {task_type.value.replace('_', ' ').title()}" 
-        for task_type in TaskType
-    }
-
-
-@router.get("/task-types/{task_type}/supported", response_model=TaskTypeSupportResponse)
-async def check_task_type_support(
-    task_type: str = Path(..., description="Task type to check"),
-    current_user: Annotated[User, Depends(get_current_active_user)] = None,
-) -> Dict[str, Any]:
-    """
-    Check if a specific task type is supported.
-    
-    Parameters:
-        - task_type: TaskType enum value to check
-    """
-    try:
-        task_type_enum = TaskType(task_type)
-        
-        # Check if task function exists
-        from app.scheduler import get_task_function
-        task_func = get_task_function(task_type_enum)
-        is_supported = task_func is not None
-        
-    except ValueError:
-        is_supported = False
-        task_type_enum = None
-    
-    response = {
-        "task_type": task_type,
-        "supported": is_supported
-    }
-    
-    if is_supported and task_type_enum:
-        response["taskiq_task_name"] = TaskRegistry.get_celery_task_name(task_type_enum)
-    
-    return response
 
 
 # ---------------------------------------------------------------------------
@@ -813,131 +756,62 @@ async def check_task_type_support(
 @router.get("/enums", response_model=EnumValuesResponse)
 async def get_enum_values(
     current_user: Annotated[User, Depends(get_current_active_user)] = None,
-) -> Dict[str, List[str]]:
+) -> Dict[str, Any]:
     """
-    Get all available enum values for task configuration.
+    获取所有可用的枚举值和支持的任务类型
     
     Useful for frontend dropdowns and validation.
     """
+    from app.core.task_registry import get_task_function
+    
+    # 获取支持的任务类型及其实现状态
+    task_types_list: List[Dict[str, Any]] = []
+    for task_type in TaskType:
+        task_func = get_task_function(task_type)
+        # 将每个任务的详细信息作为一个字典追加到列表中
+        task_types_list.append({
+            "name": task_type.value,
+            "description": f"Task type for {task_type.value.replace('_', ' ').title()}",
+            "implemented": task_func is not None
+        })
+    
     return {
-        "task_types": [t.value for t in TaskType],
+        "task_types": task_types_list,  # 包含描述和实现状态
         "task_statuses": [s.value for s in ConfigStatus],
         "scheduler_types": [s.value for s in SchedulerType]
     }
-
-
-@router.post("/validate", response_model=ValidationResponse)
-async def validate_task_config(
-    config: TaskConfigCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)] = None,
-) -> Dict[str, Any]:
-    """
-    Validate a task configuration without creating it.
-    
-    Useful for form validation before submission.
-    """
-    try:
-        # The validation happens in the Pydantic model
-        # Additional custom validation can be added here
-        
-        # Check if task type is supported
-        from app.scheduler import get_task_function
-        task_func = get_task_function(config.task_type)
-        
-        if not task_func:
-            return {
-                "valid": False,
-                "message": f"Task type {config.task_type} is not implemented",
-                "config": None
-            }
-        
-        # Validate schedule config based on scheduler type
-        if config.scheduler_type == SchedulerType.INTERVAL:
-            required = ['hours', 'minutes', 'seconds']
-            if not any(config.schedule_config.get(k) for k in required):
-                return {
-                    "valid": False,
-                    "message": "Interval schedule requires at least one time unit",
-                    "config": None
-                }
-        
-        elif config.scheduler_type == SchedulerType.CRON:
-            # 支持两种cron格式
-            has_cron_expression = 'cron_expression' in config.schedule_config
-            has_cron_fields = all(field in config.schedule_config for field in ['minute', 'hour', 'day', 'month', 'day_of_week'])
-            
-            if not has_cron_expression and not has_cron_fields:
-                return {
-                    "valid": False,
-                    "message": "Cron schedule requires either 'cron_expression' or individual cron fields (minute, hour, day, month, day_of_week)",
-                    "config": None
-                }
-        
-        elif config.scheduler_type == SchedulerType.DATE:
-            if 'run_date' not in config.schedule_config:
-                return {
-                    "valid": False,
-                    "message": "Date schedule requires run_date",
-                    "config": None
-                }
-        
-        return {
-            "valid": True,
-            "message": "Configuration is valid",
-            "config": config.dict()
-        }
-        
-    except Exception as e:
-        return {
-            "valid": False,
-            "message": str(e),
-            "config": None
-        }
-
 
 # ---------------------------------------------------------------------------
 # Statistics and Reports Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/stats/executions")
-async def get_execution_statistics(
+@router.get("/stats")
+async def get_statistics(
+    type: str = Query(..., description="Stats type: executions or events"),
     config_id: Optional[int] = Query(None, description="Filter by configuration ID"),
     days: int = Query(7, ge=1, le=365, description="Number of days to include"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """
-    Get task execution statistics.
+    获取统计数据
     
     Parameters:
-        - config_id: Optional configuration ID to filter
-        - days: Number of days to include in statistics
+        - type: 统计类型（executions 或 events）
+        - config_id: 可选的配置ID过滤
+        - days: 统计天数
     """
     async with AsyncSessionLocal() as db:
-        if config_id:
-            stats = await crud_task_execution.get_stats_by_config(db, config_id, days)
+        if type == "executions":
+            if config_id:
+                stats = await crud_task_execution.get_stats_by_config(db, config_id, days)
+            else:
+                stats = await crud_task_execution.get_global_stats(db, days)
+        elif type == "events":
+            if config_id:
+                stats = await crud_schedule_event.get_stats_by_config(db, config_id, days)
+            else:
+                stats = await crud_schedule_event.get_global_stats(db, days)
         else:
-            stats = await crud_task_execution.get_global_stats(db, days)
-        
-        return stats
-
-
-@router.get("/stats/events")
-async def get_event_statistics(
-    config_id: Optional[int] = Query(None, description="Filter by configuration ID"),
-    days: int = Query(7, ge=1, le=365, description="Number of days to include"),
-    current_user: Annotated[User, Depends(get_current_superuser)] = None,
-) -> Dict[str, Any]:
-    """
-    Get schedule event statistics.
-    
-    Parameters:
-        - config_id: Optional configuration ID to filter
-        - days: Number of days to include in statistics
-    """
-    async with AsyncSessionLocal() as db:
-        if config_id:
-            stats = await crud_schedule_event.get_stats_by_config(db, config_id, days)
-        else:
-            stats = await crud_schedule_event.get_global_stats(db, days)
+            raise HTTPException(status_code=400, detail="Invalid stats type")
         
         return stats

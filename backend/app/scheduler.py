@@ -31,9 +31,6 @@ scheduler = TaskiqScheduler(
     ],
 )
 
-# 全局任务函数映射缓存
-_task_function_cache: Dict[TaskType, Callable] = {}
-
 
 async def initialize_scheduler():
     """初始化调度器"""
@@ -41,9 +38,6 @@ async def initialize_scheduler():
         # 启动Redis调度源
         await redis_schedule_source.startup()
         logger.info("Redis调度源初始化成功")
-        
-        # 加载所有任务函数到缓存
-        _load_task_functions()
         
         # 从数据库加载调度配置
         await load_schedules_from_db()
@@ -105,6 +99,7 @@ async def register_scheduled_task(config: TaskConfig) -> bool:
         是否注册成功
     """
     try:
+        from app.core.task_registry import get_task_function
         # 获取任务函数
         task_func = get_task_function(config.task_type)
         if not task_func:
@@ -306,45 +301,6 @@ def _get_next_run_time(scheduled_task) -> Optional[str]:
     except:
         pass
     return None
-
-
-def _load_task_functions():
-    """加载所有任务函数到缓存"""
-    global _task_function_cache
-    
-    # 动态导入避免循环导入
-    from app.tasks import cleanup_tasks, notification_tasks, data_tasks
-    
-    # 构建任务函数映射
-    _task_function_cache = {
-        TaskType.CLEANUP_TOKENS: cleanup_tasks.cleanup_expired_tokens,
-        TaskType.CLEANUP_CONTENT: cleanup_tasks.cleanup_old_content,
-        TaskType.CLEANUP_EVENTS: cleanup_tasks.cleanup_schedule_events,
-        TaskType.SEND_EMAIL: notification_tasks.send_email,
-        TaskType.DATA_EXPORT: data_tasks.export_data,
-        TaskType.DATA_BACKUP: data_tasks.backup_data,
-        # 为将来的任务类型预留
-        # TaskType.BOT_SCRAPING: scraping_tasks.bot_scraping,
-        # TaskType.MANUAL_SCRAPING: scraping_tasks.manual_scraping,
-    }
-    
-    logger.info(f"已加载 {len(_task_function_cache)} 个任务函数")
-
-
-def get_task_function(task_type: TaskType) -> Optional[Callable]:
-    """
-    根据任务类型获取任务函数
-    
-    Args:
-        task_type: 任务类型
-        
-    Returns:
-        对应的任务函数，如果不存在返回None
-    """
-    if not _task_function_cache:
-        _load_task_functions()
-    
-    return _task_function_cache.get(task_type)
 
 
 async def pause_scheduled_task(config_id: int) -> bool:

@@ -51,7 +51,7 @@ class SystemStatusResponse(BaseModel):
     total_active_tasks: int = Field(..., description="总活跃任务数")
     timestamp: str = Field(..., description="状态时间戳")
     scheduler: Dict[str, Any] = Field(..., description="调度器状态")
-    worker: Dict[str, Any] = Field(..., description="Celery状态")
+    worker: Dict[str, Any] = Field(..., description="worker状态")
     queues: Dict[str, Any] = Field(..., description="队列状态")
 
 
@@ -138,12 +138,17 @@ class TaskTypeSupportResponse(BaseModel):
     """任务类型支持检查响应"""
     task_type: str = Field(..., description="任务类型")
     supported: bool = Field(..., description="是否支持")
-    celery_task_name: Optional[str] = Field(None, description="对应的Celery任务名")
+    worker_task_name: Optional[str] = Field(None, description="对应的worker任务名")
 
+class TaskTypeDetail(BaseModel):
+    """任务类型的详细信息"""
+    name: str = Field(..., description="任务类型的名称 (e.g., 'cleanup_tokens')")
+    description: str = Field(..., description="任务类型的描述")
+    implemented: bool = Field(..., description="该任务类型是否已实现")
 
 class EnumValuesResponse(BaseModel):
     """枚举值响应"""
-    task_types: List[str] = Field(..., description="任务类型列表")
+    task_types: List[TaskTypeDetail] = Field(..., description="任务类型列表，包含详细信息")
     task_statuses: List[str] = Field(..., description="任务状态列表")
     scheduler_types: List[str] = Field(..., description="调度器类型列表")
 

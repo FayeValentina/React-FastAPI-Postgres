@@ -139,7 +139,7 @@ export interface ScheduleEvent {
   created_at: string;
 }
 
-// 活跃的Celery任务
+// 活跃的worker任务
 export interface ActiveTask {
   worker: string;
   task_id: string;

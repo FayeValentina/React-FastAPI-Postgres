@@ -1,7 +1,7 @@
 """
 清理任务定义
 """
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
     max_retries=3,
 )
 async def cleanup_expired_tokens(
-    config_id: int,
+    config_id: Optional[int] = None,
     days_old: int = 7
 ) -> Dict[str, Any]:
     """
@@ -69,7 +69,7 @@ async def cleanup_expired_tokens(
     max_retries=3,
 )
 async def cleanup_old_content(
-    config_id: int,
+    config_id: Optional[int] = None,
     days_old: int = 90
 ) -> Dict[str, Any]:
     """
@@ -115,7 +115,7 @@ async def cleanup_old_content(
     max_retries=3,
 )
 async def cleanup_schedule_events(
-    config_id: int,
+    config_id: Optional[int] = None,
     days_old: int = 30
 ) -> Dict[str, Any]:
     """
@@ -150,7 +150,7 @@ async def cleanup_schedule_events(
             raise
 
 
-async def record_task_execution(db, config_id: int, status: str, result: Dict = None, error: str = None):
+async def record_task_execution(db, config_id: Optional[int], status: str, result: Dict = None, error: str = None):
     """记录任务执行结果到数据库"""
     from app.models.task_execution import TaskExecution
     import uuid

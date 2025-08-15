@@ -1,4 +1,4 @@
-"""Migrate from Celery to TaskIQ - update task_executions table
+"""Migrate from worker to TaskIQ - update task_executions table
 
 Revision ID: 849acbac87da
 Revises: 8e09b05f22bc
@@ -19,13 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Remove old Celery-related tables if they exist
+    # Remove old worker-related tables if they exist
     op.drop_table('apscheduler_jobs', if_exists=True)
-    op.drop_table('celery_taskmeta', if_exists=True)
-    op.drop_table('celery_tasksetmeta', if_exists=True)
+    op.drop_table('worker_taskmeta', if_exists=True)
+    op.drop_table('worker_tasksetmeta', if_exists=True)
     
     # Update task_executions table for TaskIQ
-    # Remove old Celery columns
+    # Remove old worker columns
     op.drop_column('task_executions', 'job_name', if_exists=True)
     
     # Rename job_id to task_id if it exists, otherwise add task_id

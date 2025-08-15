@@ -189,7 +189,7 @@ class TaskManager:
                     "task_id": task_id,
                     "status": "completed" if result.is_err is False else "failed",
                     "result": result.return_value if result.is_err is False else None,
-                    "error": result.error if result.is_err else None,
+                    "error": str(result.error) if result.is_err and result.error else None,
                     "execution_time": result.execution_time if hasattr(result, 'execution_time') else None
                 }
                 
@@ -330,6 +330,8 @@ class TaskManager:
     
     async def list_active_tasks(self) -> List[Dict[str, Any]]:
         """列出活跃的任务执行记录"""
+        from app.core.task_registry import TaskRegistry
+        
         async with AsyncSessionLocal() as db:
             executions = await crud_task_execution.get_running_executions(db)
             
@@ -338,11 +340,23 @@ class TaskManager:
                 # 获取实时状态
                 status = await self.get_task_status(e.task_id)
                 
+                # 获取任务配置以获取队列信息
+                config = await crud_task_config.get(db, e.config_id)
+                queue_name = "default"  # 默认队列
+                
+                if config and config.task_type:
+                    try:
+                        queue_name = TaskRegistry.get_queue_name(config.task_type)
+                    except Exception:
+                        queue_name = "default"
+                
                 tasks.append({
                     "task_id": e.task_id,
                     "config_id": e.config_id,
                     "status": status.get("status", e.status.value if hasattr(e.status, 'value') else e.status),
                     "started_at": e.started_at.isoformat() if e.started_at else None,
+                    "queue": queue_name,
+                    "task_type": config.task_type.value if config and config.task_type else None,
                 })
             
             return tasks
@@ -417,7 +431,7 @@ class TaskManager:
     
     def _get_task_function(self, task_type: TaskType):
         """根据任务类型获取任务函数"""
-        from app.scheduler import get_task_function
+        from app.core.task_registry import get_task_function
         return get_task_function(task_type)
     
     async def get_task_config(self, config_id: int, verify_scheduler_status: bool = False) -> Optional[Dict[str, Any]]:
@@ -452,7 +466,7 @@ class TaskManager:
             
             return result
     
-    async def list_task_configs(self, task_type: str = None, status: str = None) -> List[Dict[str, Any]]:
+    async def list_task_configs(self, task_type: str = None, status: str = None, page_size: int = 100) -> List[Dict[str, Any]]:
         """列出任务配置"""
         async with AsyncSessionLocal() as db:
             if task_type or status:
@@ -461,11 +475,11 @@ class TaskManager:
                     task_type=TaskType(task_type) if task_type else None,
                     status=ConfigStatus(status) if status else None,
                     page=1,
-                    page_size=1000
+                    page_size=page_size
                 )
                 configs, _ = await crud_task_config.get_by_query(db, query)
             else:
-                configs = await crud_task_config.get_multi(db, skip=0, limit=1000)
+                configs = await crud_task_config.get_multi(db, skip=0, limit=page_size)
             
             return [
                 {

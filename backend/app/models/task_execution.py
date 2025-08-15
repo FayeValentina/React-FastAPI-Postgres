@@ -26,7 +26,7 @@ class TaskExecution(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     
     # 关联字段
-    config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
+    config_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=True, index=True)
     task_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # TaskIQ任务ID，通常是UUID格式
     
     # 执行信息
