@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
 
 
 class TaskConfigBase(BaseModel):
@@ -48,12 +48,7 @@ class TaskConfigCreate(TaskConfigBase):
         if not scheduler_type:
             return v
             
-        if scheduler_type == SchedulerType.INTERVAL:
-            required = ['hours', 'minutes', 'seconds']
-            if not any(k in v for k in required):
-                raise ValueError('间隔调度至少需要指定hours、minutes或seconds中的一个')
-                
-        elif scheduler_type == SchedulerType.CRON:
+        if scheduler_type == SchedulerType.CRON:
             # 支持两种cron格式
             has_cron_expression = 'cron_expression' in v
             required = ['minute', 'hour', 'day', 'month', 'day_of_week']
@@ -86,7 +81,8 @@ class TaskConfigResponse(TaskConfigBase):
     id: int = Field(..., description="配置ID")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")
-    
+    scheduler_status: Optional[str] = Field(None, description="调度器中的状态")
+    stats: Optional[Dict[str, Any]] = Field(None, description="统计信息")
     model_config = ConfigDict(from_attributes=True)
 
 

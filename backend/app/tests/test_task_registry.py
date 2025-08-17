@@ -1,15 +1,15 @@
 import pytest
-from app.core.task_registry import TaskRegistry, TaskType, SchedulerType
+from app.constant.task_registry import TaskRegistry, TaskType, SchedulerType
 
 
 def test_generate_job_id():
     """测试job_id生成"""
     job_id = TaskRegistry.generate_job_id(
         task_type=TaskType.CLEANUP_TOKENS,
-        scheduler_type=SchedulerType.INTERVAL,
+        scheduler_type=SchedulerType.CRON,
         config_id=1
     )
-    assert job_id == "cleanup_tok_int_1"
+    assert job_id == "cleanup_tok_cron_1"
 
 
 def test_generate_job_id_cron():
@@ -77,7 +77,7 @@ def test_job_id_length_validation():
     # 正常情况应该通过
     job_id = TaskRegistry.generate_job_id(
         task_type=TaskType.CLEANUP_TOKENS,
-        scheduler_type=SchedulerType.INTERVAL,
+        scheduler_type=SchedulerType.CRON,
         config_id=1
     )
     assert len(job_id) <= 50
@@ -97,7 +97,7 @@ def test_job_id_uniqueness():
     
     # 生成多个不同的job_id，确保它们是唯一的
     for task_type in [TaskType.CLEANUP_TOKENS, TaskType.BOT_SCRAPING, TaskType.SEND_EMAIL]:
-        for scheduler_type in [SchedulerType.INTERVAL, SchedulerType.CRON, SchedulerType.DATE]:
+        for scheduler_type in [SchedulerType.CRON, SchedulerType.DATE]:
             for config_id in range(1, 4):
                 job_id = TaskRegistry.generate_job_id(task_type, scheduler_type, config_id)
                 assert job_id not in job_ids, f"重复的job_id: {job_id}"
@@ -128,7 +128,7 @@ def test_job_id_format_consistency():
     """测试job_id格式的一致性"""
     job_id = TaskRegistry.generate_job_id(
         task_type=TaskType.CLEANUP_TOKENS,
-        scheduler_type=SchedulerType.INTERVAL,
+        scheduler_type=SchedulerType.CRON,
         config_id=123
     )
     

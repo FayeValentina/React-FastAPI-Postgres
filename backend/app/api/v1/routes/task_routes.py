@@ -10,31 +10,22 @@ from app.schemas.task_config_schemas import (
     TaskConfigCreate, 
     TaskConfigUpdate, 
     TaskConfigResponse,
-    TaskConfigQuery,
-    TaskConfigDeleteResponse
+    TaskConfigDeleteResponse,
+    TaskConfigQuery
 )
 from app.schemas.job_schemas import (
     SystemStatusResponse,
-    HealthCheckResponse,
-    OperationResponse,
     TaskExecutionResult,
-    BatchCreateResponse,
-    BatchDeleteResponse,
-    BatchExecutionResponse,
     TaskRevokeResponse,
-    BatchRevokeResponse,
     QueueStatsResponse,
-    QueueLengthResponse,
-    TaskTypeSupportResponse,
     EnumValuesResponse,
-    ValidationResponse,
     TaskStatusResponse,
     ActiveTaskInfo,
     ScheduledJobInfo,
     ScheduleActionResponse
 )
 from app.core.task_manager import task_manager
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, ScheduleAction, TaskRegistry
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, ScheduleAction, TaskRegistry
 from app.db.base import AsyncSessionLocal
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
@@ -61,33 +52,6 @@ async def get_system_status(
     return await task_manager.get_system_status()
 
 
-@router.get("/system/health", response_model=HealthCheckResponse)
-async def get_system_health(
-    current_user: Annotated[User, Depends(get_current_superuser)],
-) -> Dict[str, Any]:
-    """
-    Get system health check status.
-    
-    Returns:
-        Health status of all system components
-    """
-    status = await task_manager.get_system_status()
-    
-    is_healthy = (
-        status.get("scheduler_running", False) and 
-        status.get("broker_connected", False)
-    )
-    
-    return {
-        "status": "healthy" if is_healthy else "degraded",
-        "scheduler_running": status.get("scheduler_running", False),
-        "broker_connected": status.get("broker_connected", False),
-        "total_scheduled_jobs": status.get("total_scheduled_jobs", 0),
-        "total_active_tasks": status.get("total_active_tasks", 0),
-        "timestamp": status.get("timestamp")
-    }
-
-
 # ---------------------------------------------------------------------------
 # Task Configuration CRUD Endpoints
 # ---------------------------------------------------------------------------
@@ -99,6 +63,8 @@ async def list_task_configs(
     name_search: Optional[str] = Query(None, description="Search by name"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    order_by: str = Query("created_at", description="Sort field"),
+    order_desc: bool = Query(True, description="Sort descending"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -110,22 +76,20 @@ async def list_task_configs(
         - name_search: Search configurations by name
         - page: Page number for pagination
         - page_size: Number of items per page
+        - order_by: Sort field (created_at, name, updated_at)
+        - order_desc: Sort descending
     """
-    configs = await task_manager.list_task_configs(
-        task_type=task_type,
-        status=status
+    query = TaskConfigQuery(
+        task_type=TaskType(task_type) if task_type else None,
+        status=ConfigStatus(status) if status else None,
+        name_search=name_search,
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+        order_desc=order_desc
     )
     
-    # Apply name search if provided
-    if name_search:
-        configs = [c for c in configs if name_search.lower() in c.get("name", "").lower()]
-    
-    # Apply pagination
-    start_idx = (page - 1) * page_size
-    end_idx = start_idx + page_size
-    paginated_configs = configs[start_idx:end_idx]
-    
-    return paginated_configs
+    return await task_manager.list_task_configs(query)
 
 
 @router.get("/configs/{config_id}", response_model=TaskConfigResponse)
@@ -143,15 +107,9 @@ async def get_task_config(
         - include_stats: Whether to include execution statistics
         - verify_scheduler_status: Whether to verify status against scheduler
     """
-    config = await task_manager.get_task_config(config_id, verify_scheduler_status)
+    config = await task_manager.get_task_config(config_id, verify_scheduler_status, include_stats)
     if not config:
         raise HTTPException(status_code=404, detail="Task configuration not found")
-    
-    # Optionally add execution statistics
-    if include_stats:
-        async with AsyncSessionLocal() as db:
-            stats = await crud_task_config.get_execution_stats(db, config_id)
-            config["stats"] = stats
     
     return config
 
@@ -171,7 +129,7 @@ async def create_task_config(
     """
     try:
         # Set status based on auto_start
-        config_dict = config.dict()
+        config_dict = config.model_dump()
         if auto_start and config.scheduler_type != SchedulerType.MANUAL:
             config_dict["status"] = ConfigStatus.ACTIVE
         
@@ -205,7 +163,7 @@ async def update_task_config(
         - reload_schedule: Whether to reload the schedule if the task is scheduled
     """
     success = await task_manager.update_task_config(
-        config_id, updates.dict(exclude_unset=True)  # exclude_unset支持部分更新
+        config_id, updates.model_dump(exclude_unset=True)  # exclude_unset支持部分更新
     )
     if not success:
         raise HTTPException(status_code=404, detail="Task configuration not found")
@@ -273,6 +231,8 @@ async def batch_operations(
         - task_ids: Task IDs for revoke operation
         - task_type: Task type for execute-by-type operation
         - options: Additional options specific to each operation
+          - For delete: {"force": true/false} - Force delete even if task is running
+          - For revoke: {"terminate": true/false} - Terminate running tasks
     """
     operation = operation.lower()
     
@@ -282,6 +242,21 @@ async def batch_operations(
         
         deleted = []
         failed = []
+        force = options.get("force", False)
+        
+        # Check for running tasks if not forcing
+        if not force:
+            active_tasks = await task_manager.list_active_tasks()
+            running_config_ids = [t["config_id"] for t in active_tasks if t["config_id"] in config_ids]
+            
+            if running_config_ids:
+                for config_id in running_config_ids:
+                    failed.append({
+                        "id": config_id, 
+                        "error": "Task is currently running. Use force=true to delete anyway."
+                    })
+                # Remove running configs from deletion list
+                config_ids = [cid for cid in config_ids if cid not in running_config_ids]
         
         for config_id in config_ids:
             try:
@@ -382,11 +357,12 @@ async def batch_operations(
             raise HTTPException(status_code=400, detail="task_type required for execute-by-type operation")
         
         # Get all active configs of this type
-        configs = await task_manager.list_task_configs(
-            task_type=task_type,
-            status=ConfigStatus.ACTIVE.value,
+        query = TaskConfigQuery(
+            task_type=TaskType(task_type),
+            status=ConfigStatus.ACTIVE,
             page_size=page_size
         )
+        configs = await task_manager.list_task_configs(query)
         
         task_ids_result = []
         failed = []
@@ -546,7 +522,7 @@ async def execute_task_immediately(
 async def execute_task_by_type(
     task_type: str = Body(..., description="Task type"),
     task_params: Dict[str, Any] = Body(default={}, description="Task parameters"),
-    queue: str = Body(default="default", description="Queue name"),
+    queue: str = Body(default=TaskRegistry.DEFAULT_QUEUE, description="Queue name"),
     options: Dict[str, Any] = Body(default={}, description="Execution options"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -566,7 +542,7 @@ async def execute_task_by_type(
         raise HTTPException(status_code=400, detail=f"Unsupported task type: {task_type}")
     
     # Get task function
-    from app.core.task_registry import get_task_function
+    from backend.app.constant.task_registry import get_task_function
     task_func = get_task_function(task_type_enum)
     
     if not task_func:
@@ -651,7 +627,7 @@ async def get_active_tasks(
     # Convert to response format and apply filters
     active_tasks = []
     for t in tasks:
-        task_queue = t.get("queue", "default")
+        task_queue = t.get("queue", TaskRegistry.DEFAULT_QUEUE)
         
         # Apply queue filter if specified
         if queue and task_queue != queue:
@@ -675,7 +651,7 @@ async def get_queue_stats(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """Get statistics for all queues with actual task distribution."""
-    queues = ["default", "cleanup", "scraping", "high_priority", "low_priority"]
+    queues = TaskRegistry.get_all_queue_names()
     stats = {}
     
     # Initialize all queues with 0 count
@@ -690,7 +666,7 @@ async def get_queue_stats(
     
     # Count tasks by queue
     for task in active_tasks:
-        queue_name = task.get("queue", "default")
+        queue_name = task.get("queue", TaskRegistry.DEFAULT_QUEUE)
         
         # Ensure the queue exists in our stats
         if queue_name not in stats:
@@ -762,7 +738,7 @@ async def get_enum_values(
     
     Useful for frontend dropdowns and validation.
     """
-    from app.core.task_registry import get_task_function
+    from backend.app.constant.task_registry import get_task_function
     
     # 获取支持的任务类型及其实现状态
     task_types_list: List[Dict[str, Any]] = []

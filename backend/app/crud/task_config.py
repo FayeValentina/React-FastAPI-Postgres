@@ -9,7 +9,7 @@ from app.models.schedule_event import ScheduleEvent
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
 from app.core.exceptions import (
     DatabaseError,
     ResourceNotFoundError,
@@ -53,20 +53,6 @@ class CRUDTaskConfig:
         )
         return result.scalar_one_or_none()
     
-    async def get_multi(
-        self,
-        db: AsyncSession,
-        skip: int = 0,
-        limit: int = 100
-    ) -> List[TaskConfig]:
-        """获取多个任务配置"""
-        result = await db.execute(
-            select(TaskConfig)
-            .offset(skip)
-            .limit(limit)
-            .order_by(TaskConfig.created_at.desc())
-        )
-        return result.scalars().all()
     
     async def get_by_query(
         self,

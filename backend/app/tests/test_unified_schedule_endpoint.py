@@ -4,7 +4,7 @@
 import sys
 sys.path.append('.')
 
-from app.core.task_registry import ScheduleAction, ConfigStatus, TaskType, SchedulerType, TaskRegistry
+from app.constant.task_registry import ScheduleAction, ConfigStatus, TaskType, SchedulerType, TaskRegistry
 from unittest.mock import AsyncMock, MagicMock
 
 def test_schedule_action_enum():

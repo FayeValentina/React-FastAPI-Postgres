@@ -80,11 +80,8 @@ async def test_task_manager_basic_functions():
     logger.info("=" * 50)
     
     # 由于TaskManager依赖数据库，我们需要先模拟其核心组件
-    from app.core.scheduler import Scheduler
-    from app.core.task_registry import TaskType
-    
-    # 创建调度器
-    scheduler = Scheduler()
+    from scheduler import scheduler
+    from app.constant.task_registry import TaskType
     
     # 测试1: 启动调度器
     try:
@@ -209,40 +206,6 @@ async def test_task_manager_basic_functions():
     logger.info("=" * 50)
 
 
-async def test_task_dispatcher():
-    """测试TaskDispatcher功能"""
-    logger.info("=" * 50)
-    logger.info("开始测试 TaskDispatcher 功能")
-    logger.info("=" * 50)
-    
-    try:
-        from app.core.task_dispatcher import TaskDispatcher
-        from app.core.task_registry import TaskRegistry
-        
-        dispatcher = TaskDispatcher()
-        
-        # 测试1: 检查支持的任务类型
-        logger.info("测试1: 检查支持的任务类型")
-        task_types = dispatcher.get_supported_task_types()
-        logger.info(f"✓ 支持的任务类型: {task_types}")
-        
-        # 测试2: 检查特定任务类型支持
-        logger.info("测试2: 检查特定任务类型支持")
-        for task_type in ['unknown_task']:
-            supported = dispatcher.is_task_type_supported(task_type)
-            status = "✓" if supported else "○"
-            logger.info(f"{status} 任务类型 '{task_type}' 支持状态: {supported}")
-        
-        logger.info("✓ TaskDispatcher 功能测试完成")
-        
-    except Exception as e:
-        logger.error(f"✗ TaskDispatcher 测试失败: {e}")
-    
-    logger.info("=" * 50)
-    logger.info("TaskDispatcher 功能测试完成")
-    logger.info("=" * 50)
-
-
 async def main():
     """主测试函数"""
     logger.info("开始测试 tasks_manager 框架功能")
@@ -252,9 +215,6 @@ async def main():
     
     # 等待一段时间
     await asyncio.sleep(2)
-    
-    # 测试任务分发器功能
-    await test_task_dispatcher()
     
     logger.info("所有测试完成!")
 

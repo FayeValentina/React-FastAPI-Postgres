@@ -16,7 +16,7 @@ from app.core.config import settings
 from app.db.base import AsyncSessionLocal
 from app.models.task_config import TaskConfig
 from app.crud.task_config import crud_task_config
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ async def register_scheduled_task(config: TaskConfig) -> bool:
         是否注册成功
     """
     try:
-        from app.core.task_registry import get_task_function
+        from app.constant.task_registry import get_task_function
         # 获取任务函数
         task_func = get_task_function(config.task_type)
         if not task_func:
@@ -111,7 +111,7 @@ async def register_scheduled_task(config: TaskConfig) -> bool:
         kwargs = config.parameters or {}
         
         # 生成唯一的任务ID
-        task_id = f"scheduled_task_{config.id}"
+        task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}"
         
         # 创建调度任务参数
         task_params = {
@@ -159,7 +159,7 @@ async def unregister_scheduled_task(config_id: int) -> bool:
         是否取消成功
     """
     try:
-        task_id = f"scheduled_task_{config_id}"
+        task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}"
         await redis_schedule_source.delete_schedule(task_id)
         logger.info(f"成功取消调度任务: config_id={config_id}")
         return True
@@ -201,9 +201,9 @@ async def get_scheduled_tasks() -> list:
         
         for schedule in all_schedules:
             task_info = {
-                "task_id": getattr(schedule, 'schedule_id', 'unknown'),
+                "task_id": getattr(schedule, 'schedule_id', TaskRegistry.UNKNOWN_VALUE),
                 "task_name": schedule.task_name,
-                "schedule": getattr(schedule, 'cron', getattr(schedule, 'time', 'unknown')),
+                "schedule": getattr(schedule, 'cron', getattr(schedule, 'time', TaskRegistry.UNKNOWN_VALUE)),
                 "labels": schedule.labels,
                 "next_run": _get_next_run_time(schedule)
             }
@@ -234,11 +234,11 @@ def _get_schedule_params(scheduler_type: SchedulerType, schedule_config: Dict[st
                 cron_expression = schedule_config["cron_expression"]
             else:
                 # 格式2: 分离的cron字段
-                minute = schedule_config.get("minute", "*")
-                hour = schedule_config.get("hour", "*")
-                day = schedule_config.get("day", "*")
-                month = schedule_config.get("month", "*")
-                day_of_week = schedule_config.get("day_of_week", "*")
+                minute = schedule_config.get("minute", TaskRegistry.CRON_WILDCARD)
+                hour = schedule_config.get("hour", TaskRegistry.CRON_WILDCARD)
+                day = schedule_config.get("day", TaskRegistry.CRON_WILDCARD)
+                month = schedule_config.get("month", TaskRegistry.CRON_WILDCARD)
+                day_of_week = schedule_config.get("day_of_week", TaskRegistry.CRON_WILDCARD)
                 cron_expression = f"{minute} {hour} {day} {month} {day_of_week}"
             
             return {"cron": cron_expression}
@@ -249,34 +249,6 @@ def _get_schedule_params(scheduler_type: SchedulerType, schedule_config: Dict[st
             if isinstance(run_date, str):
                 run_date = datetime.fromisoformat(run_date)
             return {"time": run_date}
-            
-        elif scheduler_type == SchedulerType.INTERVAL:
-            # 间隔调度 - 转换为cron表达式
-            # TaskIQ 0.11.x 不直接支持间隔调度，需要转换为cron
-            interval_seconds = (
-                schedule_config.get("days", 0) * 86400 +
-                schedule_config.get("hours", 0) * 3600 +
-                schedule_config.get("minutes", 0) * 60 +
-                schedule_config.get("seconds", 0)
-            )
-            
-            if interval_seconds <= 0:
-                logger.warning("间隔调度时间必须大于0")
-                return None
-                
-            # 简单转换：如果是分钟间隔，转换为cron
-            if interval_seconds % 60 == 0:
-                minutes = interval_seconds // 60
-                if minutes < 60:
-                    return {"cron": f"*/{minutes} * * * *"}
-                else:
-                    hours = minutes // 60
-                    if hours < 24:
-                        return {"cron": f"0 */{hours} * * *"}
-            
-            # 对于其他间隔，使用每分钟检查的cron
-            logger.warning(f"间隔调度 {interval_seconds}秒 转换为每分钟检查")
-            return {"cron": "* * * * *"}
             
         else:
             logger.warning(f"不支持的调度类型: {scheduler_type}")

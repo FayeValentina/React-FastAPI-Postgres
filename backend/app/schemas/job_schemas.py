@@ -18,11 +18,6 @@ class TaskExecutionCreate(BaseModel):
     error_message: Optional[str] = Field(None, description="错误消息")
     error_traceback: Optional[str] = Field(None, description="错误堆栈")
 
-
-# 删除重复的 TaskStatus 定义，改为从 task_registry 导入 RuntimeStatus
-from app.core.task_registry import RuntimeStatus
-
-
 class JobExecutionSummary(BaseModel):
     """任务执行摘要"""
     total_runs: int = Field(..., description="总执行次数")
@@ -46,23 +41,16 @@ class ScheduleEventInfo(BaseModel):
 
 class SystemStatusResponse(BaseModel):
     """系统状态响应"""
+    broker_connected: bool = Field(..., description="broker运行状态")
     scheduler_running: bool = Field(..., description="调度器运行状态")
+    total_configs: int = Field(..., description="总配置数")
+    active_configs: int = Field(..., description="总活跃配置数")
     total_scheduled_jobs: int = Field(..., description="总调度任务数")
     total_active_tasks: int = Field(..., description="总活跃任务数")
     timestamp: str = Field(..., description="状态时间戳")
     scheduler: Dict[str, Any] = Field(..., description="调度器状态")
     worker: Dict[str, Any] = Field(..., description="worker状态")
     queues: Dict[str, Any] = Field(..., description="队列状态")
-
-
-class HealthCheckResponse(BaseModel):
-    """健康检查响应"""
-    status: str = Field(..., description="健康状态: healthy/degraded")
-    scheduler_running: bool = Field(..., description="调度器运行状态")
-    broker_connected: bool = Field(..., description="Broker连接状态")
-    total_scheduled_jobs: int = Field(..., description="总调度任务数")
-    total_active_tasks: int = Field(..., description="总活跃任务数")
-    timestamp: Optional[str] = Field(None, description="状态时间戳")
 
 
 class OperationResponse(BaseModel):

@@ -21,12 +21,14 @@ from app.scheduler import (
 )
 from app.db.base import AsyncSessionLocal
 from app.models.task_config import TaskConfig
-from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate
+from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
 from app.crud.schedule_event import crud_schedule_event
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
 from app.models.schedule_event import ScheduleEventType
+from app.models.task_execution import TaskExecution, ExecutionStatus
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ class TaskManager:
                     await crud_schedule_event.create(
                         db=db,
                         config_id=config.id,
-                        job_id=f"scheduled_task_{config.id}",
+                        job_id=f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}",
                         job_name=config.name,
                         event_type=ScheduleEventType.SCHEDULED
                     )
@@ -161,7 +163,7 @@ class TaskManager:
                     db=db,
                     config_id=config_id,
                     task_id=task.task_id,
-                    status="running",
+                    status=ExecutionStatus.RUNNING,
                     started_at=datetime.utcnow()
                 )
                 
@@ -187,7 +189,7 @@ class TaskManager:
                 
                 status_info = {
                     "task_id": task_id,
-                    "status": "completed" if result.is_err is False else "failed",
+                    "status": ExecutionStatus.SUCCESS.value if result.is_err is False else ExecutionStatus.FAILED.value,
                     "result": result.return_value if result.is_err is False else None,
                     "error": str(result.error) if result.is_err and result.error else None,
                     "execution_time": result.execution_time if hasattr(result, 'execution_time') else None
@@ -200,7 +202,7 @@ class TaskManager:
                         await crud_task_execution.update_status(
                             db=db,
                             execution_id=execution.id,
-                            status="success" if result.is_err is False else "failed",
+                            status=ExecutionStatus.SUCCESS if result.is_err is False else ExecutionStatus.FAILED,
                             completed_at=datetime.utcnow(),
                             result={"return_value": result.return_value} if result.is_err is False else None,
                             error_message=str(result.error) if result.is_err else None
@@ -224,7 +226,7 @@ class TaskManager:
                     else:
                         return {
                             "task_id": task_id,
-                            "status": "pending",
+                            "status": TaskRegistry.TASK_STATUS_PENDING,
                             "result": None,
                             "error": None,
                         }
@@ -233,7 +235,7 @@ class TaskManager:
             logger.error(f"获取任务状态失败 {task_id}: {e}")
             return {
                 "task_id": task_id,
-                "status": "error",
+                "status": TaskRegistry.TASK_STATUS_ERROR,
                 "result": None,
                 "error": str(e),
             }
@@ -304,7 +306,7 @@ class TaskManager:
                 await crud_schedule_event.create(
                     db=db,
                     config_id=config_id,
-                    job_id=f"scheduled_task_{config_id}",
+                    job_id=f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}",
                     job_name=config.name,
                     event_type=event_type_map.get(action, ScheduleEventType.EXECUTED),
                     result={"action": action, "success": success}
@@ -330,7 +332,7 @@ class TaskManager:
     
     async def list_active_tasks(self) -> List[Dict[str, Any]]:
         """列出活跃的任务执行记录"""
-        from app.core.task_registry import TaskRegistry
+        from app.constant.task_registry import TaskRegistry
         
         async with AsyncSessionLocal() as db:
             executions = await crud_task_execution.get_running_executions(db)
@@ -342,13 +344,13 @@ class TaskManager:
                 
                 # 获取任务配置以获取队列信息
                 config = await crud_task_config.get(db, e.config_id)
-                queue_name = "default"  # 默认队列
+                queue_name = TaskRegistry.DEFAULT_QUEUE  # 默认队列
                 
                 if config and config.task_type:
                     try:
                         queue_name = TaskRegistry.get_queue_name(config.task_type)
                     except Exception:
-                        queue_name = "default"
+                        queue_name = TaskRegistry.DEFAULT_QUEUE
                 
                 tasks.append({
                     "task_id": e.task_id,
@@ -416,7 +418,7 @@ class TaskManager:
                     "active_tasks": len(active_tasks)
                 },
                 "queues": {
-                    "default": {"status": "active" if broker_connected else "disconnected"}
+                    TaskRegistry.DEFAULT_QUEUE: {"status": TaskRegistry.QUEUE_STATUS_ACTIVE if broker_connected else TaskRegistry.QUEUE_STATUS_DISCONNECTED}
                 }
             }
             
@@ -431,10 +433,10 @@ class TaskManager:
     
     def _get_task_function(self, task_type: TaskType):
         """根据任务类型获取任务函数"""
-        from app.core.task_registry import get_task_function
+        from app.constant.task_registry import get_task_function
         return get_task_function(task_type)
     
-    async def get_task_config(self, config_id: int, verify_scheduler_status: bool = False) -> Optional[Dict[str, Any]]:
+    async def get_task_config(self, config_id: int, verify_scheduler_status: Optional[bool] = False, include_stats: Optional[bool] = False) -> Optional[Dict[str, Any]]:
         """获取任务配置详情"""
         async with AsyncSessionLocal() as db:
             config = await crud_task_config.get_with_relations(db, config_id)
@@ -460,29 +462,26 @@ class TaskManager:
             # 验证调度器中的状态
             if verify_scheduler_status:
                 scheduled_tasks = await get_scheduled_tasks()
-                task_id = f"scheduled_task_{config_id}"
+                task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}"
                 is_scheduled = any(t.get("task_id") == task_id for t in scheduled_tasks)
                 result['scheduler_status'] = "scheduled" if is_scheduled else "not_scheduled"
             
+            # 包含执行统计数据
+            if include_stats:
+                stats = await crud_task_config.get_execution_stats(db, config_id)
+                result["stats"] = stats
+            
             return result
     
-    async def list_task_configs(self, task_type: str = None, status: str = None, page_size: int = 100) -> List[Dict[str, Any]]:
+    async def list_task_configs(self, query: TaskConfigQuery) -> List[Dict[str, Any]]:
         """列出任务配置"""
         async with AsyncSessionLocal() as db:
-            if task_type or status:
-                from app.schemas.task_config_schemas import TaskConfigQuery
-                query = TaskConfigQuery(
-                    task_type=TaskType(task_type) if task_type else None,
-                    status=ConfigStatus(status) if status else None,
-                    page=1,
-                    page_size=page_size
-                )
-                configs, _ = await crud_task_config.get_by_query(db, query)
-            else:
-                configs = await crud_task_config.get_multi(db, skip=0, limit=page_size)
+            configs, _ = await crud_task_config.get_by_query(db, query)
             
-            return [
-                {
+            results = []
+            
+            for c in configs:
+                config_dict = {
                     'id': c.id,
                     'name': c.name,
                     'description': c.description,
@@ -494,8 +493,23 @@ class TaskManager:
                     'priority': c.priority,
                     'created_at': c.created_at.isoformat() if c.created_at else None
                 }
-                for c in configs
-            ]
+                results.append(config_dict)
+            return results
+
+    @staticmethod
+    async def record_task_execution(db, config_id: Optional[int], status: str, result: Dict = None, error: str = None):
+        """记录任务执行结果到数据库"""
+        execution = TaskExecution(
+            config_id=config_id,
+            task_id=str(uuid.uuid4()),  # 生成唯一的task_id
+            status=status,
+            started_at=datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+            result=result,
+            error_message=error
+        )
+        db.add(execution)
+        await db.commit()
 
 
 # 全局任务管理器实例

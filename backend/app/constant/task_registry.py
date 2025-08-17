@@ -57,7 +57,6 @@ class RuntimeStatus(str, PyEnum):
 
 class SchedulerType(str, PyEnum):
     """调度器类型枚举"""
-    INTERVAL = "interval"
     CRON = "cron"
     DATE = "date"
     MANUAL = "manual"
@@ -74,6 +73,27 @@ class ScheduleAction(str, PyEnum):
 
 class TaskRegistry:
     """任务注册中心"""
+    
+    # 默认队列名称
+    DEFAULT_QUEUE = "default"
+    
+    # 任务ID前缀常量
+    SCHEDULED_TASK_PREFIX = "scheduled_task_"
+    
+    # 任务状态常量
+    TASK_STATUS_PENDING = "pending"
+    TASK_STATUS_COMPLETED = "completed"
+    TASK_STATUS_ERROR = "error"
+    
+    # 队列状态常量
+    QUEUE_STATUS_ACTIVE = "active"
+    QUEUE_STATUS_DISCONNECTED = "disconnected"
+    
+    # 调度相关常量
+    UNKNOWN_VALUE = "unknown"
+    CRON_WILDCARD = "*"
+    CRON_EVERY_MINUTE = "* * * * *"
+    
     
     # worker任务名称映射
     _worker_TASK_MAPPING: Dict[TaskType, str] = {
@@ -149,7 +169,6 @@ class TaskRegistry:
     
     # 调度类型缩写映射
     _SCHEDULER_TYPE_SHORTCUTS: Dict[SchedulerType, str] = {
-        SchedulerType.INTERVAL: 'int',
         SchedulerType.CRON: 'cron',
         SchedulerType.DATE: 'once',
         SchedulerType.MANUAL: 'man',
@@ -166,7 +185,7 @@ class TaskRegistry:
     @classmethod
     def get_queue_name(cls, task_type: TaskType) -> str:
         """获取任务队列名称"""
-        return cls._QUEUE_MAPPING.get(task_type, 'default')
+        return cls._QUEUE_MAPPING.get(task_type, cls.DEFAULT_QUEUE)
     
     @classmethod
     def register_task(cls, task_type: TaskType, worker_task_name: str, queue: str = 'default'):
@@ -191,6 +210,13 @@ class TaskRegistry:
     def get_supported_task_types(cls) -> Set[TaskType]:
         """获取所有支持的任务类型"""
         return set(cls._worker_TASK_MAPPING.keys())
+    
+    @classmethod
+    def get_all_queue_names(cls) -> Set[str]:
+        """获取所有队列名称"""
+        all_queues = set(cls._QUEUE_MAPPING.values())
+        all_queues.add(cls.DEFAULT_QUEUE)  # 确保包含默认队列
+        return all_queues
     
     @classmethod
     def get_task_type_shortcut(cls, task_type: TaskType) -> str:
