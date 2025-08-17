@@ -18,11 +18,6 @@ class TaskExecutionCreate(BaseModel):
     error_message: Optional[str] = Field(None, description="错误消息")
     error_traceback: Optional[str] = Field(None, description="错误堆栈")
 
-
-# 删除重复的 TaskStatus 定义，改为从 task_registry 导入 RuntimeStatus
-from app.core.task_registry import RuntimeStatus
-
-
 class JobExecutionSummary(BaseModel):
     """任务执行摘要"""
     total_runs: int = Field(..., description="总执行次数")
@@ -46,22 +41,16 @@ class ScheduleEventInfo(BaseModel):
 
 class SystemStatusResponse(BaseModel):
     """系统状态响应"""
+    broker_connected: bool = Field(..., description="broker运行状态")
     scheduler_running: bool = Field(..., description="调度器运行状态")
+    total_configs: int = Field(..., description="总配置数")
+    active_configs: int = Field(..., description="总活跃配置数")
     total_scheduled_jobs: int = Field(..., description="总调度任务数")
     total_active_tasks: int = Field(..., description="总活跃任务数")
     timestamp: str = Field(..., description="状态时间戳")
     scheduler: Dict[str, Any] = Field(..., description="调度器状态")
-    celery: Dict[str, Any] = Field(..., description="Celery状态")
+    worker: Dict[str, Any] = Field(..., description="worker状态")
     queues: Dict[str, Any] = Field(..., description="队列状态")
-
-
-class HealthCheckResponse(BaseModel):
-    """健康检查响应"""
-    status: str = Field(..., description="健康状态: healthy/degraded")
-    scheduler_running: bool = Field(..., description="调度器运行状态")
-    total_scheduled_jobs: int = Field(..., description="总调度任务数")
-    total_active_tasks: int = Field(..., description="总活跃任务数")
-    timestamp: Optional[str] = Field(None, description="状态时间戳")
 
 
 class OperationResponse(BaseModel):
@@ -137,12 +126,17 @@ class TaskTypeSupportResponse(BaseModel):
     """任务类型支持检查响应"""
     task_type: str = Field(..., description="任务类型")
     supported: bool = Field(..., description="是否支持")
-    celery_task_name: Optional[str] = Field(None, description="对应的Celery任务名")
+    worker_task_name: Optional[str] = Field(None, description="对应的worker任务名")
 
+class TaskTypeDetail(BaseModel):
+    """任务类型的详细信息"""
+    name: str = Field(..., description="任务类型的名称 (e.g., 'cleanup_tokens')")
+    description: str = Field(..., description="任务类型的描述")
+    implemented: bool = Field(..., description="该任务类型是否已实现")
 
 class EnumValuesResponse(BaseModel):
     """枚举值响应"""
-    task_types: List[str] = Field(..., description="任务类型列表")
+    task_types: List[TaskTypeDetail] = Field(..., description="任务类型列表，包含详细信息")
     task_statuses: List[str] = Field(..., description="任务状态列表")
     scheduler_types: List[str] = Field(..., description="调度器类型列表")
 
@@ -160,18 +154,20 @@ class TaskStatusResponse(BaseModel):
     status: str = Field(..., description="任务状态")
     result: Optional[Dict[str, Any]] = Field(None, description="任务结果")
     traceback: Optional[str] = Field(None, description="错误追踪")
-    name: Optional[str] = Field(None, description="任务名称")
-    args: Optional[List[Any]] = Field(None, description="任务参数")
-    kwargs: Optional[Dict[str, Any]] = Field(None, description="任务关键字参数")
+    execution_time: Optional[datetime] = Field(None, description = "执行时间")
+    started_at: Optional[datetime] = Field(None, description = "开始时间")
+    completed_at: Optional[datetime] =Field(None, description = "完成时间")
 
 
 class ActiveTaskInfo(BaseModel):
     """活跃任务信息"""
     task_id: str = Field(..., description="任务ID")
+    config_id: int = Field(..., description="配置ID")
     name: str = Field(..., description="任务名称")
-    args: List[Any] = Field(..., description="任务参数")
-    kwargs: Dict[str, Any] = Field(..., description="任务关键字参数")
-    worker: Optional[str] = Field(None, description="执行工作者")
+    parameters: Dict[str, Any] = Field(..., description="任务关键字参数")
+    status: str = Field(..., description="任务状态")
+    started_at: datetime = Field(..., description = "启动时间")
+    task_type: str = Field(..., description = "任务类型")
     queue: Optional[str] = Field(None, description="队列名称")
 
 

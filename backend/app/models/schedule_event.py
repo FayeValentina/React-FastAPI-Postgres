@@ -26,7 +26,7 @@ class ScheduleEvent(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     
     # 关联字段
-    config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id"), nullable=False, index=True)
+    config_id: Mapped[int] = mapped_column(Integer, ForeignKey("task_configs.id", ondelete="CASCADE"), nullable=False, index=True)
     job_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # APScheduler的job_id，通常是str(config_id)
     job_name: Mapped[str] = mapped_column(String, nullable=False)
     event_type: Mapped[ScheduleEventType] = mapped_column(Enum(ScheduleEventType))

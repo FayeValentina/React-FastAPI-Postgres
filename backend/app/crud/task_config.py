@@ -9,7 +9,7 @@ from app.models.schedule_event import ScheduleEvent
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
 from app.core.exceptions import (
     DatabaseError,
     ResourceNotFoundError,
@@ -53,20 +53,6 @@ class CRUDTaskConfig:
         )
         return result.scalar_one_or_none()
     
-    async def get_multi(
-        self,
-        db: AsyncSession,
-        skip: int = 0,
-        limit: int = 100
-    ) -> List[TaskConfig]:
-        """获取多个任务配置"""
-        result = await db.execute(
-            select(TaskConfig)
-            .offset(skip)
-            .limit(limit)
-            .order_by(TaskConfig.created_at.desc())
-        )
-        return result.scalars().all()
     
     async def get_by_query(
         self,
@@ -407,21 +393,29 @@ class CRUDTaskConfig:
         
         return {status: count for status, count in result.all()}
     
+    async def get_total_count(self, db: AsyncSession) -> int:
+        """获取任务配置总数"""
+        result = await db.execute(
+            select(func.count(TaskConfig.id))
+        )
+        return result.scalar() or 0
+    
+    async def get_active_count(self, db: AsyncSession) -> int:
+        """获取活跃任务配置数"""
+        result = await db.execute(
+            select(func.count(TaskConfig.id))
+            .filter(TaskConfig.status == ConfigStatus.ACTIVE)
+        )
+        return result.scalar() or 0
+
     async def get_stats(self, db: AsyncSession) -> Dict[str, Any]:
         """获取任务配置统计信息"""
         try:
             # 总配置数
-            total_result = await db.execute(
-                select(func.count(TaskConfig.id))
-            )
-            total_configs = total_result.scalar() or 0
+            total_configs = await self.get_total_count(db)
             
             # 活跃配置数
-            active_result = await db.execute(
-                select(func.count(TaskConfig.id))
-                .filter(TaskConfig.status == ConfigStatus.ACTIVE)
-            )
-            active_configs = active_result.scalar() or 0
+            active_configs = await self.get_active_count(db)
             
             # 按类型统计
             type_stats = await self.count_by_type(db)

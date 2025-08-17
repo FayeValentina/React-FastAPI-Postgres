@@ -65,9 +65,9 @@
 #         logger.info("4️⃣ 测试TaskRegistry功能...")
         
 #         # 测试任务类型映射
-#         celery_task = TaskRegistry.get_celery_task_name(TaskType.CLEANUP_TOKENS)
+#         worker_task = TaskRegistry.get_worker_task_name(TaskType.CLEANUP_TOKENS)
 #         queue_name = TaskRegistry.get_queue_name(TaskType.CLEANUP_TOKENS)
-#         logger.info(f"✅ CLEANUP_TOKENS -> {celery_task} (队列: {queue_name})")
+#         logger.info(f"✅ CLEANUP_TOKENS -> {worker_task} (队列: {queue_name})")
         
 #         # 测试支持的任务类型
 #         all_types = TaskRegistry.get_all_task_types()

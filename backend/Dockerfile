@@ -25,7 +25,7 @@ RUN if [ ! -f poetry.lock ] || ! poetry check; then \
     poetry install --no-interaction --no-ansi --only=main
 
 # Verify installation by attempting to import key modules
-RUN python -c "import celery; import fastapi; import sqlalchemy; print('Dependencies installed successfully')"
+RUN python -c "import taskiq; import fastapi; import sqlalchemy; print('Dependencies installed successfully')"
 
 # Copy application code
 COPY . .

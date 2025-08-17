@@ -50,3 +50,8 @@ class ErrorMessages:
     # 系统相关
     DATABASE_ERROR = "数据库操作失败"
     INTERNAL_ERROR = "服务器内部错误"
+
+__all__ = [
+    "ErrorMessages",
+    "StatusCode",
+]

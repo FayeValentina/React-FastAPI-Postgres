@@ -7,7 +7,7 @@ import os
 # 添加项目根目录到路径
 sys.path.append('.')
 
-from app.core.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
+from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
 
 def test_meaningful_job_id_format():
     """测试有意义的job_id格式"""
@@ -62,7 +62,7 @@ def test_invalid_job_id_extraction():
 def test_job_id_generation_variety():
     """测试各种任务类型和调度类型的job_id生成"""
     test_combinations = [
-        (TaskType.CLEANUP_TOKENS, SchedulerType.INTERVAL, 1, "cleanup_tok_int_1"),
+        (TaskType.CLEANUP_TOKENS, SchedulerType.CRON, 1, "cleanup_tok_cron_1"),
         (TaskType.BOT_SCRAPING, SchedulerType.CRON, 5, "scrape_bot_cron_5"),
         (TaskType.SEND_EMAIL, SchedulerType.DATE, 10, "email_once_10"),
         (TaskType.SYSTEM_MONITOR, SchedulerType.MANUAL, 100, "monitor_man_100"),

@@ -37,10 +37,19 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - SECRET_KEY=${SECRET_KEY}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: >
       bash -c "
@@ -104,7 +113,7 @@ services:
     env_file:
       - .env
     ports:
-      - "5672:5672"
+      - "${RABBITMQ_PORT}:5672"
       - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
@@ -120,7 +129,38 @@ services:
     networks:
       - dbNetWork
 
-  celery_worker:
+  redis:
+    image: redis:7-alpine
+    env_file:
+      - .env
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      sh -c "
+        if [ -n '${REDIS_PASSWORD}' ]; then
+          redis-server --requirepass ${REDIS_PASSWORD}
+        else
+          redis-server
+        fi
+      "
+    healthcheck:
+      test: >
+        sh -c "
+          if [ -n '${REDIS_PASSWORD}' ]; then
+            redis-cli -a ${REDIS_PASSWORD} ping
+          else
+            redis-cli ping
+          fi
+        "
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dbNetWork
+
+  taskiq_worker:
     build: ./backend
     env_file:
       - .env
@@ -129,58 +169,90 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
-      - C_FORCE_ROOT=true
-      - CELERY_WORKER_POOL=${CELERY_WORKER_POOL}  # 从环境变量读取 worker 池类型
-      - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY}  # 从环境变量读取 Worker 进程数
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: >
       bash -c "
         echo '等待依赖服务...' &&
         sleep 10 &&
-        echo '启动 Celery Worker（使用 prefork 池）...' &&
-        celery -A app.celery_app worker \
-          --loglevel=info \
-          --concurrency=${CELERY_WORKER_CONCURRENCY} \
-          --pool=${CELERY_WORKER_POOL} \
-          --max-tasks-per-child=100 \
-          -Q default,cleanup,scraping
+        poetry install --no-interaction --no-ansi &&
+        poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --log-level ${LOG_LEVEL:-INFO}
       "
     networks:
       - dbNetWork
     deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
+      replicas: ${TASKIQ_WORKER_CONCURRENCY}
 
-  flower:
-    image: mher/flower:2.0
+  taskiq_scheduler:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      taskiq_worker:
+        condition: service_started
+    command: >
+      bash -c "
+        echo '等待依赖服务...' &&
+        sleep 15 &&
+        poetry install --no-interaction --no-ansi &&
+        poetry run taskiq scheduler app.scheduler:scheduler --log-level ${LOG_LEVEL:-INFO}
+      "
+    networks:
+      - dbNetWork
+
+  redisinsight:
+    image: redislabs/redisinsight:${REDISINSIGHT_VERSION:-2.70}
+    container_name: ${REDISINSIGHT_CONTAINER_NAME:-redisinsight}
     env_file:
       - .env
     ports:
-      - "5555:5555"
+      - "${REDISINSIGHT_PORT:-8001}:5540"
+    volumes:
+      - redisinsight_data:/db
     environment:
-      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
-      - FLOWER_PORT=5555
-      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-8001}
     depends_on:
-      - rabbitmq
-      - celery_worker
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - dbNetWork
-    command: celery flower --broker=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
 
 volumes:
   postgres_data:
   rabbitmq_data:
+  redis_data:
+  redisinsight_data:
 
 networks:
   dbNetWork:

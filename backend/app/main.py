@@ -10,7 +10,9 @@ from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
-from app.services.tasks_manager import task_manager
+from app.core.task_manager import task_manager
+from app.broker import broker
+from app.core.redis_timeout_store import redis_timeout_store 
 
 # 配置日志系统
 setup_logging()
@@ -24,19 +26,29 @@ async def lifespan(app: FastAPI):
     
     try:
         # 启动时
-        await task_manager.start()
-        logger.info("任务管理器启动成功")
+        await broker.startup()
+        await task_manager.initialize()
+        
+        # 初始化Redis超时存储连接池
+        await redis_timeout_store.connect()
+        logger.info("Redis超时存储已初始化")
+        
+        logger.info("TaskIQ任务管理器启动成功")
     except Exception as e:
-        logger.error(f"任务管理器启动失败: {e}")
+        logger.error(f"启动失败: {e}")
     
     yield
     
     # 关闭时
     try:
-        task_manager.shutdown()
-        logger.info("任务管理器关闭成功")
+        await broker.shutdown()
+        
+        # 关闭Redis超时存储连接
+        await redis_timeout_store.disconnect()
+        
+        logger.info("应用关闭成功")
     except Exception as e:
-        logger.error(f"任务管理器关闭失败: {e}")
+        logger.error(f"关闭失败: {e}")
 
 
 app = FastAPI(

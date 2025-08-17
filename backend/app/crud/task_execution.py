@@ -17,8 +17,7 @@ class CRUDTaskExecution:
         self,
         db: AsyncSession,
         config_id: int,
-        job_id: str,
-        job_name: str,
+        task_id: str,
         status: ExecutionStatus,
         started_at: datetime,
         completed_at: Optional[datetime] = None,
@@ -31,8 +30,7 @@ class CRUDTaskExecution:
         try:
             db_obj = TaskExecution(
                 config_id=config_id,
-                job_id=job_id,
-                job_name=job_name,
+                task_id=task_id,
                 status=status,
                 started_at=started_at,
                 completed_at=completed_at,
@@ -88,16 +86,30 @@ class CRUDTaskExecution:
             await db.rollback()
             raise DatabaseError(f"更新任务执行状态时出错: {str(e)}")
     
-    async def get_by_job_id(
+    async def get_by_task_id(
         self,
         db: AsyncSession,
-        job_id: str
+        task_id: str
     ) -> Optional[TaskExecution]:
-        """通过job_id获取执行记录"""
+        """通过task_id获取执行记录"""
         result = await db.execute(
             select(TaskExecution)
             .options(selectinload(TaskExecution.task_config))
-            .where(TaskExecution.job_id == job_id)
+            .where(TaskExecution.task_id == task_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_latest_by_task_id(
+        self,
+        db: AsyncSession,
+        task_id: str
+    ) -> Optional[TaskExecution]:
+        """通过task_id获取最新的执行记录"""
+        result = await db.execute(
+            select(TaskExecution)
+            .where(TaskExecution.task_id == task_id)
+            .order_by(TaskExecution.created_at.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
     

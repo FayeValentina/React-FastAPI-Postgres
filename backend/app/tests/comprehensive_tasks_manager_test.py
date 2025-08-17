@@ -391,7 +391,7 @@
 #             logger.warning("⚠️ 没有可用的任务配置，跳过批量操作测试")
 #             return {}
         
-#         # 测试1: 立即执行单个任务（注意：这里可能会失败，因为需要Celery）
+#         # 测试1: 立即执行单个任务（注意：这里可能会失败，因为需要worker）
 #         try:
 #             task_id = await self.task_manager.execute_task_immediately(
 #                 self.created_config_ids[0]
@@ -473,13 +473,13 @@
 #         try:
 #             active_tasks = self.task_manager.get_active_tasks()
 #             results['get_active_tasks'] = self.print_test_result(
-#                 "获取活跃的Celery任务",
+#                 "获取活跃的worker任务",
 #                 isinstance(active_tasks, list),
 #                 f"找到 {len(active_tasks)} 个活跃任务"
 #             )
 #         except Exception as e:
 #             results['get_active_tasks'] = self.print_test_result(
-#                 "获取活跃的Celery任务",
+#                 "获取活跃的worker任务",
 #                 False,
 #                 f"异常: {e}"
 #             )

@@ -43,10 +43,6 @@ class PostgresSettings(BaseSettings):
         """获取同步数据库 URI（用于 Alembic）"""
         return self.SQLALCHEMY_DATABASE_URL.replace("+asyncpg", "+psycopg2")
     
-    @property
-    def CELERY_RESULT_BACKEND_URL(self) -> str:
-        """获取 Celery Result Backend URI (不包含驱动程序)"""
-        return f"postgresql://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB}"
 
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_",
@@ -207,78 +203,49 @@ class RabbitMQSettings(BaseSettings):
     )
 
 
-class CelerySettings(BaseSettings):
-    """Celery 配置"""
-    BROKER_URL: Optional[str] = None
-    RESULT_BACKEND: Optional[str] = None
+class RedisSettings(BaseSettings):
+    """Redis 配置"""
+    HOST: str = "redis"
+    PORT: int = 6379
+    PASSWORD: Optional[str] = None
+    DB: int = 0
+    URL: Optional[str] = None
     
-    # 任务配置
-    TASK_SERIALIZER: str = "json"
-    ACCEPT_CONTENT: List[str] = ["json"]
-    RESULT_SERIALIZER: str = "json"
+    @property
+    def CONNECTION_URL(self) -> str:
+        """获取 Redis 连接 URL"""
+        if self.URL:
+            return self.URL
+        
+        if self.PASSWORD:
+            return f"redis://:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB}"
+        else:
+            return f"redis://{self.HOST}:{self.PORT}/{self.DB}"
     
-    # 时区设置
+    model_config = SettingsConfigDict(
+        env_prefix="REDIS_",
+        env_file=[".env"],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class TaskIQSettings(BaseSettings):
+    """TaskIQ 配置"""
+    # TaskIQ 基本配置
     TIMEZONE: str = "UTC"
-    ENABLE_UTC: bool = True
-    
-    # 任务重试设置
-    TASK_ACKS_LATE: bool = True
-    TASK_REJECT_ON_WORKER_LOST: bool = True
-    
-    # 结果存储设置
-    RESULT_EXPIRES: int = 3600 * 24  # 24小时
-    RESULT_PERSISTENT: bool = True
-    
-    # Worker设置
-    WORKER_PREFETCH_MULTIPLIER: int = 1
-    WORKER_MAX_TASKS_PER_CHILD: int = 1000
-    WORKER_POOL: str = "prefork"
-    WORKER_CONCURRENCY: int = 2
-    
-    # 监控设置
-    WORKER_SEND_TASK_EVENTS: bool = True
-    TASK_SEND_SENT_EVENT: bool = True
-    
-    # 任务超时设置
-    TASK_TIME_LIMIT: int = 30 * 60  # 30分钟
-    TASK_SOFT_TIME_LIMIT: int = 25 * 60  # 25分钟
-    
-    # 任务重试设置
     TASK_DEFAULT_RETRY_DELAY: int = 60
     TASK_MAX_RETRIES: int = 3
+    TASK_TIME_LIMIT: int = 30 * 60  # 30分钟
     
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._rabbitmq_settings = None
-        self._postgres_settings = None
+    # Worker设置
+    WORKER_CONCURRENCY: int = 2
     
-    def _set_dependencies(self, rabbitmq_settings: 'RabbitMQSettings', postgres_settings: 'PostgresSettings'):
-        """设置依赖的配置对象"""
-        self._rabbitmq_settings = rabbitmq_settings
-        self._postgres_settings = postgres_settings
+    # 结果存储设置
+    RESULT_EX_TIME: int = 3600  # 结果过期时间（秒）
     
-    @computed_field
-    @property
-    def broker_url(self) -> str:
-        """获取 Broker URL"""
-        if self.BROKER_URL:
-            return self.BROKER_URL
-        
-        else:
-            return self._rabbitmq_settings.URL
-    
-    @computed_field
-    @property  
-    def result_backend_url(self) -> str:
-        """获取 Result Backend URL"""
-        if self.RESULT_BACKEND:
-            return self.RESULT_BACKEND
-            
-        else:
-            return f"db+{self._postgres_settings.CELERY_RESULT_BACKEND_URL}"
-
     model_config = SettingsConfigDict(
-        env_prefix="CELERY_",
+        env_prefix="TASKIQ_",
         env_file=[".env"],
         env_file_encoding="utf-8",
         extra="allow"
@@ -307,7 +274,8 @@ class Settings(BaseSettings):
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
-    celery: CelerySettings = CelerySettings()
+    redis: RedisSettings = RedisSettings()
+    taskiq: TaskIQSettings = TaskIQSettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True
@@ -321,8 +289,6 @@ class Settings(BaseSettings):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # 在初始化完成后设置Celery的依赖关系
-        self.celery._set_dependencies(self.rabbitmq, self.postgres)
 
 settings = Settings() 
 

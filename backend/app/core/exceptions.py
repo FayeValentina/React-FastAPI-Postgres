@@ -7,7 +7,7 @@
 from fastapi import HTTPException
 from typing import Any, Dict, Optional
 
-from .constants import ErrorMessages, StatusCode
+from app.constant.constants import ErrorMessages, StatusCode
 
 
 class ApiError(Exception):
