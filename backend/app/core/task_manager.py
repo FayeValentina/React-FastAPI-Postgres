@@ -159,13 +159,23 @@ class TaskManager:
                 task = await task_func.kiq(config_id, **task_params)
                 
                 # 记录任务执行
-                await crud_task_execution.create(
+                execution = await crud_task_execution.create(
                     db=db,
                     config_id=config_id,
                     task_id=task.task_id,
                     status=ExecutionStatus.RUNNING,
                     started_at=datetime.utcnow()
                 )
+                
+                # 注册到超时监控器
+                if config.timeout_seconds:
+                    from app.core.timeout_monitor_engine import timeout_monitor
+                    timeout_monitor.register_task(
+                        task.task_id, 
+                        config_id, 
+                        config.timeout_seconds, 
+                        execution.started_at
+                    )
                 
                 logger.info(f"已立即执行任务 {config_id}，任务ID: {task.task_id}")
                 return task.task_id

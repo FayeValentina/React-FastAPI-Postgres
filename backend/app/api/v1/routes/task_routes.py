@@ -619,9 +619,9 @@ async def get_task_status(
         "status": status.get("status", "unknown"),
         "result": status.get("result"),
         "traceback": status.get("error"),
-        "name": None,  # Can be added if needed
-        "args": [],
-        "kwargs": {}
+        "execution_time": status.get("execution_time", None),
+        "started_at": status.get("started_at", None),
+        "completed_at": status.get("completed_at", None)
     }
 
 

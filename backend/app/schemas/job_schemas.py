@@ -154,9 +154,9 @@ class TaskStatusResponse(BaseModel):
     status: str = Field(..., description="任务状态")
     result: Optional[Dict[str, Any]] = Field(None, description="任务结果")
     traceback: Optional[str] = Field(None, description="错误追踪")
-    name: Optional[str] = Field(None, description="任务名称")
-    args: Optional[List[Any]] = Field(None, description="任务参数")
-    kwargs: Optional[Dict[str, Any]] = Field(None, description="任务关键字参数")
+    execution_time: Optional[datetime] = Field(None, description = "执行时间")
+    started_at: Optional[datetime] = Field(None, description = "开始时间")
+    completed_at: Optional[datetime] =Field(None, description = "完成时间")
 
 
 class ActiveTaskInfo(BaseModel):
