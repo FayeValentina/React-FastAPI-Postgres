@@ -355,10 +355,12 @@ class TaskManager:
                 tasks.append({
                     "task_id": e.task_id,
                     "config_id": e.config_id,
+                    "config_name": config.name if config else None,
                     "status": status.get("status", e.status.value if hasattr(e.status, 'value') else e.status),
                     "started_at": e.started_at.isoformat() if e.started_at else None,
                     "queue": queue_name,
                     "task_type": config.task_type.value if config and config.task_type else None,
+                    "parameters": config.parameters if config else {},
                 })
             
             return tasks
@@ -424,11 +426,18 @@ class TaskManager:
             
         except Exception as e:
             logger.error(f"获取系统状态失败: {e}")
+            # 返回符合schema的完整结构
             return {
                 "broker_connected": False,
                 "scheduler_running": False,
-                "error": str(e),
+                "total_configs": 0,
+                "active_configs": 0,
+                "total_scheduled_jobs": 0,
+                "total_active_tasks": 0,
                 "timestamp": datetime.utcnow().isoformat(),
+                "scheduler": {"initialized": False, "scheduled_tasks": 0, "error": str(e)},
+                "worker": {"broker_connected": False, "active_tasks": 0, "error": str(e)},
+                "queues": {}
             }
     
     def _get_task_function(self, task_type: TaskType):
@@ -491,7 +500,16 @@ class TaskManager:
                     'parameters': c.parameters or {},
                     'schedule_config': c.schedule_config or {},
                     'priority': c.priority,
-                    'created_at': c.created_at.isoformat() if c.created_at else None
+                    'created_at': c.created_at.isoformat() if c.created_at else None,
+                    
+                    # 添加缺少的必需字段
+                    'max_retries': c.max_retries or 0,
+                    'timeout_seconds': c.timeout_seconds,
+                    'updated_at': c.updated_at.isoformat() if c.updated_at else None,
+                    
+                    # 添加可选字段（设为None，符合schema定义）
+                    'scheduler_status': None,  # 在列表视图中不包含调度器状态（性能考虑）
+                    'stats': None  # 在列表视图中不包含统计信息（性能考虑）
                 }
                 results.append(config_dict)
             return results

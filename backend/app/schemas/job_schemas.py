@@ -162,10 +162,12 @@ class TaskStatusResponse(BaseModel):
 class ActiveTaskInfo(BaseModel):
     """活跃任务信息"""
     task_id: str = Field(..., description="任务ID")
+    config_id: int = Field(..., description="配置ID")
     name: str = Field(..., description="任务名称")
-    args: List[Any] = Field(..., description="任务参数")
-    kwargs: Dict[str, Any] = Field(..., description="任务关键字参数")
-    worker: Optional[str] = Field(None, description="执行工作者")
+    parameters: Dict[str, Any] = Field(..., description="任务关键字参数")
+    status: str = Field(..., description="任务状态")
+    started_at: datetime = Field(..., description = "启动时间")
+    task_type: str = Field(..., description = "任务类型")
     queue: Optional[str] = Field(None, description="队列名称")
 
 

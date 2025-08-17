@@ -506,15 +506,29 @@ async def execute_task_immediately(
         - config_id: Task configuration ID
         - options: Execution options (additional parameters)
     """
+    # 获取任务配置信息以补充响应字段
+    config = await task_manager.get_task_config(config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Task configuration not found")
+    
     task_id = await task_manager.execute_task_immediately(config_id, **options)
     if not task_id:
         raise HTTPException(status_code=400, detail="Failed to execute task")
     
+    # 获取队列信息
+    try:
+        task_type_enum = TaskType(config['task_type'])
+        queue_name = TaskRegistry.get_queue_name(task_type_enum)
+    except Exception:
+        queue_name = TaskRegistry.DEFAULT_QUEUE
+    
     return {
         "task_id": task_id,
         "config_id": config_id,
+        "task_type": config['task_type'],  # 添加任务类型
         "status": "submitted",
-        "message": f"Task {config_id} submitted for execution"
+        "queue": queue_name,  # 添加队列信息
+        "message": f"Task {config['name']} (ID: {config_id}) submitted for execution"  # 使用配置名称
     }
 
 
@@ -542,7 +556,7 @@ async def execute_task_by_type(
         raise HTTPException(status_code=400, detail=f"Unsupported task type: {task_type}")
     
     # Get task function
-    from backend.app.constant.task_registry import get_task_function
+    from app.constant.task_registry import get_task_function
     task_func = get_task_function(task_type_enum)
     
     if not task_func:
@@ -569,9 +583,11 @@ async def execute_task_by_type(
 
         return {
             "task_id": task.task_id,
+            "config_id": None,  # 直接执行没有config_id
             "task_type": task_type,
             "status": "submitted",
-            "queue": queue
+            "queue": queue,
+            "message": f"Task {task_type} submitted for execution"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute task: {str(e)}")
@@ -612,7 +628,6 @@ async def get_task_status(
 @router.get("/active", response_model=List[ActiveTaskInfo])
 async def get_active_tasks(
     queue: Optional[str] = Query(None, description="Filter by queue name"),
-    worker: Optional[str] = Query(None, description="Filter by worker name"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -635,11 +650,13 @@ async def get_active_tasks(
             
         task_info = {
             "task_id": t["task_id"],
-            "name": f"Task Config {t['config_id']} ({t.get('task_type', 'unknown')})",
-            "args": [],
-            "kwargs": {},
-            "worker": worker,  # Can be populated if available from TaskIQ
-            "queue": task_queue
+            "config_id": t["config_id"],
+            "name": t.get("config_name") or f"Direct: {t.get('task_type', 'unknown')}",
+            "parameters": t["parameters"],
+            "status": t["status"],
+            "started_at": t["started_at"],
+            "task_type": t["task_type"],
+            "queue": t["queue"]
         }
         active_tasks.append(task_info)
     
@@ -738,7 +755,7 @@ async def get_enum_values(
     
     Useful for frontend dropdowns and validation.
     """
-    from backend.app.constant.task_registry import get_task_function
+    from app.constant.task_registry import get_task_function
     
     # 获取支持的任务类型及其实现状态
     task_types_list: List[Dict[str, Any]] = []
