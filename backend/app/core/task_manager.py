@@ -169,8 +169,8 @@ class TaskManager:
                 
                 # 注册到超时监控器
                 if config.timeout_seconds:
-                    from app.core.timeout_monitor_engine import timeout_monitor
-                    timeout_monitor.register_task(
+                    from app.core.redis_timeout_store import redis_timeout_store
+                    redis_timeout_store.register_task(
                         task.task_id, 
                         config_id, 
                         config.timeout_seconds, 

@@ -2,7 +2,6 @@
 清理任务定义
 """
 from typing import Dict, Any, Optional
-from datetime import datetime
 import logging
 
 from app.broker import broker
@@ -11,7 +10,7 @@ from app.crud.token import crud_refresh_token
 from app.crud.password_reset import crud_password_reset
 from app.crud.reddit_content import crud_reddit_content
 from app.crud.schedule_event import crud_schedule_event
-from app.core.monitor_wrapper import timeout_monitor
+from app.core.timeout_decorator import with_timeout  # 改为使用新的装饰器
 
 logger = logging.getLogger(__name__)
 
@@ -22,25 +21,18 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
-@timeout_monitor
+@with_timeout  # 使用新的超时装饰器
 async def cleanup_expired_tokens(
     config_id: Optional[int] = None,
-    days_old: int = 7
+    days_old: int = 7,
+    **kwargs  # 接收task_id等额外参数
 ) -> Dict[str, Any]:
     """
     清理过期的令牌
-    
-    Args:
-        config_id: 任务配置ID
-        days_old: 清理多少天前的过期令牌
-    
-    Returns:
-        清理结果统计
     """
     logger.info(f"开始清理 {days_old} 天前的过期令牌... (Config ID: {config_id})")
     
     async with AsyncSessionLocal() as db:
-        
         expired_refresh = await crud_refresh_token.cleanup_expired(db, days_old=days_old)
         expired_reset = await crud_password_reset.cleanup_expired(db, days_old=days_old)
         
@@ -62,20 +54,14 @@ async def cleanup_expired_tokens(
     retry_on_error=True,
     max_retries=3,
 )
-@timeout_monitor
+@with_timeout
 async def cleanup_old_content(
     config_id: Optional[int] = None,
-    days_old: int = 90
+    days_old: int = 90,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     清理旧内容
-    
-    Args:
-        config_id: 任务配置ID
-        days_old: 清理多少天前的内容
-    
-    Returns:
-        清理结果统计
     """
     logger.info(f"开始清理 {days_old} 天前的旧内容... (Config ID: {config_id})")
     
@@ -102,20 +88,14 @@ async def cleanup_old_content(
     retry_on_error=True,
     max_retries=3,
 )
-@timeout_monitor
+@with_timeout
 async def cleanup_schedule_events(
     config_id: Optional[int] = None,
-    days_old: int = 30
+    days_old: int = 30,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     清理旧的调度事件
-    
-    Args:
-        config_id: 任务配置ID
-        days_old: 清理多少天前的事件
-    
-    Returns:
-        清理结果统计
     """
     logger.info(f"开始清理 {days_old} 天前的旧调度事件... (Config ID: {config_id})")
     
@@ -130,5 +110,3 @@ async def cleanup_schedule_events(
         
         logger.info(f"清理调度事件完成: {result}")
         return result
-
-

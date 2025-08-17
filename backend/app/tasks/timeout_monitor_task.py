@@ -1,20 +1,21 @@
 """
 超时监控任务
-定期检查并处理超时的任务执行
+定期检查Redis中的超时任务并处理
 """
-from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
 import logging
-import asyncio
+from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.crud.task_execution import crud_task_execution
 from app.crud.task_config import crud_task_config
-from app.models.task_execution import ExecutionStatus
-from app.core.task_manager import TaskManager
-from app.core.monitor_wrapper import timeout_monitor
+from app.models.task_execution import ExecutionStatus, TaskExecution
+from app.models.task_config import TaskConfig
+from app.core.redis_timeout_store import redis_timeout_store
+from app.core.timeout_decorator import with_timeout
 from app.utils.common import get_current_time
+from sqlalchemy import select, and_
 
 logger = logging.getLogger(__name__)
 
@@ -22,191 +23,176 @@ logger = logging.getLogger(__name__)
 @broker.task(
     task_name="timeout_monitor",
     queue="monitor",
-    retry_on_error=True,
-    max_retries=1,
+    retry_on_error=False,  # 监控任务不重试
 )
-@timeout_monitor
 async def timeout_monitor_task(
     config_id: Optional[int] = None,
-    check_interval_minutes: int = 5,
-    max_check_hours: int = 24
+    **kwargs
 ) -> Dict[str, Any]:
     """
-    超时监控任务 - 检查并处理超时的任务执行
+    超时监控任务 - 检查Redis中的超时任务
     
-    Args:
-        config_id: 任务配置ID (用于统一接口，此处可忽略)
-        check_interval_minutes: 检查间隔(分钟)
-        max_check_hours: 最大检查范围(小时)
-    
-    Returns:
-        监控结果统计
+    这个任务应该定期运行（比如每30秒），处理所有超时的任务
     """
-    logger.info("开始执行超时监控任务...")
+    logger.info("开始执行超时监控...")
+    
+    # 获取所有超时的任务
+    timeout_tasks = await redis_timeout_store.get_timeout_tasks()
+    
+    if not timeout_tasks:
+        logger.debug("没有检测到超时任务")
+        return {
+            "config_id": config_id,
+            "checked_at": get_current_time().isoformat(),
+            "timeout_count": 0
+        }
+    
+    logger.warning(f"检测到 {len(timeout_tasks)} 个超时任务")
+    
+    # 批量获取数据，避免N+1查询
+    task_ids = [task["task_id"] for task in timeout_tasks]
+    config_ids = list(set(task["config_id"] for task in timeout_tasks))
+    
+    configs_map = await _batch_get_configs(config_ids)
+    executions_map = await _batch_get_executions(task_ids)
+    
+    # 处理每个超时任务
+    processed_count = 0
+    processed_task_ids = []
     
     async with AsyncSessionLocal() as db:
-        # 获取所有正在运行的任务
-        running_executions = await crud_task_execution.get_running_executions(db)
-        
-        timeout_count = 0
-        checked_count = len(running_executions)
-        timeout_tasks = []
-        
-        current_time = get_current_time()
-        
-        for execution in running_executions:
+        for task_data in timeout_tasks:
             try:
-                # 获取任务配置以确定超时时间
-                task_config = await crud_task_config.get(db, execution.config_id)
-                if not task_config or not task_config.timeout_seconds:
-                    continue
+                task_id = task_data["task_id"]
+                config_id = task_data["config_id"]
+                started_at = datetime.fromisoformat(task_data["started_at"])
+                timeout_seconds = task_data["timeout_seconds"]
                 
-                # 计算任务运行时间
-                running_time = (current_time - execution.started_at).total_seconds()
+                # 从缓存中获取配置和执行记录
+                config = configs_map.get(config_id)
+                execution = executions_map.get(task_id)
                 
-                # 检查是否超时
-                if running_time > task_config.timeout_seconds:
-                    logger.warning(
-                        f"检测到超时任务: task_id={execution.task_id}, "
-                        f"运行时间={running_time:.1f}s, 超时阈值={task_config.timeout_seconds}s"
-                    )
+                config_name = config.name if config else f"Config#{config_id}"
+                
+                # 更新任务状态为超时
+                if execution and execution.status == ExecutionStatus.RUNNING:
+                    running_time = (get_current_time() - started_at).total_seconds()
+                    error_msg = f"任务超时 (运行时间: {running_time:.1f}秒, 限制: {timeout_seconds}秒)"
                     
-                    # 标记任务为超时
                     await crud_task_execution.update_status(
                         db=db,
                         execution_id=execution.id,
                         status=ExecutionStatus.TIMEOUT,
-                        completed_at=current_time,
-                        error_message=f"Task timed out after {running_time:.1f} seconds (limit: {task_config.timeout_seconds}s)"
+                        completed_at=get_current_time(),
+                        error_message=error_msg
                     )
                     
-                    timeout_count += 1
-                    timeout_tasks.append({
-                        "task_id": execution.task_id,
-                        "config_id": execution.config_id,
-                        "config_name": task_config.name,
-                        "running_time_seconds": running_time,
-                        "timeout_threshold_seconds": task_config.timeout_seconds
-                    })
-                    
-                    # 尝试通过TaskIQ撤销任务 (如果支持)
-                    try:
-                        await _revoke_task_from_broker(execution.task_id)
-                    except Exception as e:
-                        logger.warning(f"无法撤销超时任务 {execution.task_id}: {e}")
-            
+                    logger.warning(f"标记任务 {task_id} ({config_name}) 为超时状态")
+                    processed_count += 1
+                
+                processed_task_ids.append(task_id)
+                
             except Exception as e:
-                logger.error(f"处理任务执行记录 {execution.id} 时出错: {e}")
-                continue
-        
-        result = {
-            "config_id": config_id,
-            "monitor_time": current_time.isoformat(),
-            "checked_tasks": checked_count,
-            "timeout_tasks": timeout_count,
-            "timeout_details": timeout_tasks,
-            "check_interval_minutes": check_interval_minutes
-        }
-        
-        if timeout_count > 0:
-            logger.warning(f"超时监控完成: 检查了 {checked_count} 个任务，发现 {timeout_count} 个超时任务")
-        else:
-            logger.info(f"超时监控完成: 检查了 {checked_count} 个任务，无超时任务")
-            
-        return result
-
-
-async def _revoke_task_from_broker(task_id: str) -> bool:
-    """
-    尝试从TaskIQ broker撤销任务
+                logger.error(f"处理超时任务 {task_data.get('task_id')} 时出错: {e}")
     
-    Args:
-        task_id: 任务ID
-        
-    Returns:
-        是否成功撤销
+    # 从Redis中清理已处理的任务
+    if processed_task_ids:
+        await redis_timeout_store.cleanup_completed_tasks(processed_task_ids)
+    
+    result = {
+        "config_id": config_id,
+        "checked_at": get_current_time().isoformat(),
+        "timeout_count": len(timeout_tasks),
+        "processed_count": processed_count
+    }
+    
+    logger.info(f"超时监控完成: 检测 {len(timeout_tasks)} 个，处理 {processed_count} 个")
+    return result
+
+
+async def _batch_get_configs(config_ids: List[int]) -> Dict[int, TaskConfig]:
     """
-    try:
-        # TaskIQ 0.11.x 的任务撤销方法
-        from app.broker import broker
+    批量获取任务配置，避免N+1查询
+    """
+    if not config_ids:
+        return {}
+    
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(TaskConfig).where(TaskConfig.id.in_(config_ids))
+        )
+        configs = result.scalars().all()
         
-        # 检查任务是否还在队列中
-        is_ready = await broker.result_backend.is_result_ready(task_id)
-        if not is_ready:
-            # 任务可能还在队列中，尝试标记为撤销
-            # 注意：这里的实现取决于你的TaskIQ版本和配置
-            logger.info(f"尝试撤销队列中的任务: {task_id}")
-            return True
+        return {config.id: config for config in configs}
+
+
+async def _batch_get_executions(task_ids: List[str]) -> Dict[str, TaskExecution]:
+    """
+    批量获取任务执行记录，避免N+1查询
+    """
+    if not task_ids:
+        return {}
+    
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(TaskExecution).where(TaskExecution.task_id.in_(task_ids))
+        )
+        executions = result.scalars().all()
         
-        return False
-        
-    except Exception as e:
-        logger.warning(f"撤销任务失败 {task_id}: {e}")
-        return False
+        return {execution.task_id: execution for execution in executions}
 
 
 @broker.task(
-    task_name="cleanup_timeout_tasks",
+    task_name="cleanup_timeout_monitor",
     queue="cleanup",
-    retry_on_error=True,
-    max_retries=1,
+    retry_on_error=False,
 )
-@timeout_monitor
-async def cleanup_timeout_tasks(
+async def cleanup_timeout_monitor_task(
     config_id: Optional[int] = None,
-    days_old: int = 7
+    **kwargs
 ) -> Dict[str, Any]:
     """
-    清理旧的超时任务记录
+    清理Redis中的过期监控数据
     
-    Args:
-        config_id: 任务配置ID
-        days_old: 清理多少天前的超时记录
-    
-    Returns:
-        清理结果统计
+    这个任务应该每天运行一次，清理已经不需要的监控数据
     """
-    logger.info(f"开始清理 {days_old} 天前的超时任务记录...")
+    logger.info("开始清理超时监控数据...")
     
-    async with AsyncSessionLocal() as db:
-        cutoff_date = get_current_time() - timedelta(days=days_old)
-        
-        # 获取需要清理的超时任务
-        from sqlalchemy import select, and_, delete
-        from app.models.task_execution import TaskExecution
-        
-        # 统计要删除的记录数
-        count_result = await db.execute(
-            select(TaskExecution.id)
-            .where(
-                and_(
-                    TaskExecution.status == ExecutionStatus.TIMEOUT,
-                    TaskExecution.completed_at < cutoff_date
-                )
-            )
-        )
-        timeout_records = count_result.scalars().all()
-        count_to_delete = len(timeout_records)
-        
-        # 执行删除
-        if count_to_delete > 0:
-            await db.execute(
-                delete(TaskExecution)
-                .where(
-                    and_(
-                        TaskExecution.status == ExecutionStatus.TIMEOUT,
-                        TaskExecution.completed_at < cutoff_date
-                    )
-                )
-            )
-            await db.commit()
-        
-        result = {
+    # 获取所有任务
+    all_tasks = await redis_timeout_store.get_all_tasks()
+    
+    if not all_tasks:
+        return {
             "config_id": config_id,
-            "cleanup_time": get_current_time().isoformat(),
-            "days_old": days_old,
-            "deleted_timeout_records": count_to_delete
+            "cleaned_at": get_current_time().isoformat(),
+            "total_tasks": 0,
+            "cleaned_count": 0
         }
+    
+    # 批量获取所有任务的执行状态，避免N+1查询
+    task_ids = [task["task_id"] for task in all_tasks]
+    executions_map = await _batch_get_executions(task_ids)
+    
+    # 找出已经完成的任务
+    completed_task_ids = []
+    for task_data in all_tasks:
+        task_id = task_data["task_id"]
+        execution = executions_map.get(task_id)
         
-        logger.info(f"清理超时任务记录完成: 删除了 {count_to_delete} 条记录")
-        return result
+        if not execution or execution.status != ExecutionStatus.RUNNING:
+            completed_task_ids.append(task_id)
+    
+    # 清理已完成的任务
+    cleaned_count = 0
+    if completed_task_ids:
+        cleaned_count = await redis_timeout_store.cleanup_completed_tasks(completed_task_ids)
+    
+    result = {
+        "config_id": config_id,
+        "cleaned_at": get_current_time().isoformat(),
+        "total_tasks": len(all_tasks),
+        "cleaned_count": cleaned_count
+    }
+    
+    logger.info(f"清理完成: 总任务 {len(all_tasks)}，清理 {cleaned_count}")
+    return result

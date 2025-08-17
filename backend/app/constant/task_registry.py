@@ -299,7 +299,7 @@ def _load_task_functions():
         TaskType.DATA_EXPORT: data_tasks.export_data,
         TaskType.DATA_BACKUP: data_tasks.backup_data,
         TaskType.TIMEOUT_MONITOR: timeout_monitor_task.timeout_monitor_task,
-        TaskType.CLEANUP_TIMEOUT_TASKS: timeout_monitor_task.cleanup_timeout_tasks,
+        TaskType.CLEANUP_TIMEOUT_TASKS: timeout_monitor_task.cleanup_timeout_monitor_task,
         # 为将来的任务类型预留
         # TaskType.BOT_SCRAPING: scraping_tasks.bot_scraping,
         # TaskType.MANUAL_SCRAPING: scraping_tasks.manual_scraping,
