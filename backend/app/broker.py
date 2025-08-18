@@ -5,11 +5,12 @@ TaskIQ Broker 配置
 import uuid
 import os
 from typing import Optional
-from taskiq import TaskiqEvents
+from taskiq import TaskiqEvents, TaskiqScheduler
 from taskiq_aio_pika import AioPikaBroker
 from taskiq_redis import RedisAsyncResultBackend
 
 from app.core.config import settings
+from app.core.redis_manager import redis_services
 
 # 配置 RabbitMQ broker
 broker = AioPikaBroker(
@@ -21,6 +22,13 @@ broker = AioPikaBroker(
         redis_url=settings.redis.CONNECTION_URL,
         result_ex_time=settings.taskiq.RESULT_EX_TIME,
     )
+)
+
+scheduler = TaskiqScheduler(
+    broker=broker,
+    sources=[
+        redis_services.scheduler.schedule_source,
+    ],
 )
 
 # 配置任务事件监听器

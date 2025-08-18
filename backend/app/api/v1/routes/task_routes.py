@@ -462,9 +462,7 @@ async def get_scheduled_jobs(
     Parameters:
         - include_paused: Whether to include paused jobs in the result
     """
-    from app.scheduler import get_scheduled_tasks
-    
-    tasks = await get_scheduled_tasks()
+    tasks = await redis_services.scheduler.get_all_schedules()
     
     # Convert to response format
     jobs = []
