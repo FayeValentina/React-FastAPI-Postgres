@@ -4,41 +4,6 @@ from datetime import datetime
 from app.models.task_execution import ExecutionStatus
 from enum import Enum
 
-
-class TaskExecutionCreate(BaseModel):
-    """创建任务执行记录"""
-    config_id: int = Field(..., description="任务配置ID")
-    job_id: str = Field(..., description="任务执行ID")
-    job_name: str = Field(..., description="任务名称")
-    status: ExecutionStatus = Field(..., description="执行状态")
-    started_at: str = Field(..., description="开始时间")
-    completed_at: Optional[str] = Field(None, description="完成时间")
-    duration_seconds: Optional[float] = Field(None, description="执行时长(秒)")
-    result: Optional[Dict[str, Any]] = Field(None, description="执行结果")
-    error_message: Optional[str] = Field(None, description="错误消息")
-    error_traceback: Optional[str] = Field(None, description="错误堆栈")
-
-class JobExecutionSummary(BaseModel):
-    """任务执行摘要"""
-    total_runs: int = Field(..., description="总执行次数")
-    successful_runs: int = Field(..., description="成功执行次数")
-    failed_runs: int = Field(..., description="失败执行次数")
-    success_rate: float = Field(..., description="成功率（百分比）")
-    avg_duration: float = Field(..., description="平均执行时间（秒）")
-    last_run: Optional[str] = Field(None, description="最后执行时间")
-    last_status: Optional[str] = Field(None, description="最后执行状态")
-    last_error: Optional[str] = Field(None, description="最后错误信息")
-
-
-class ScheduleEventInfo(BaseModel):
-    """调度事件信息"""
-    event_type: str = Field(..., description="事件类型")
-    created_at: str = Field(..., description="创建时间")
-    error_message: Optional[str] = Field(None, description="错误信息")
-    result: Optional[Dict[str, Any]] = Field(None, description="执行结果")
-
-
-
 class SystemStatusResponse(BaseModel):
     """系统状态响应"""
     broker_connected: bool = Field(..., description="broker运行状态")
@@ -53,12 +18,6 @@ class SystemStatusResponse(BaseModel):
     queues: Dict[str, Any] = Field(..., description="队列状态")
 
 
-class OperationResponse(BaseModel):
-    """通用操作响应"""
-    success: bool = Field(..., description="操作是否成功")
-    message: str = Field(..., description="操作结果消息")
-
-
 class TaskExecutionResult(BaseModel):
     """任务执行结果响应"""
     task_id: str = Field(..., description="任务ID")
@@ -69,31 +28,6 @@ class TaskExecutionResult(BaseModel):
     message: Optional[str] = Field(None, description="结果消息")
 
 
-class BatchCreateResponse(BaseModel):
-    """批量创建响应"""
-    created: List[int] = Field(..., description="成功创建的ID列表")
-    failed: List[Dict[str, Any]] = Field(..., description="失败项目列表")
-    total_created: int = Field(..., description="创建成功总数")
-    total_failed: int = Field(..., description="创建失败总数")
-
-
-class BatchDeleteResponse(BaseModel):
-    """批量删除响应"""
-    deleted: List[int] = Field(..., description="成功删除的ID列表")
-    failed: List[Dict[str, Any]] = Field(..., description="失败项目列表")
-    total_deleted: int = Field(..., description="删除成功总数")
-    total_failed: int = Field(..., description="删除失败总数")
-
-
-class BatchExecutionResponse(BaseModel):
-    """批量执行响应"""
-    task_ids: List[str] = Field(..., description="任务ID列表")
-    total_submitted: int = Field(..., description="提交任务总数")
-    config_ids: Optional[List[int]] = Field(None, description="配置ID列表")
-    task_type: Optional[str] = Field(None, description="任务类型")
-    status: str = Field(..., description="提交状态")
-
-
 class TaskRevokeResponse(BaseModel):
     """任务撤销响应"""
     task_id: str = Field(..., description="任务ID")
@@ -101,32 +35,10 @@ class TaskRevokeResponse(BaseModel):
     message: str = Field(..., description="操作结果")
 
 
-class BatchRevokeResponse(BaseModel):
-    """批量撤销响应"""
-    total_revoked: int = Field(..., description="撤销成功总数")
-    total_failed: int = Field(..., description="撤销失败总数")
-    results: List[TaskRevokeResponse] = Field(..., description="详细结果列表")
-
-
 class QueueStatsResponse(BaseModel):
     """队列统计响应"""
     queues: Dict[str, Dict[str, Any]] = Field(..., description="队列统计信息")
     total_tasks: int = Field(..., description="总任务数")
-
-
-class QueueLengthResponse(BaseModel):
-    """队列长度响应"""
-    queue_name: str = Field(..., description="队列名称")
-    length: int = Field(..., description="队列长度")
-    status: str = Field(..., description="队列状态")
-
-
-
-class TaskTypeSupportResponse(BaseModel):
-    """任务类型支持检查响应"""
-    task_type: str = Field(..., description="任务类型")
-    supported: bool = Field(..., description="是否支持")
-    worker_task_name: Optional[str] = Field(None, description="对应的worker任务名")
 
 class TaskTypeDetail(BaseModel):
     """任务类型的详细信息"""
@@ -139,14 +51,6 @@ class EnumValuesResponse(BaseModel):
     task_types: List[TaskTypeDetail] = Field(..., description="任务类型列表，包含详细信息")
     task_statuses: List[str] = Field(..., description="任务状态列表")
     scheduler_types: List[str] = Field(..., description="调度器类型列表")
-
-
-class ValidationResponse(BaseModel):
-    """配置验证响应"""
-    valid: bool = Field(..., description="是否有效")
-    message: str = Field(..., description="验证消息")
-    config: Optional[Dict[str, Any]] = Field(None, description="配置数据")
-
 
 class TaskStatusResponse(BaseModel):
     """任务状态响应"""

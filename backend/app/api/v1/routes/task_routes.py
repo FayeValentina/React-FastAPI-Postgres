@@ -29,7 +29,7 @@ from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, Sc
 from app.db.base import AsyncSessionLocal
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
-from app.crud.schedule_event import crud_schedule_event
+from app.core.redis_manager import redis_services
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -801,9 +801,26 @@ async def get_statistics(
                 stats = await crud_task_execution.get_global_stats(db, days)
         elif type == "events":
             if config_id:
-                stats = await crud_schedule_event.get_stats_by_config(db, config_id, days)
+                # 从Redis获取调度历史记录
+                history = await redis_services.history.get_history(config_id, limit=1000)
+                # 简化的统计：计算不同状态的事件数量
+                stats = {
+                    "config_id": config_id,
+                    "total_events": len(history),
+                    "success_count": len([h for h in history if h.get("status") == "success"]),
+                    "failed_count": len([h for h in history if h.get("status") == "failed"]),
+                    "timeout_count": len([h for h in history if h.get("status") == "timeout"]),
+                    "recent_history": history[:10]  # 最近10个事件
+                }
             else:
-                stats = await crud_schedule_event.get_global_stats(db, days)
+                # 全局统计暂时返回空（需要时可以实现遍历所有配置）
+                stats = {
+                    "total_events": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "timeout_count": 0,
+                    "note": "Global event stats from Redis not implemented yet"
+                }
         else:
             raise HTTPException(status_code=400, detail="Invalid stats type")
         

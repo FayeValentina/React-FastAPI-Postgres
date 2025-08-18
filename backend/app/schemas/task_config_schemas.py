@@ -33,7 +33,7 @@ class TaskConfigCreate(TaskConfigBase):
             return v
         
         # 清理任务参数验证  
-        if task_type in [TaskType.CLEANUP_CONTENT, TaskType.CLEANUP_EVENTS]:
+        if task_type in [TaskType.CLEANUP_CONTENT]:
             if 'days_old' not in v:
                 raise ValueError(f'{task_type}任务缺少必要参数: days_old')
             if not isinstance(v['days_old'], int) or v['days_old'] <= 0:

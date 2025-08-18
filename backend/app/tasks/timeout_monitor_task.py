@@ -1,7 +1,4 @@
-"""
-超时监控任务
-定期检查Redis中的超时任务并处理
-"""
+# backend/app/tasks/timeout_monitor_task.py (使用新的Redis服务)
 import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -12,13 +9,11 @@ from app.crud.task_execution import crud_task_execution
 from app.crud.task_config import crud_task_config
 from app.models.task_execution import ExecutionStatus, TaskExecution
 from app.models.task_config import TaskConfig
-from app.core.redis_timeout_store import redis_timeout_store
-from app.core.timeout_decorator import with_timeout
+from app.core.redis_manager import redis_services  # 使用新的Redis服务
 from app.utils.common import get_current_time
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
-
 
 @broker.task(
     task_name="timeout_monitor",
@@ -30,14 +25,12 @@ async def timeout_monitor_task(
     **kwargs
 ) -> Dict[str, Any]:
     """
-    超时监控任务 - 检查Redis中的超时任务
-    
-    这个任务应该定期运行（比如每30秒），处理所有超时的任务
+    超时监控任务 - 使用新的Redis超时监控服务
     """
     logger.info("开始执行超时监控...")
     
-    # 获取所有超时的任务
-    timeout_tasks = await redis_timeout_store.get_timeout_tasks()
+    # 使用新的Redis服务获取超时任务
+    timeout_tasks = await redis_services.timeout.get_expired_tasks()
     
     if not timeout_tasks:
         logger.debug("没有检测到超时任务")
@@ -87,6 +80,17 @@ async def timeout_monitor_task(
                         error_message=error_msg
                     )
                     
+                    # 记录到调度历史
+                    await redis_services.history.add_history_event(
+                        config_id=config_id,
+                        event_data={
+                            "task_id": task_id,
+                            "status": "timeout",
+                            "error": error_msg,
+                            "timestamp": get_current_time().isoformat()
+                        }
+                    )
+                    
                     logger.warning(f"标记任务 {task_id} ({config_name}) 为超时状态")
                     processed_count += 1
                 
@@ -95,9 +99,9 @@ async def timeout_monitor_task(
             except Exception as e:
                 logger.error(f"处理超时任务 {task_data.get('task_id')} 时出错: {e}")
     
-    # 从Redis中清理已处理的任务
+    # 从Redis中清理已处理的任务（使用新的服务）
     if processed_task_ids:
-        await redis_timeout_store.cleanup_completed_tasks(processed_task_ids)
+        await redis_services.timeout.cleanup_completed_tasks(processed_task_ids)
     
     result = {
         "config_id": config_id,
@@ -109,11 +113,8 @@ async def timeout_monitor_task(
     logger.info(f"超时监控完成: 检测 {len(timeout_tasks)} 个，处理 {processed_count} 个")
     return result
 
-
 async def _batch_get_configs(config_ids: List[int]) -> Dict[int, TaskConfig]:
-    """
-    批量获取任务配置，避免N+1查询
-    """
+    """批量获取任务配置，避免N+1查询"""
     if not config_ids:
         return {}
     
@@ -125,11 +126,8 @@ async def _batch_get_configs(config_ids: List[int]) -> Dict[int, TaskConfig]:
         
         return {config.id: config for config in configs}
 
-
 async def _batch_get_executions(task_ids: List[str]) -> Dict[str, TaskExecution]:
-    """
-    批量获取任务执行记录，避免N+1查询
-    """
+    """批量获取任务执行记录，避免N+1查询"""
     if not task_ids:
         return {}
     
@@ -141,7 +139,6 @@ async def _batch_get_executions(task_ids: List[str]) -> Dict[str, TaskExecution]
         
         return {execution.task_id: execution for execution in executions}
 
-
 @broker.task(
     task_name="cleanup_timeout_monitor",
     queue="cleanup",
@@ -152,14 +149,12 @@ async def cleanup_timeout_monitor_task(
     **kwargs
 ) -> Dict[str, Any]:
     """
-    清理Redis中的过期监控数据
-    
-    这个任务应该每天运行一次，清理已经不需要的监控数据
+    清理Redis中的过期监控数据 - 使用新的Redis服务
     """
     logger.info("开始清理超时监控数据...")
     
-    # 获取所有任务
-    all_tasks = await redis_timeout_store.get_all_tasks()
+    # 使用新的Redis服务获取所有任务
+    all_tasks = await redis_services.timeout.get_all_tasks()
     
     if not all_tasks:
         return {
@@ -182,10 +177,10 @@ async def cleanup_timeout_monitor_task(
         if not execution or execution.status != ExecutionStatus.RUNNING:
             completed_task_ids.append(task_id)
     
-    # 清理已完成的任务
+    # 使用新的Redis服务清理已完成的任务
     cleaned_count = 0
     if completed_task_ids:
-        cleaned_count = await redis_timeout_store.cleanup_completed_tasks(completed_task_ids)
+        cleaned_count = await redis_services.timeout.cleanup_completed_tasks(completed_task_ids)
     
     result = {
         "config_id": config_id,

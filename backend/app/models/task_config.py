@@ -8,7 +8,6 @@ from app.db.base_class import Base
 from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
 
 if TYPE_CHECKING:
-    from .schedule_event import ScheduleEvent
     from .task_execution import TaskExecution
 
 
@@ -41,13 +40,6 @@ class TaskConfig(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, onupdate=func.now())
     
     # 关联关系
-    schedule_events: Mapped[List["ScheduleEvent"]] = relationship(
-        "ScheduleEvent",
-        back_populates="task_config",
-        cascade="all, delete-orphan",
-        lazy="select"
-    )
-    
     task_executions: Mapped[List["TaskExecution"]] = relationship(
         "TaskExecution", 
         back_populates="task_config",

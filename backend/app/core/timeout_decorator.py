@@ -1,7 +1,4 @@
-"""
-任务超时装饰器
-简单直接的超时处理，使用Redis记录任务状态
-"""
+# backend/app/core/timeout_decorator.py (使用新的Redis服务)
 import asyncio
 import functools
 import logging
@@ -13,20 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud.task_execution import crud_task_execution
 from app.crud.task_config import crud_task_config
 from app.models.task_execution import ExecutionStatus
-from app.core.redis_timeout_store import redis_timeout_store
+from app.core.redis_manager import redis_services  # 使用新的Redis服务
 from app.utils.common import get_current_time
 
 logger = logging.getLogger(__name__)
 
-
 def with_timeout(func: Callable):
     """
-    任务超时装饰器
-    
-    1. 注册任务到Redis
-    2. 使用asyncio.wait_for实现超时
-    3. 更新任务状态
-    4. 从Redis注销任务
+    任务超时装饰器 - 使用新的Redis超时监控服务
     """
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
@@ -51,9 +42,9 @@ def with_timeout(func: Callable):
             # 记录开始时间
             started_at = get_current_time()
             
-            # 注册到Redis超时监控
+            # 注册到新的Redis超时监控服务
             if config_id:
-                await redis_timeout_store.register_task(
+                await redis_services.timeout.add_task(
                     task_id=task_id,
                     config_id=config_id,
                     timeout_seconds=timeout_seconds,
@@ -76,6 +67,18 @@ def with_timeout(func: Callable):
                     result={"return_value": result} if result is not None else None
                 )
                 
+                # 记录到调度历史
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "task_id": task_id,
+                        "status": "success",
+                        "started_at": started_at.isoformat(),
+                        "completed_at": get_current_time().isoformat(),
+                        "result": result
+                    }
+                )
+                
                 return result
                 
             except asyncio.TimeoutError:
@@ -89,6 +92,17 @@ def with_timeout(func: Callable):
                     status=ExecutionStatus.TIMEOUT,
                     started_at=started_at,
                     error_message=error_msg
+                )
+                
+                # 记录到调度历史
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "task_id": task_id,
+                        "status": "timeout",
+                        "started_at": started_at.isoformat(),
+                        "error": error_msg
+                    }
                 )
                 
                 raise
@@ -105,14 +119,29 @@ def with_timeout(func: Callable):
                     error_message=str(e)
                 )
                 
+                # 记录到调度历史
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "task_id": task_id,
+                        "status": "failed",
+                        "started_at": started_at.isoformat(),
+                        "error": str(e)
+                    }
+                )
+                
                 raise
                 
             finally:
-                # 从Redis注销任务
-                await redis_timeout_store.unregister_task(task_id)
+                # 从Redis注销任务（使用新的服务）
+                await redis_services.timeout.remove_task(task_id)
+                
+                # 更新调度状态
+                if config_id:
+                    status = "idle"  # 任务完成后设置为空闲
+                    await redis_services.history.update_status(config_id, status)
     
     return wrapper
-
 
 async def _get_timeout_seconds(db: AsyncSession, config_id: Optional[int]) -> Optional[int]:
     """获取任务超时配置"""
@@ -125,7 +154,6 @@ async def _get_timeout_seconds(db: AsyncSession, config_id: Optional[int]) -> Op
     except Exception as e:
         logger.warning(f"获取超时配置失败: {e}")
         return None
-
 
 async def _update_task_status(
     db: AsyncSession,

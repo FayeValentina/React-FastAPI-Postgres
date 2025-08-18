@@ -8,25 +8,13 @@ from datetime import datetime
 import asyncio
 
 from app.broker import broker
-from app.scheduler import (
-    scheduler, 
-    register_scheduled_task,
-    unregister_scheduled_task,
-    update_scheduled_task,
-    get_scheduled_tasks,
-    pause_scheduled_task,
-    resume_scheduled_task,
-    initialize_scheduler as init_scheduler,
-    shutdown_scheduler
-)
+from app.core.redis_manager import redis_services  # 使用新的Redis服务管理器
 from app.db.base import AsyncSessionLocal
 from app.models.task_config import TaskConfig
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
-from app.crud.schedule_event import crud_schedule_event
 from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
-from app.models.schedule_event import ScheduleEventType
 from app.models.task_execution import TaskExecution, ExecutionStatus
 import uuid
 
@@ -38,7 +26,6 @@ class TaskManager:
     
     def __init__(self):
         self.broker = broker
-        self.scheduler = scheduler
         self._initialized = False
         self._active_tasks = {}  # 缓存活跃任务
     
@@ -48,10 +35,8 @@ class TaskManager:
             return
         
         try:
-            # 初始化调度器
-            await init_scheduler()
-            
-            # 标记为已初始化
+            # 注意：调度器的初始化已经在main.py中通过redis_services.initialize()完成
+            # 这里只需要标记初始化完成
             self._initialized = True
             logger.info("任务管理器初始化完成")
             
@@ -62,7 +47,7 @@ class TaskManager:
     async def shutdown(self):
         """关闭任务管理器"""
         try:
-            await shutdown_scheduler()
+            # 注意：Redis服务的关闭在main.py中统一处理
             self._initialized = False
             logger.info("任务管理器已关闭")
         except Exception as e:
@@ -79,15 +64,18 @@ class TaskManager:
                 # 如果是调度任务且状态为活跃，注册到调度器
                 if (config.scheduler_type != SchedulerType.MANUAL and 
                     config.status == ConfigStatus.ACTIVE):
-                    await register_scheduled_task(config)
+                    # 使用新的Redis调度器服务
+                    await redis_services.scheduler.register_task(config)
                     
-                    # 记录调度事件
-                    await crud_schedule_event.create(
-                        db=db,
+                    # 记录调度事件到Redis历史
+                    await redis_services.history.add_history_event(
                         config_id=config.id,
-                        job_id=f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}",
-                        job_name=config.name,
-                        event_type=ScheduleEventType.SCHEDULED
+                        event_data={
+                            "event": "task_scheduled",
+                            "job_id": f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}",
+                            "job_name": config.name,
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
                     )
                 
                 logger.info(f"已创建任务配置: {config.id} - {config.name}")
@@ -111,7 +99,16 @@ class TaskManager:
                 
                 # 更新调度器中的任务
                 if updated_config.scheduler_type != SchedulerType.MANUAL:
-                    await update_scheduled_task(updated_config)
+                    await redis_services.scheduler.update_task(updated_config)
+                    
+                    # 记录更新事件
+                    await redis_services.history.add_history_event(
+                        config_id=config_id,
+                        event_data={
+                            "event": "task_updated",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
+                    )
                 
                 logger.info(f"已更新任务配置: {config_id}")
                 return True
@@ -125,12 +122,20 @@ class TaskManager:
         async with AsyncSessionLocal() as db:
             try:
                 # 先从调度器中移除
-                await unregister_scheduled_task(config_id)
+                await redis_services.scheduler.unregister_task(config_id)
                 
                 # 从数据库删除
                 success = await crud_task_config.delete(db, config_id)
                 
                 if success:
+                    # 记录删除事件
+                    await redis_services.history.add_history_event(
+                        config_id=config_id,
+                        event_data={
+                            "event": "task_deleted",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
+                    )
                     logger.info(f"已删除任务配置: {config_id}")
                     
                 return success
@@ -155,6 +160,10 @@ class TaskManager:
                 # 合并参数
                 task_params = {**(config.parameters or {}), **kwargs}
                 
+                # 生成任务ID
+                task_id = str(uuid.uuid4())
+                task_params['task_id'] = task_id  # 传递task_id给任务函数
+                
                 # 发送任务到队列
                 task = await task_func.kiq(config_id, **task_params)
                 
@@ -167,21 +176,44 @@ class TaskManager:
                     started_at=datetime.utcnow()
                 )
                 
-                # 注册到超时监控器
+                # 注册到超时监控器（使用新的Redis服务）
                 if config.timeout_seconds:
-                    from app.core.redis_timeout_store import redis_timeout_store
-                    redis_timeout_store.register_task(
-                        task.task_id, 
-                        config_id, 
-                        config.timeout_seconds, 
-                        execution.started_at
+                    await redis_services.timeout.add_task(
+                        task_id=task.task_id,
+                        config_id=config_id,
+                        timeout_seconds=config.timeout_seconds,
+                        started_at=execution.started_at
                     )
+                
+                # 记录执行事件
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "event": "task_executed",
+                        "task_id": task.task_id,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+                
+                # 更新状态
+                await redis_services.history.update_status(config_id, "running")
                 
                 logger.info(f"已立即执行任务 {config_id}，任务ID: {task.task_id}")
                 return task.task_id
                 
             except Exception as e:
                 logger.error(f"立即执行任务失败: {e}")
+                
+                # 记录失败事件
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "event": "task_execution_failed",
+                        "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+                
                 return None
     
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
@@ -217,6 +249,11 @@ class TaskManager:
                             result={"return_value": result.return_value} if result.is_err is False else None,
                             error_message=str(result.error) if result.is_err else None
                         )
+                        
+                        # 更新Redis中的状态
+                        if execution.config_id:
+                            status = "success" if result.is_err is False else "failed"
+                            await redis_services.history.update_status(execution.config_id, status)
                 
                 return status_info
             else:
@@ -277,50 +314,55 @@ class TaskManager:
                 if action == "start":
                     # 启动任务调度
                     if config.scheduler_type != SchedulerType.MANUAL:
-                        success = await register_scheduled_task(config)
+                        success = await redis_services.scheduler.register_task(config)
                         new_status = ConfigStatus.ACTIVE if success else ConfigStatus.ERROR
                     
                 elif action == "stop":
                     # 停止任务调度
-                    success = await unregister_scheduled_task(config_id)
+                    success = await redis_services.scheduler.unregister_task(config_id)
                     new_status = ConfigStatus.INACTIVE if success else ConfigStatus.ERROR
                     
                 elif action == "pause":
                     # 暂停任务调度
-                    success = await pause_scheduled_task(config_id)
+                    success = await redis_services.scheduler.pause_task(config_id)
                     new_status = ConfigStatus.PAUSED if success else ConfigStatus.ERROR
                     
                 elif action == "resume":
                     # 恢复任务调度
-                    success = await resume_scheduled_task(config)
+                    success = await redis_services.scheduler.resume_task(config)
                     new_status = ConfigStatus.ACTIVE if success else ConfigStatus.ERROR
                     
                 elif action == "reload":
                     # 重新加载任务调度
-                    success = await update_scheduled_task(config)
+                    success = await redis_services.scheduler.update_task(config)
                     new_status = ConfigStatus.ACTIVE if success else ConfigStatus.ERROR
                 
                 # 更新数据库状态
                 if new_status != config.status:
                     await crud_task_config.update_status(db, config_id, new_status)
                 
-                # 记录调度事件
+                # 记录调度事件到Redis
                 event_type_map = {
-                    "start": ScheduleEventType.SCHEDULED,
-                    "stop": ScheduleEventType.PAUSED,
-                    "pause": ScheduleEventType.PAUSED,
-                    "resume": ScheduleEventType.RESUMED,
-                    "reload": ScheduleEventType.SCHEDULED
+                    "start": "task_started",
+                    "stop": "task_stopped",
+                    "pause": "task_paused",
+                    "resume": "task_resumed",
+                    "reload": "task_reloaded"
                 }
                 
-                await crud_schedule_event.create(
-                    db=db,
+                await redis_services.history.add_history_event(
                     config_id=config_id,
-                    job_id=f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}",
-                    job_name=config.name,
-                    event_type=event_type_map.get(action, ScheduleEventType.EXECUTED),
-                    result={"action": action, "success": success}
+                    event_data={
+                        "event": event_type_map.get(action, "task_action"),
+                        "action": action,
+                        "success": success,
+                        "new_status": new_status.value,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
                 )
+                
+                # 更新Redis中的状态
+                await redis_services.history.update_status(config_id, new_status.value)
                 
                 return {
                     "success": success,
@@ -332,6 +374,18 @@ class TaskManager:
                 
             except Exception as e:
                 logger.error(f"管理调度任务失败 {config_id}: {e}")
+                
+                # 记录错误事件
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "event": "task_action_failed",
+                        "action": action,
+                        "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+                
                 return {
                     "success": False,
                     "message": f"操作失败: {str(e)}",
@@ -354,7 +408,7 @@ class TaskManager:
                 
                 # 获取任务配置以获取队列信息
                 config = await crud_task_config.get(db, e.config_id)
-                queue_name = TaskRegistry.DEFAULT_QUEUE  # 默认队列
+                queue_name = TaskRegistry.DEFAULT_QUEUE
                 
                 if config and config.task_type:
                     try:
@@ -381,11 +435,8 @@ class TaskManager:
             # 检查 result backend (Redis) 连接
             if self.broker.result_backend:
                 test_task_id = "connection_test_" + str(datetime.utcnow().timestamp())
-                # 这里只是检查Redis连接，如果成功说明至少result backend可用
                 await self.broker.result_backend.is_result_ready(test_task_id)
             
-            # 检查broker本身是否可用（这里返回True表示基本配置正常）
-            # 注意：真正的连接检查需要worker运行时才能确定
             return True
             
         except Exception as e:
@@ -395,7 +446,8 @@ class TaskManager:
     async def _get_scheduled_jobs_count(self) -> int:
         """获取已调度的任务数量"""
         try:
-            tasks = await get_scheduled_tasks()
+            # 使用新的Redis调度器服务
+            tasks = await redis_services.scheduler.get_all_schedules()
             return len(tasks)
         except Exception as e:
             logger.warning(f"获取调度任务数量失败: {e}")
@@ -413,6 +465,17 @@ class TaskManager:
             async with AsyncSessionLocal() as db:
                 stats = await crud_task_config.get_stats(db)
             
+            # 从Redis获取最近的调度历史（可选）
+            recent_history = []
+            try:
+                # 获取最近的调度事件
+                for config_id in range(1, min(6, stats.get("total_configs", 0) + 1)):
+                    history = await redis_services.history.get_history(config_id, limit=1)
+                    if history:
+                        recent_history.extend(history)
+            except:
+                pass  # 历史记录是可选的
+            
             return {
                 "broker_connected": broker_connected,
                 "scheduler_running": self._initialized,
@@ -423,20 +486,23 @@ class TaskManager:
                 "timestamp": datetime.utcnow().isoformat(),
                 "scheduler": {
                     "initialized": self._initialized,
-                    "scheduled_tasks": scheduled_count
+                    "scheduled_tasks": scheduled_count,
+                    "redis_connected": redis_services.scheduler._initialized
                 },
                 "worker": {
                     "broker_connected": broker_connected,
                     "active_tasks": len(active_tasks)
                 },
                 "queues": {
-                    TaskRegistry.DEFAULT_QUEUE: {"status": TaskRegistry.QUEUE_STATUS_ACTIVE if broker_connected else TaskRegistry.QUEUE_STATUS_DISCONNECTED}
-                }
+                    TaskRegistry.DEFAULT_QUEUE: {
+                        "status": TaskRegistry.QUEUE_STATUS_ACTIVE if broker_connected else TaskRegistry.QUEUE_STATUS_DISCONNECTED
+                    }
+                },
+                "recent_events": recent_history[:5]  # 最近5个事件
             }
             
         except Exception as e:
             logger.error(f"获取系统状态失败: {e}")
-            # 返回符合schema的完整结构
             return {
                 "broker_connected": False,
                 "scheduler_running": False,
@@ -480,7 +546,7 @@ class TaskManager:
             
             # 验证调度器中的状态
             if verify_scheduler_status:
-                scheduled_tasks = await get_scheduled_tasks()
+                scheduled_tasks = await redis_services.scheduler.get_all_schedules()
                 task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}"
                 is_scheduled = any(t.get("task_id") == task_id for t in scheduled_tasks)
                 result['scheduler_status'] = "scheduled" if is_scheduled else "not_scheduled"
@@ -489,6 +555,10 @@ class TaskManager:
             if include_stats:
                 stats = await crud_task_config.get_execution_stats(db, config_id)
                 result["stats"] = stats
+                
+                # 从Redis获取最近的历史记录
+                history = await redis_services.history.get_history(config_id, limit=10)
+                result["recent_history"] = history
             
             return result
     
@@ -511,15 +581,11 @@ class TaskManager:
                     'schedule_config': c.schedule_config or {},
                     'priority': c.priority,
                     'created_at': c.created_at.isoformat() if c.created_at else None,
-                    
-                    # 添加缺少的必需字段
                     'max_retries': c.max_retries or 0,
                     'timeout_seconds': c.timeout_seconds,
                     'updated_at': c.updated_at.isoformat() if c.updated_at else None,
-                    
-                    # 添加可选字段（设为None，符合schema定义）
-                    'scheduler_status': None,  # 在列表视图中不包含调度器状态（性能考虑）
-                    'stats': None  # 在列表视图中不包含统计信息（性能考虑）
+                    'scheduler_status': None,
+                    'stats': None
                 }
                 results.append(config_dict)
             return results
@@ -529,7 +595,7 @@ class TaskManager:
         """记录任务执行结果到数据库"""
         execution = TaskExecution(
             config_id=config_id,
-            task_id=str(uuid.uuid4()),  # 生成唯一的task_id
+            task_id=str(uuid.uuid4()),
             status=status,
             started_at=datetime.utcnow(),
             completed_at=datetime.utcnow(),
@@ -538,6 +604,17 @@ class TaskManager:
         )
         db.add(execution)
         await db.commit()
+        
+        # 记录到Redis历史
+        await redis_services.history.add_history_event(
+            config_id=config_id or 0,
+            event_data={
+                "event": "task_execution_recorded",
+                "task_id": execution.task_id,
+                "status": status,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
 
 
 # 全局任务管理器实例

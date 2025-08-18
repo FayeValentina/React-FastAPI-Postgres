@@ -19,7 +19,6 @@ class TaskType(str, PyEnum):
     # === 清理相关任务 ===
     CLEANUP_TOKENS = "cleanup_tokens"
     CLEANUP_CONTENT = "cleanup_content"
-    CLEANUP_EVENTS = "cleanup_events"
     
     # === 通知相关任务 ===
     SEND_EMAIL = "send_email"
@@ -107,7 +106,6 @@ class TaskRegistry:
         # 清理任务
         TaskType.CLEANUP_TOKENS: 'cleanup_expired_tokens_task',
         TaskType.CLEANUP_CONTENT: 'cleanup_old_content_task',
-        TaskType.CLEANUP_EVENTS: 'cleanup_schedule_events_task',
         
         # 通知任务
         TaskType.SEND_EMAIL: 'send_email_task',
@@ -133,7 +131,6 @@ class TaskRegistry:
         TaskType.BATCH_SCRAPING: 'scraping',
         TaskType.CLEANUP_TOKENS: 'cleanup',
         TaskType.CLEANUP_CONTENT: 'cleanup',
-        TaskType.CLEANUP_EVENTS: 'cleanup',
         TaskType.SEND_EMAIL: 'default',
         TaskType.SEND_NOTIFICATION: 'default',
         TaskType.DATA_EXPORT: 'default',
@@ -156,7 +153,6 @@ class TaskRegistry:
         # 清理任务
         TaskType.CLEANUP_TOKENS: 'cleanup_tok',
         TaskType.CLEANUP_CONTENT: 'cleanup_cnt',
-        TaskType.CLEANUP_EVENTS: 'cleanup_evt',
         
         # 通知任务
         TaskType.SEND_EMAIL: 'email',
@@ -294,7 +290,6 @@ def _load_task_functions():
     _task_function_cache = {
         TaskType.CLEANUP_TOKENS: cleanup_tasks.cleanup_expired_tokens,
         TaskType.CLEANUP_CONTENT: cleanup_tasks.cleanup_old_content,
-        TaskType.CLEANUP_EVENTS: cleanup_tasks.cleanup_schedule_events,
         TaskType.SEND_EMAIL: notification_tasks.send_email,
         TaskType.DATA_EXPORT: data_tasks.export_data,
         TaskType.DATA_BACKUP: data_tasks.backup_data,
