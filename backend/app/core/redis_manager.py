@@ -3,7 +3,7 @@ from app.redis.auth_redis import AuthRedisService
 from app.redis.cache_redis import CacheRedisService
 from app.redis.schedule_history_redis import ScheduleHistoryRedisService
 from app.redis.scheduler_redis import SchedulerRedisService
-from app.redis.timeout_redis import TimeoutRedisService
+# from app.redis.timeout_redis import TimeoutRedisService  # 移除，使用TaskIQ原生超时
 from app.core.redis_pool import redis_connection_manager
 
 class RedisServiceManager:
@@ -14,7 +14,7 @@ class RedisServiceManager:
         self.cache = CacheRedisService()
         self.history = ScheduleHistoryRedisService()
         self.scheduler = SchedulerRedisService()
-        self.timeout = TimeoutRedisService()
+        # self.timeout = TimeoutRedisService()  # 移除，使用TaskIQ原生超时
         self._connection_manager = redis_connection_manager
     
     async def initialize(self):

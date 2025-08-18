@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Path
 from typing import Annotated, Any, Dict, List, Optional
 from datetime import datetime
+import asyncio
 
 from app.models.user import User
 from app.dependencies.current_user import get_current_superuser, get_current_active_user
@@ -212,6 +213,7 @@ async def batch_operations(
     config_ids: Optional[List[int]] = Body(None, description="Config IDs for delete/execute"),
     task_ids: Optional[List[str]] = Body(None, description="Task IDs for revoke"),
     task_type: Optional[str] = Body(None, description="Task type for execute-by-type"),
+    timeout_seconds: Optional[int] = Body(default=None, description="Task timeout in seconds for execute operations"),
     options: Optional[Dict[str, Any]] = Body(default={}, description="Additional options"),
     page_size: Optional[int] = Body(1000, description="Page size for execute-by-type"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -230,6 +232,7 @@ async def batch_operations(
         - config_ids: Configuration IDs for delete/execute operations
         - task_ids: Task IDs for revoke operation
         - task_type: Task type for execute-by-type operation
+        - timeout_seconds: Optional timeout in seconds for execute operations
         - options: Additional options specific to each operation
           - For delete: {"force": true/false} - Force delete even if task is running
           - For revoke: {"terminate": true/false} - Terminate running tasks
@@ -285,11 +288,13 @@ async def batch_operations(
         
         for config_id in config_ids:
             try:
-                task_id = await task_manager.execute_task_immediately(config_id, **options)
+                task_id = await task_manager.execute_task_immediately(config_id, timeout_seconds=timeout_seconds, **options)
                 if task_id:
                     task_ids_result.append(task_id)
                 else:
                     failed.append({"id": config_id, "error": "Failed to execute"})
+            except asyncio.TimeoutError as e:
+                failed.append({"id": config_id, "error": f"Task execution timeout: {str(e)}", "type": "timeout"})
             except Exception as e:
                 failed.append({"id": config_id, "error": str(e)})
         
@@ -369,11 +374,13 @@ async def batch_operations(
         
         for config in configs:
             try:
-                task_id = await task_manager.execute_task_immediately(config["id"], **options)
+                task_id = await task_manager.execute_task_immediately(config["id"], timeout_seconds=timeout_seconds, **options)
                 if task_id:
                     task_ids_result.append(task_id)
                 else:
                     failed.append({"id": config["id"], "error": "Failed to execute"})
+            except asyncio.TimeoutError as e:
+                failed.append({"id": config["id"], "error": f"Task execution timeout: {str(e)}", "type": "timeout"})
             except Exception as e:
                 failed.append({"id": config["id"], "error": str(e)})
         
@@ -494,6 +501,7 @@ async def get_scheduled_jobs(
 @router.post("/configs/{config_id}/execute", response_model=TaskExecutionResult)
 async def execute_task_immediately(
     config_id: int = Path(..., description="Task configuration ID"),
+    timeout_seconds: Optional[int] = Body(default=None, description="Task timeout in seconds"),
     options: Dict[str, Any] = Body(default={}, description="Execution options"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -502,6 +510,7 @@ async def execute_task_immediately(
     
     Parameters:
         - config_id: Task configuration ID
+        - timeout_seconds: Optional timeout in seconds (overrides config timeout)
         - options: Execution options (additional parameters)
     """
     # 获取任务配置信息以补充响应字段
@@ -509,7 +518,7 @@ async def execute_task_immediately(
     if not config:
         raise HTTPException(status_code=404, detail="Task configuration not found")
     
-    task_id = await task_manager.execute_task_immediately(config_id, **options)
+    task_id = await task_manager.execute_task_immediately(config_id, timeout_seconds=timeout_seconds, **options)
     if not task_id:
         raise HTTPException(status_code=400, detail="Failed to execute task")
     
@@ -535,6 +544,7 @@ async def execute_task_by_type(
     task_type: str = Body(..., description="Task type"),
     task_params: Dict[str, Any] = Body(default={}, description="Task parameters"),
     queue: str = Body(default=TaskRegistry.DEFAULT_QUEUE, description="Queue name"),
+    timeout_seconds: Optional[int] = Body(default=None, description="Task timeout in seconds"),
     options: Dict[str, Any] = Body(default={}, description="Execution options"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -545,6 +555,7 @@ async def execute_task_by_type(
         - task_type: TaskType enum value
         - task_params: Parameters for the task
         - queue: Queue to submit the task to
+        - timeout_seconds: Optional timeout in seconds (uses TaskIQ's timeout)
         - options: Additional execution options
     """
     # Validate task type
@@ -567,7 +578,14 @@ async def execute_task_by_type(
             "config_id": None,  # Default for direct execution
             **task_params  # User params override defaults
         }
-        task = await task_func.kiq(**task_params_with_defaults, **options)
+        # Prepare task submission with optional timeout
+        task_submission = task_func.kiq(**task_params_with_defaults, **options)
+        
+        # Add timeout if specified
+        if timeout_seconds:
+            task_submission = task_submission.with_labels(timeout=timeout_seconds)
+        
+        task = await task_submission
         
         # Create a task execution record
         async with AsyncSessionLocal() as db:
@@ -587,6 +605,29 @@ async def execute_task_by_type(
             "queue": queue,
             "message": f"Task {task_type} submitted for execution"
         }
+    except asyncio.TimeoutError as e:
+        # 处理任务超时
+        error_msg = f"Task {task_type} execution timeout: {str(e)}"
+        
+        # 如果任务已经创建，更新其状态
+        if 'task' in locals():
+            async with AsyncSessionLocal() as db:
+                try:
+                    from app.models.task_execution import ExecutionStatus
+                    execution = await crud_task_execution.get_by_task_id(db, task.task_id)
+                    if execution:
+                        await crud_task_execution.update_status(
+                            db=db,
+                            execution_id=execution.id,
+                            status=ExecutionStatus.TIMEOUT,
+                            completed_at=datetime.utcnow(),
+                            error_message=error_msg
+                        )
+                except Exception as inner_e:
+                    pass  # 静默失败，不影响主要错误返回
+        
+        raise HTTPException(status_code=408, detail=error_msg)
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute task: {str(e)}")
 

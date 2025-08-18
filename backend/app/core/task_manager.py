@@ -144,7 +144,7 @@ class TaskManager:
                 logger.error(f"删除任务配置失败: {e}")
                 return False
     
-    async def execute_task_immediately(self, config_id: int, **kwargs) -> Optional[str]:
+    async def execute_task_immediately(self, config_id: int, timeout_seconds: Optional[int] = None, **kwargs) -> Optional[str]:
         """立即执行任务"""
         async with AsyncSessionLocal() as db:
             try:
@@ -164,8 +164,15 @@ class TaskManager:
                 task_id = str(uuid.uuid4())
                 task_params['task_id'] = task_id  # 传递task_id给任务函数
                 
-                # 发送任务到队列
-                task = await task_func.kiq(config_id, **task_params)
+                # 发送任务到队列，使用TaskIQ的原生超时支持
+                task_submission = task_func.kiq(config_id, **task_params)
+                
+                # 使用传入的超时参数或配置中的超时参数
+                effective_timeout = timeout_seconds or config.timeout_seconds
+                if effective_timeout:
+                    task_submission = task_submission.with_labels(timeout=effective_timeout)
+                
+                task = await task_submission
                 
                 # 记录任务执行
                 execution = await crud_task_execution.create(
@@ -176,14 +183,7 @@ class TaskManager:
                     started_at=datetime.utcnow()
                 )
                 
-                # 注册到超时监控器（使用新的Redis服务）
-                if config.timeout_seconds:
-                    await redis_services.timeout.add_task(
-                        task_id=task.task_id,
-                        config_id=config_id,
-                        timeout_seconds=config.timeout_seconds,
-                        started_at=execution.started_at
-                    )
+                # TaskIQ现在自动处理超时，不需要手动监控
                 
                 # 记录执行事件
                 await redis_services.history.add_history_event(
@@ -200,6 +200,46 @@ class TaskManager:
                 
                 logger.info(f"已立即执行任务 {config_id}，任务ID: {task.task_id}")
                 return task.task_id
+                
+            except asyncio.TimeoutError as e:
+                logger.error(f"任务执行超时 {config_id}: {e}")
+                
+                # 尝试更新任务状态为超时
+                try:
+                    if 'task' in locals():
+                        execution = await crud_task_execution.get_by_task_id(db, task.task_id)
+                        if execution:
+                            await crud_task_execution.update_status(
+                                db=db,
+                                execution_id=execution.id,
+                                status=ExecutionStatus.TIMEOUT,
+                                completed_at=datetime.utcnow(),
+                                error_message=f"任务执行超时: {str(e)}"
+                            )
+                    else:
+                        # 如果任务还没有记录到数据库，创建一个超时记录
+                        await crud_task_execution.create(
+                            db=db,
+                            config_id=config_id,
+                            task_id=task_id,  # 使用生成的task_id
+                            status=ExecutionStatus.TIMEOUT,
+                            started_at=datetime.utcnow(),
+                            completed_at=datetime.utcnow(),
+                            error_message=f"任务提交后立即超时: {str(e)}"
+                        )
+                except Exception as inner_e:
+                    logger.error(f"更新超时状态时出错: {inner_e}")
+                
+                # 记录超时事件
+                await redis_services.history.add_history_event(
+                    config_id=config_id,
+                    event_data={
+                        "event": "task_execution_timeout",
+                        "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+                return None
                 
             except Exception as e:
                 logger.error(f"立即执行任务失败: {e}")
