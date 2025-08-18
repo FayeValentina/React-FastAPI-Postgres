@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
-    from .token import RefreshToken
     from .password_reset import PasswordReset
 
 class User(Base):
@@ -28,7 +27,6 @@ class User(Base):
     )
 
     # 关联关系
-    refresh_tokens: Mapped[List["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     password_resets: Mapped[List["PasswordReset"]] = relationship(
         "PasswordReset", back_populates="user", cascade="all, delete-orphan"
     )

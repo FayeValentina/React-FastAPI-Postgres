@@ -8,6 +8,9 @@ from sqlalchemy import pool
 from alembic import context
 from dotenv import load_dotenv
 
+# 导入枚举自动生成支持
+import alembic_autogenerate_enums
+
 # 加载 .env 文件（如果存在）
 # 在 Docker 环境中，环境变量已通过 docker-compose 传递，不需要加载 .env 文件
 if os.path.exists('.env'):
@@ -19,7 +22,7 @@ sys.path.append(current_dir)
 
 # 导入你的 SQLAlchemy 模型
 from app.db.base import Base
-from app.models import User
+from app.models import *
 from app.core.config import settings
 
 # this is the Alembic Config object

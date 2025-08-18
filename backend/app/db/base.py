@@ -6,10 +6,8 @@ from app.db.base_class import Base
 
 # Import all models here for Alembic
 from app.models.user import User
-from app.models.token import RefreshToken
 from app.models.password_reset import PasswordReset
 from app.models.task_execution import TaskExecution
-from app.models.schedule_event import ScheduleEvent
 from app.models.task_config import TaskConfig
 
 # 主应用使用的引擎（用于 Web 服务器）
@@ -46,10 +44,8 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 __all__ = [
     "Base", 
     "User", 
-    "RefreshToken", 
     "PasswordReset",
     "TaskExecution",
-    "ScheduleEvent",
     "TaskConfig"
 ]
 

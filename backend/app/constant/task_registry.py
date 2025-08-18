@@ -19,7 +19,6 @@ class TaskType(str, PyEnum):
     # === 清理相关任务 ===
     CLEANUP_TOKENS = "cleanup_tokens"
     CLEANUP_CONTENT = "cleanup_content"
-    CLEANUP_EVENTS = "cleanup_events"
     
     # === 通知相关任务 ===
     SEND_EMAIL = "send_email"
@@ -34,6 +33,8 @@ class TaskType(str, PyEnum):
     HEALTH_CHECK = "health_check"
     SYSTEM_MONITOR = "system_monitor"
     LOG_ROTATION = "log_rotation"
+    TIMEOUT_MONITOR = "timeout_monitor"
+    CLEANUP_TIMEOUT_TASKS = "cleanup_timeout_tasks"
 
 
 class ConfigStatus(str, PyEnum):
@@ -105,7 +106,6 @@ class TaskRegistry:
         # 清理任务
         TaskType.CLEANUP_TOKENS: 'cleanup_expired_tokens_task',
         TaskType.CLEANUP_CONTENT: 'cleanup_old_content_task',
-        TaskType.CLEANUP_EVENTS: 'cleanup_schedule_events_task',
         
         # 通知任务
         TaskType.SEND_EMAIL: 'send_email_task',
@@ -120,6 +120,8 @@ class TaskRegistry:
         TaskType.HEALTH_CHECK: 'health_check_task',
         TaskType.SYSTEM_MONITOR: 'system_monitor_task',
         TaskType.LOG_ROTATION: 'log_rotation_task',
+        TaskType.TIMEOUT_MONITOR: 'timeout_monitor',
+        TaskType.CLEANUP_TIMEOUT_TASKS: 'cleanup_timeout_tasks',
     }
     
     # 任务队列映射
@@ -129,7 +131,6 @@ class TaskRegistry:
         TaskType.BATCH_SCRAPING: 'scraping',
         TaskType.CLEANUP_TOKENS: 'cleanup',
         TaskType.CLEANUP_CONTENT: 'cleanup',
-        TaskType.CLEANUP_EVENTS: 'cleanup',
         TaskType.SEND_EMAIL: 'default',
         TaskType.SEND_NOTIFICATION: 'default',
         TaskType.DATA_EXPORT: 'default',
@@ -138,6 +139,8 @@ class TaskRegistry:
         TaskType.HEALTH_CHECK: 'default',
         TaskType.SYSTEM_MONITOR: 'default',
         TaskType.LOG_ROTATION: 'default',
+        TaskType.TIMEOUT_MONITOR: 'monitor',
+        TaskType.CLEANUP_TIMEOUT_TASKS: 'cleanup',
     }
     
     # 任务类型缩写映射
@@ -150,7 +153,6 @@ class TaskRegistry:
         # 清理任务
         TaskType.CLEANUP_TOKENS: 'cleanup_tok',
         TaskType.CLEANUP_CONTENT: 'cleanup_cnt',
-        TaskType.CLEANUP_EVENTS: 'cleanup_evt',
         
         # 通知任务
         TaskType.SEND_EMAIL: 'email',
@@ -165,6 +167,8 @@ class TaskRegistry:
         TaskType.HEALTH_CHECK: 'health',
         TaskType.SYSTEM_MONITOR: 'monitor',
         TaskType.LOG_ROTATION: 'logrot',
+        TaskType.TIMEOUT_MONITOR: 'timeout_mon',
+        TaskType.CLEANUP_TIMEOUT_TASKS: 'cleanup_timeout',
     }
     
     # 调度类型缩写映射
@@ -280,16 +284,17 @@ def _load_task_functions():
     global _task_function_cache
     
     # 动态导入避免循环导入
-    from app.tasks import cleanup_tasks, notification_tasks, data_tasks
+    from app.tasks import cleanup_tasks, notification_tasks, data_tasks, timeout_monitor_task
     
     # 构建任务函数映射
     _task_function_cache = {
         TaskType.CLEANUP_TOKENS: cleanup_tasks.cleanup_expired_tokens,
         TaskType.CLEANUP_CONTENT: cleanup_tasks.cleanup_old_content,
-        TaskType.CLEANUP_EVENTS: cleanup_tasks.cleanup_schedule_events,
         TaskType.SEND_EMAIL: notification_tasks.send_email,
         TaskType.DATA_EXPORT: data_tasks.export_data,
         TaskType.DATA_BACKUP: data_tasks.backup_data,
+        TaskType.TIMEOUT_MONITOR: timeout_monitor_task.timeout_monitor_task,
+        TaskType.CLEANUP_TIMEOUT_TASKS: timeout_monitor_task.cleanup_timeout_monitor_task,
         # 为将来的任务类型预留
         # TaskType.BOT_SCRAPING: scraping_tasks.bot_scraping,
         # TaskType.MANUAL_SCRAPING: scraping_tasks.manual_scraping,

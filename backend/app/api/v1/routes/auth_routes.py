@@ -13,8 +13,8 @@ from app.schemas.password_reset import (
 from app.core.config import settings
 from app.core.security import verify_password, create_token_pair, verify_token, get_password_hash
 from app.crud.user import crud_user
-from app.crud.token import crud_refresh_token
 from app.crud.password_reset import crud_password_reset
+from app.core.redis_manager import redis_services
 from app.services.email_service import email_service
 from app.db.base import get_async_session
 from app.schemas.token import Token, RefreshTokenRequest, TokenRevocationRequest
@@ -56,16 +56,13 @@ async def login(
         )
         
         # 在创建新令牌前，先吊销该用户的所有现有刷新令牌
-        await crud_refresh_token.revoke_all_for_user(db, user_id=user.id)
+        await redis_services.auth.revoke_all_user_tokens(user.id)
         
-        # 将刷新令牌存储到数据库
-        await crud_refresh_token.create(
-            db=db,
+        # 将刷新令牌存储到Redis而不是数据库
+        await redis_services.auth.store_refresh_token(
             token=refresh_token,
             user_id=user.id,
-            expires_in_days=settings.security.REFRESH_TOKEN_EXPIRE_DAYS,  # 使用配置的过期天数
-            user_agent=request.headers.get("user-agent"),
-            ip_address=request.client.host if request.client else None
+            expires_in_days=settings.security.REFRESH_TOKEN_EXPIRE_DAYS
         )
         
         return Token(
@@ -106,29 +103,26 @@ async def refresh_token(
         if payload.get("type") != "refresh_token":
             raise InvalidRefreshTokenError("无效的令牌类型")
         
-        # 检查刷新令牌是否在数据库中存在且有效
-        token_record = await crud_refresh_token.get_by_token(db, token=refresh_data.refresh_token)
-        if not token_record or not token_record.is_valid or token_record.is_expired:
+        # 从Redis检查刷新令牌是否存在
+        token_data = await redis_services.auth.get_refresh_token_payload(refresh_data.refresh_token)
+        if not token_data:
             raise InvalidRefreshTokenError()
         
         # 提取用户标识
-        subject = payload.get("sub")
-        if not subject:
+        user_id = token_data.get("user_id")
+        if not user_id:
             raise InvalidRefreshTokenError("令牌缺少用户标识")
         
         # 吊销当前使用的刷新令牌
-        await crud_refresh_token.revoke(db, token=refresh_data.refresh_token)
+        await redis_services.auth.revoke_token(refresh_data.refresh_token)
         
-        # 创建新的令牌对（旧刷新令牌已被吊销，确保用户只有一个有效的刷新令牌）
-        access_token, new_refresh_token, expires_at = create_token_pair(subject=subject)
+        # 创建新的令牌对
+        access_token, new_refresh_token, expires_at = create_token_pair(subject=str(user_id))
         
-        # 存储新的刷新令牌
-        await crud_refresh_token.create(
-            db=db,
+        # 存储新的刷新令牌到Redis
+        await redis_services.auth.store_refresh_token(
             token=new_refresh_token,
-            user_id=token_record.user_id,
-            user_agent=request.headers.get("user-agent"),
-            ip_address=request.client.host if request.client else None
+            user_id=user_id
         )
         
         return Token(
@@ -157,8 +151,8 @@ async def revoke_token(
         if revocation_data.token_type != "refresh_token":
             return
         
-        # 吊销指定的刷新令牌
-        await crud_refresh_token.revoke(db, token=revocation_data.token)
+        # 吊销指定的刷新令牌（使用Redis服务）
+        await redis_services.auth.revoke_token(revocation_data.token)
     except Exception as e:
         raise handle_error(e)
 
@@ -174,8 +168,8 @@ async def logout(
     此端点需要用户已通过JWT认证
     """
     try:
-        # 吊销用户的所有刷新令牌
-        await crud_refresh_token.revoke_all_for_user(db, user_id=current_user.id)
+        # 吊销用户的所有刷新令牌（从Redis）
+        await redis_services.auth.revoke_all_user_tokens(current_user.id)
     except Exception as e:
         raise handle_error(e)
 
@@ -286,8 +280,8 @@ async def reset_password(
         # 标记令牌为已使用
         await crud_password_reset.use_token(db, token=reset_data.token)
         
-        # 吊销用户的所有刷新令牌（强制重新登录）
-        await crud_refresh_token.revoke_all_for_user(db, user_id=user.id)
+        # 吊销用户的所有刷新令牌（强制重新登录）- 使用Redis服务
+        await redis_services.auth.revoke_all_user_tokens(user.id)
         
         await db.commit()
         await db.refresh(user)

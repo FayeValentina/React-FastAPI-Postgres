@@ -14,10 +14,10 @@ This project is a full-stack Reddit scraping application with a web-based manage
 
 ### Architecture
 
-The application follows a modern, decoupled architecture with a separate frontend and backend.
+The application follows a modern, decoupled architecture with a separate frontend and 
 
-*   **Backend**: The FastAPI backend provides a RESTful API for the frontend to consume. It handles user authentication, bot configuration, scraping session management, and data storage. It uses SQLAlchemy as the ORM for interacting with the PostgreSQL database and Alembic for database migrations. Background tasks, such as scraping, are managed using TaskIQ with RabbitMQ as the message broker and Redis as the result backend.
-*   **Frontend**: The React frontend provides a user interface for managing the scraping bots and viewing the scraped data. It uses Vite for the development server and build process. Material-UI is used for the UI components, and Zustand is used for state management. Axios is used for making API requests to the backend.
+*   **Backend**: The FastAPI backend provides a RESTful API for the frontend to consume. It handles user authentication, bot configuration, scraping session management, and data storage. It uses SQLAlchemy as the ORM for interacting with the PostgreSQL database and Alembic for database migrations. Background tasks, such as scraping, are managed using TaskIQ with RabbitMQ as the message broker and Redis as the result 
+*   **Frontend**: The React frontend provides a user interface for managing the scraping bots and viewing the scraped data. It uses Vite for the development server and build process. Material-UI is used for the UI components, and Zustand is used for state management. Axios is used for making API requests to the 
 *   **Database**: A PostgreSQL database is used to store all the application data, including user information, bot configurations, and scraped Reddit content. Redis is used for caching and as a result backend for TaskIQ.
 *   **Messaging**: RabbitMQ is used as a message broker to handle asynchronous tasks, such as starting and stopping scraping sessions.
 

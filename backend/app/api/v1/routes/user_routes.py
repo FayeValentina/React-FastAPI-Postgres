@@ -9,6 +9,7 @@ from app.schemas.user import (
 from app.crud.user import crud_user
 from app.db.base import get_async_session
 from app.models.user import User
+from app.core.redis_manager import redis_services
 from app.dependencies.current_user import (
     get_current_active_user,
     get_current_superuser
@@ -58,7 +59,12 @@ async def update_user(
         if not db_user:
             raise UserNotFoundError()
         
-        return await crud_user.update(db, db_obj=db_user, obj_in=user_update)
+        updated_user = await crud_user.update(db, db_obj=db_user, obj_in=user_update)
+        
+        # 更新后清除用户缓存
+        await redis_services.cache.invalidate_user_cache(user_id)
+        
+        return updated_user
     except Exception as e:
         raise handle_error(e)
 
@@ -182,6 +188,11 @@ async def delete_user(
         if current_user.id == user_id:
             raise ValueError("不能删除自己的账户")
             
-        return await crud_user.delete(db, id=user_id)
+        deleted_user = await crud_user.delete(db, id=user_id)
+        
+        # 删除后清除用户缓存
+        await redis_services.cache.invalidate_user_cache(user_id)
+        
+        return deleted_user
     except Exception as e:
         raise handle_error(e) 
