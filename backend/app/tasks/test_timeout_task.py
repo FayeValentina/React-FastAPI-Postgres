@@ -9,10 +9,12 @@ import logging
 from taskiq import Context, TaskiqDepends
 from app.broker import broker
 from app.core.task_decorators import with_timeout_handling
+from app.constant.task_registry import task
 
 logger = logging.getLogger(__name__)
 
 
+@task("TEST_TIMEOUT", queue="test")
 @broker.task(
     task_name="test_timeout_task",
     queue="test",
@@ -54,6 +56,7 @@ async def test_timeout_task(
     return result
 
 
+@task("TEST_FAILURE", queue="test")
 @broker.task(
     task_name="test_failure_task",
     queue="test",
@@ -94,6 +97,7 @@ async def test_failure_task(
     return {"status": "should_not_reach_here"}
 
 
+@task("TEST_SHORT_TIMEOUT", queue="test")
 @broker.task(
     task_name="test_short_timeout_task",
     queue="test",

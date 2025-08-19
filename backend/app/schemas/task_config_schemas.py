@@ -5,14 +5,14 @@ from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import ConfigStatus, SchedulerType
 
 
 class TaskConfigBase(BaseModel):
     """任务配置基础模型"""
     name: str = Field(..., description="任务名称", min_length=1, max_length=200)
     description: Optional[str] = Field(None, description="任务描述", max_length=500)
-    task_type: TaskType = Field(..., description="任务类型")
+    task_type: str = Field(..., description="任务类型")
     scheduler_type: SchedulerType = Field(..., description="调度器类型")
     status: ConfigStatus = Field(ConfigStatus.ACTIVE, description="任务状态")
     parameters: Dict[str, Any] = Field({}, description="任务参数(JSON)")
@@ -20,6 +20,13 @@ class TaskConfigBase(BaseModel):
     max_retries: int = Field(0, description="最大重试次数", ge=0, le=10)
     timeout_seconds: Optional[int] = Field(None, description="任务超时时间(秒)", gt=0)
     priority: int = Field(5, description="任务优先级(1-10)", ge=1, le=10)
+    
+    @validator('task_type')
+    def validate_task_type(cls, v):
+        from app.constant import task_registry as tr
+        if not tr.is_supported(v):
+            raise ValueError(f'不支持的任务类型: {v}')
+        return v
 
 
 class TaskConfigCreate(TaskConfigBase):
@@ -33,7 +40,7 @@ class TaskConfigCreate(TaskConfigBase):
             return v
         
         # 清理任务参数验证  
-        if task_type in [TaskType.CLEANUP_CONTENT]:
+        if task_type in ["CLEANUP_CONTENT"]:
             if 'days_old' not in v:
                 raise ValueError(f'{task_type}任务缺少必要参数: days_old')
             if not isinstance(v['days_old'], int) or v['days_old'] <= 0:
@@ -90,7 +97,7 @@ class TaskConfigResponse(TaskConfigBase):
 
 class TaskConfigQuery(BaseModel):
     """任务配置查询参数"""
-    task_type: Optional[TaskType] = Field(None, description="任务类型")
+    task_type: Optional[str] = Field(None, description="任务类型")
     status: Optional[ConfigStatus] = Field(None, description="任务状态")
     name_search: Optional[str] = Field(None, description="名称搜索", max_length=100)
     page: int = Field(1, description="页码", ge=1)

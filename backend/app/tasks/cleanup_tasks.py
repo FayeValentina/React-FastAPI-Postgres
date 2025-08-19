@@ -10,10 +10,12 @@ from app.db.base import AsyncSessionLocal
 from app.crud.password_reset import crud_password_reset
 from app.crud.reddit_content import crud_reddit_content
 from app.core.task_decorators import with_timeout_handling
+from app.constant.task_registry import task
 
 logger = logging.getLogger(__name__)
 
 
+@task("CLEANUP_TOKENS", queue="cleanup")
 @broker.task(
     task_name="cleanup_expired_tokens",
     queue="cleanup",
@@ -45,6 +47,7 @@ async def cleanup_expired_tokens(
         return result
 
 
+@task("CLEANUP_CONTENT", queue="cleanup")
 @broker.task(
     task_name="cleanup_old_content",
     queue="cleanup",

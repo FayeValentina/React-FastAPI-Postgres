@@ -25,7 +25,8 @@ from app.schemas.job_schemas import (
     ScheduleActionResponse
 )
 from app.core.task_manager import task_manager
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, ScheduleAction, TaskRegistry
+from app.constant.task_registry import ConfigStatus, SchedulerType, ScheduleAction
+from app.constant import task_registry as tr
 from app.db.base import AsyncSessionLocal
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
@@ -80,7 +81,7 @@ async def list_task_configs(
         - order_desc: Sort descending
     """
     query = TaskConfigQuery(
-        task_type=TaskType(task_type) if task_type else None,
+        task_type=task_type if task_type else None,
         status=ConfigStatus(status) if status else None,
         name_search=name_search,
         page=page,
@@ -358,7 +359,7 @@ async def batch_operations(
         
         # Get all active configs of this type
         query = TaskConfigQuery(
-            task_type=TaskType(task_type),
+            task_type=task_type,
             status=ConfigStatus.ACTIVE,
             page_size=page_size
         )
@@ -517,10 +518,10 @@ async def execute_task_immediately(
     
     # 获取队列信息
     try:
-        task_type_enum = TaskType(config['task_type'])
-        queue_name = TaskRegistry.get_queue_name(task_type_enum)
+        task_type_str = config['task_type']
+        queue_name = tr.get_queue(task_type_str)
     except Exception:
-        queue_name = TaskRegistry.DEFAULT_QUEUE
+        queue_name = "default"
     
     return {
         "task_id": task_id,
@@ -536,7 +537,7 @@ async def execute_task_immediately(
 async def execute_task_by_type(
     task_type: str = Body(..., description="Task type"),
     task_params: Dict[str, Any] = Body(default={}, description="Task parameters"),
-    queue: str = Body(default=TaskRegistry.DEFAULT_QUEUE, description="Queue name"),
+    queue: str = Body(default="default", description="Queue name"),
     options: Dict[str, Any] = Body(default={}, description="Execution options"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -551,13 +552,12 @@ async def execute_task_by_type(
     """
     # Validate task type
     try:
-        task_type_enum = TaskType(task_type)
+        task_type_str = task_type
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unsupported task type: {task_type}")
     
     # Get task function
-    from app.constant.task_registry import get_task_function
-    task_func = get_task_function(task_type_enum)
+    task_func = tr.get_function(task_type_str)
     
     if not task_func:
         raise HTTPException(status_code=400, detail=f"Task type {task_type} not implemented")
@@ -642,7 +642,7 @@ async def get_active_tasks(
     # Convert to response format and apply filters
     active_tasks = []
     for t in tasks:
-        task_queue = t.get("queue", TaskRegistry.DEFAULT_QUEUE)
+        task_queue = t.get("queue", "default")
         
         # Apply queue filter if specified
         if queue and task_queue != queue:
@@ -668,7 +668,7 @@ async def get_queue_stats(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """Get statistics for all queues with actual task distribution."""
-    queues = TaskRegistry.get_all_queue_names()
+    queues = tr.all_queues()
     stats = {}
     
     # Initialize all queues with 0 count
@@ -683,7 +683,7 @@ async def get_queue_stats(
     
     # Count tasks by queue
     for task in active_tasks:
-        queue_name = task.get("queue", TaskRegistry.DEFAULT_QUEUE)
+        queue_name = task.get("queue", "default")
         
         # Ensure the queue exists in our stats
         if queue_name not in stats:
@@ -759,7 +759,7 @@ async def get_enum_values(
     
     # 获取支持的任务类型及其实现状态
     task_types_list: List[Dict[str, Any]] = []
-    for task_type in TaskType:
+    for task_type in tr.TASKS.keys():
         task_func = get_task_function(task_type)
         # 将每个任务的详细信息作为一个字典追加到列表中
         task_types_list.append({

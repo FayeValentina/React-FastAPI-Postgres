@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import ConfigStatus, SchedulerType
 
 if TYPE_CHECKING:
     from .task_execution import TaskExecution
@@ -22,7 +22,7 @@ class TaskConfig(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     
     # 任务类型和状态
-    task_type: Mapped[TaskType] = mapped_column(Enum(TaskType), nullable=False, index=True)
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     scheduler_type: Mapped[SchedulerType] = mapped_column(Enum(SchedulerType), nullable=False)
     status: Mapped[ConfigStatus] = mapped_column(Enum(ConfigStatus), nullable=False, default=ConfigStatus.ACTIVE, index=True)
     

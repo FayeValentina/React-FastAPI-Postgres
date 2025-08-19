@@ -10,10 +10,12 @@ from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.core.task_manager import TaskManager
 from app.core.task_decorators import with_timeout_handling
+from app.constant.task_registry import task
 
 logger = logging.getLogger(__name__)
 
 
+@task("DATA_EXPORT", queue="default")
 @broker.task(
     task_name="export_data",
     queue="default",
@@ -65,6 +67,7 @@ async def export_data(
             raise
 
 
+@task("DATA_BACKUP", queue="default")
 @broker.task(
     task_name="backup_data",
     queue="default",

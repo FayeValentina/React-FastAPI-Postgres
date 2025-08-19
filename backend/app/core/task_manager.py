@@ -14,7 +14,7 @@ from app.models.task_config import TaskConfig
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
+from app.constant.task_registry import ConfigStatus, SchedulerType
 from app.models.task_execution import TaskExecution, ExecutionStatus
 import uuid
 
@@ -72,7 +72,7 @@ class TaskManager:
                         config_id=config.id,
                         event_data={
                             "event": "task_scheduled",
-                            "job_id": f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}",
+                            "job_id": f"scheduled_task_{config.id}",
                             "job_name": config.name,
                             "timestamp": datetime.utcnow().isoformat()
                         }
@@ -264,7 +264,7 @@ class TaskManager:
                     else:
                         return {
                             "task_id": task_id,
-                            "status": TaskRegistry.TASK_STATUS_PENDING,
+                            "status": "pending",
                             "result": None,
                             "error": None,
                         }
@@ -273,7 +273,7 @@ class TaskManager:
             logger.error(f"获取任务状态失败 {task_id}: {e}")
             return {
                 "task_id": task_id,
-                "status": TaskRegistry.TASK_STATUS_ERROR,
+                "status": "error",
                 "result": None,
                 "error": str(e),
             }
@@ -387,7 +387,7 @@ class TaskManager:
     
     async def list_active_tasks(self) -> List[Dict[str, Any]]:
         """列出活跃的任务执行记录"""
-        from app.constant.task_registry import TaskRegistry
+        from app.constant import task_registry as tr
         
         async with AsyncSessionLocal() as db:
             executions = await crud_task_execution.get_running_executions(db)
@@ -399,13 +399,13 @@ class TaskManager:
                 
                 # 获取任务配置以获取队列信息
                 config = await crud_task_config.get(db, e.config_id)
-                queue_name = TaskRegistry.DEFAULT_QUEUE
+                queue_name = "default"
                 
                 if config and config.task_type:
                     try:
-                        queue_name = TaskRegistry.get_queue_name(config.task_type)
+                        queue_name = tr.get_queue(config.task_type)
                     except Exception:
-                        queue_name = TaskRegistry.DEFAULT_QUEUE
+                        queue_name = "default"
                 
                 tasks.append({
                     "task_id": e.task_id,
@@ -485,8 +485,8 @@ class TaskManager:
                     "active_tasks": len(active_tasks)
                 },
                 "queues": {
-                    TaskRegistry.DEFAULT_QUEUE: {
-                        "status": TaskRegistry.QUEUE_STATUS_ACTIVE if broker_connected else TaskRegistry.QUEUE_STATUS_DISCONNECTED
+                    "default": {
+                        "status": "active" if broker_connected else "disconnected"
                     }
                 },
                 "recent_events": recent_history[:5]  # 最近5个事件
@@ -507,10 +507,10 @@ class TaskManager:
                 "queues": {}
             }
     
-    def _get_task_function(self, task_type: TaskType):
+    def _get_task_function(self, task_type: str):
         """根据任务类型获取任务函数"""
-        from app.constant.task_registry import get_task_function
-        return get_task_function(task_type)
+        from app.constant import task_registry as tr
+        return tr.get_function(task_type)
     
     async def get_task_config(self, config_id: int, verify_scheduler_status: Optional[bool] = False, include_stats: Optional[bool] = False) -> Optional[Dict[str, Any]]:
         """获取任务配置详情"""
@@ -538,7 +538,7 @@ class TaskManager:
             # 验证调度器中的状态
             if verify_scheduler_status:
                 scheduled_tasks = await redis_services.scheduler.get_all_schedules()
-                task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}"
+                task_id = f"scheduled_task_{config_id}"
                 is_scheduled = any(t.get("task_id") == task_id for t in scheduled_tasks)
                 result['scheduler_status'] = "scheduled" if is_scheduled else "not_scheduled"
             

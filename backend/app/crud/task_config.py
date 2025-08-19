@@ -8,7 +8,7 @@ from app.models.task_config import TaskConfig
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.constant.task_registry import ConfigStatus, SchedulerType
 from app.core.exceptions import (
     DatabaseError,
     ResourceNotFoundError,
@@ -108,7 +108,7 @@ class CRUDTaskConfig:
     async def get_by_type(
         self,
         db: AsyncSession,
-        task_type: TaskType,
+        task_type: str,
         status: Optional[ConfigStatus] = None
     ) -> List[TaskConfig]:
         """根据任务类型获取配置"""
@@ -373,7 +373,7 @@ class CRUDTaskConfig:
             "last_status": last_execution[1] if last_execution else None
         }
     
-    async def count_by_type(self, db: AsyncSession) -> Dict[TaskType, int]:
+    async def count_by_type(self, db: AsyncSession) -> Dict[str, int]:
         """按类型统计任务配置数量"""
         result = await db.execute(
             select(TaskConfig.task_type, func.count(TaskConfig.id))

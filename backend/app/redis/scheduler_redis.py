@@ -7,7 +7,8 @@ from taskiq_redis import RedisScheduleSource
 
 from app.core.config import settings
 from app.models.task_config import TaskConfig
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType, TaskRegistry
+from app.constant.task_registry import ConfigStatus, SchedulerType
+from app.constant import task_registry as tr
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,10 @@ class SchedulerRedisService:
     async def register_task(self, config: TaskConfig) -> bool:
         """注册调度任务到Redis"""
         try:
-            from app.constant.task_registry import get_task_function
+            # Task function is accessed via the registry
             
             # 获取任务函数
-            task_func = get_task_function(config.task_type)
+            task_func = tr.get_function(config.task_type)
             if not task_func:
                 logger.error(f"找不到任务类型 {config.task_type} 对应的任务函数")
                 return False
@@ -58,12 +59,12 @@ class SchedulerRedisService:
             kwargs = config.parameters or {}
             
             # 生成唯一的任务ID
-            task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}"
+            task_id = f"scheduled_task_{config.id}"
             
             # 🔧 准备 labels，包含超时时间
             labels = {
                 "config_id": str(config.id),
-                "task_type": config.task_type.value,
+                "task_type": config.task_type,
                 "scheduler_type": config.scheduler_type.value,
             }
             
@@ -107,7 +108,7 @@ class SchedulerRedisService:
     async def unregister_task(self, config_id: int) -> bool:
         """取消注册调度任务"""
         try:
-            task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config_id}"
+            task_id = f"scheduled_task_{config_id}"
             await self.schedule_source.delete_schedule(task_id)
             logger.info(f"成功取消调度任务: config_id={config_id}")
             return True
