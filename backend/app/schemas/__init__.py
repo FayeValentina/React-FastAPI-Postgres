@@ -11,7 +11,8 @@ from .reddit_content import (
     RedditContentListResponse, CommentSearchRequest, SubredditStats, RedditConnectionTestResponse
 )
 from .job_schemas import (
-    TaskExecutionCreate, JobExecutionSummary, ScheduleEventInfo, SystemStatusResponse
+    SystemStatusResponse, TaskExecutionResult, TaskRevokeResponse, QueueStatsResponse, EnumValuesResponse,
+    TaskStatusResponse, ActiveTaskInfo, ScheduledJobInfo, ScheduleActionResponse
 )
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     "RedditContentListResponse", "CommentSearchRequest", "SubredditStats", "RedditConnectionTestResponse",
     
     # Task models
-    "TaskExecutionCreate", "JobExecutionSummary", "ScheduleEventInfo", "SystemStatusResponse"
+    "SystemStatusResponse", "TaskExecutionResult", "TaskRevokeResponse", "QueueStatsResponse", "EnumValuesResponse",
+    "TaskStatusResponse", "ActiveTaskInfo", "ScheduledJobInfo", "ScheduleActionResponse"
 ] 

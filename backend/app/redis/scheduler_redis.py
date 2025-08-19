@@ -60,17 +60,25 @@ class SchedulerRedisService:
             # 生成唯一的任务ID
             task_id = f"{TaskRegistry.SCHEDULED_TASK_PREFIX}{config.id}"
             
+            # 🔧 准备 labels，包含超时时间
+            labels = {
+                "config_id": str(config.id),
+                "task_type": config.task_type.value,
+                "scheduler_type": config.scheduler_type.value,
+            }
+            
+            # 添加超时时间到 labels（TaskIQ 会使用这个值）
+            if config.timeout_seconds:
+                labels["timeout"] = config.timeout_seconds
+                logger.info(f"为定时任务 {config.name} 设置超时: {config.timeout_seconds}秒")
+        
             # 创建调度任务参数
             task_params = {
                 "schedule_id": task_id,
                 "task_name": task_func.task_name,
                 "args": args,
                 "kwargs": kwargs,
-                "labels": {
-                    "config_id": str(config.id),
-                    "task_type": config.task_type.value,
-                    "scheduler_type": config.scheduler_type.value,
-                }
+                "labels": labels
             }
             
             # 根据调度类型添加调度参数
@@ -83,6 +91,8 @@ class SchedulerRedisService:
             
             # 创建调度任务
             scheduled_task = ScheduledTask(**task_params)
+            
+            logger.info(f"即将注册的调度任务 (字典格式): {scheduled_task.model_dump()}")
             
             # 添加到Redis调度源
             await self.schedule_source.add_schedule(scheduled_task)

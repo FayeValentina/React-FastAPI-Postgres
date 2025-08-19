@@ -5,9 +5,11 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
+from taskiq import Context, TaskiqDepends
 from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.core.task_manager import TaskManager
+from app.core.task_decorators import with_timeout_handling
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +20,13 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
+@with_timeout_handling
 async def send_email(
     config_id: Optional[int],
     to_email: str,
     subject: str,
-    content: str
+    content: str,
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     发送邮件

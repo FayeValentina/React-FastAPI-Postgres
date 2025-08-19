@@ -35,6 +35,11 @@ class TaskType(str, PyEnum):
     LOG_ROTATION = "log_rotation"
     TIMEOUT_MONITOR = "timeout_monitor"
     CLEANUP_TIMEOUT_TASKS = "cleanup_timeout_tasks"
+    
+    # === test ===
+    TEST_TIMEOUT = "test_timeout"
+    TEST_FAILURE = "test_failure"
+    TEST_SHORT_TIMEOUT = "test_short_timeout" 
 
 
 class ConfigStatus(str, PyEnum):
@@ -122,6 +127,11 @@ class TaskRegistry:
         TaskType.LOG_ROTATION: 'log_rotation_task',
         TaskType.TIMEOUT_MONITOR: 'timeout_monitor',
         TaskType.CLEANUP_TIMEOUT_TASKS: 'cleanup_timeout_tasks',
+        
+        # test
+        TaskType.TEST_TIMEOUT: 'test_timeout_task',
+        TaskType.TEST_FAILURE: 'test_failure_task',
+        TaskType.TEST_SHORT_TIMEOUT: 'test_short_timeout_task',
     }
     
     # 任务队列映射
@@ -141,6 +151,7 @@ class TaskRegistry:
         TaskType.LOG_ROTATION: 'default',
         TaskType.TIMEOUT_MONITOR: 'monitor',
         TaskType.CLEANUP_TIMEOUT_TASKS: 'cleanup',
+        TaskType.TEST_TIMEOUT: 'test',
     }
     
     # 任务类型缩写映射
@@ -284,7 +295,7 @@ def _load_task_functions():
     global _task_function_cache
     
     # 动态导入避免循环导入
-    from app.tasks import cleanup_tasks, notification_tasks, data_tasks, timeout_monitor_task
+    from app.tasks import cleanup_tasks, notification_tasks, data_tasks, test_timeout_task
     
     # 构建任务函数映射
     _task_function_cache = {
@@ -293,11 +304,12 @@ def _load_task_functions():
         TaskType.SEND_EMAIL: notification_tasks.send_email,
         TaskType.DATA_EXPORT: data_tasks.export_data,
         TaskType.DATA_BACKUP: data_tasks.backup_data,
-        TaskType.TIMEOUT_MONITOR: timeout_monitor_task.timeout_monitor_task,
-        TaskType.CLEANUP_TIMEOUT_TASKS: timeout_monitor_task.cleanup_timeout_monitor_task,
         # 为将来的任务类型预留
         # TaskType.BOT_SCRAPING: scraping_tasks.bot_scraping,
         # TaskType.MANUAL_SCRAPING: scraping_tasks.manual_scraping,
+        TaskType.TEST_TIMEOUT: test_timeout_task.test_timeout_task,
+        TaskType.TEST_FAILURE: test_timeout_task.test_failure_task,
+        TaskType.TEST_SHORT_TIMEOUT: test_timeout_task.test_short_timeout_task,
     }
     
     logger.info(f"已加载 {len(_task_function_cache)} 个任务函数")

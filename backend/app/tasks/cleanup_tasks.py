@@ -4,11 +4,12 @@
 from typing import Dict, Any, Optional
 import logging
 
+from taskiq import Context, TaskiqDepends
 from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.crud.password_reset import crud_password_reset
 from app.crud.reddit_content import crud_reddit_content
-from app.core.timeout_decorator import with_timeout  # 改为使用新的装饰器
+from app.core.task_decorators import with_timeout_handling
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,11 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout  # 使用新的超时装饰器
+@with_timeout_handling
 async def cleanup_expired_tokens(
     config_id: Optional[int] = None,
     days_old: int = 7,
+    context: Context = TaskiqDepends(),
     **kwargs  # 接收task_id等额外参数
 ) -> Dict[str, Any]:
     """
@@ -49,10 +51,11 @@ async def cleanup_expired_tokens(
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout
+@with_timeout_handling
 async def cleanup_old_content(
     config_id: Optional[int] = None,
     days_old: int = 90,
+    context: Context = TaskiqDepends(),
     **kwargs
 ) -> Dict[str, Any]:
     """

@@ -5,9 +5,11 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
+from taskiq import Context, TaskiqDepends
 from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.core.task_manager import TaskManager
+from app.core.task_decorators import with_timeout_handling
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +20,12 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
+@with_timeout_handling
 async def export_data(
     config_id: Optional[int],
     export_format: str = "json",
-    date_range: Dict[str, str] = None
+    date_range: Dict[str, str] = None,
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     导出数据
@@ -67,9 +71,11 @@ async def export_data(
     retry_on_error=True,
     max_retries=3,
 )
+@with_timeout_handling
 async def backup_data(
     config_id: Optional[int],
-    backup_type: str = "full"
+    backup_type: str = "full",
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     备份数据

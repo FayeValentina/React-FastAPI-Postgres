@@ -176,15 +176,6 @@ class TaskManager:
                     started_at=datetime.utcnow()
                 )
                 
-                # 注册到超时监控器（使用新的Redis服务）
-                if config.timeout_seconds:
-                    await redis_services.timeout.add_task(
-                        task_id=task.task_id,
-                        config_id=config_id,
-                        timeout_seconds=config.timeout_seconds,
-                        started_at=execution.started_at
-                    )
-                
                 # 记录执行事件
                 await redis_services.history.add_history_event(
                     config_id=config_id,
