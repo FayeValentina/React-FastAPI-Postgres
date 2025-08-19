@@ -3,7 +3,6 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 from sqlalchemy import String, DateTime, func, Integer, Text, Enum, Numeric, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
-from enum import Enum as PyEnum
 
 from app.db.base_class import Base
 from app.core.task_registry import ExecutionStatus

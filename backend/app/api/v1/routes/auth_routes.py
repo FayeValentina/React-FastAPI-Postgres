@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 from app.schemas import (
     LoginRequest,
     UserCreate
@@ -24,6 +25,7 @@ from app.core.exceptions import InvalidCredentialsError, InvalidRefreshTokenErro
 from app.utils.common import handle_error
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/login", response_model=Token)
@@ -56,14 +58,19 @@ async def login(
         )
         
         # 在创建新令牌前，先吊销该用户的所有现有刷新令牌
-        await redis_services.auth.revoke_all_user_tokens(user.id)
+        revoke_success = await redis_services.auth.revoke_all_user_tokens(user.id)
         
         # 将刷新令牌存储到Redis而不是数据库
-        await redis_services.auth.store_refresh_token(
+        store_success = await redis_services.auth.store_refresh_token(
             token=refresh_token,
             user_id=user.id,
             expires_in_days=settings.security.REFRESH_TOKEN_EXPIRE_DAYS
         )
+        
+        # 如果Redis存储失败，应该提供警告但不阻止登录
+        if not store_success:
+            logger.warning(f"刷新令牌存储到Redis失败，用户ID: {user.id}")
+            # 可以考虑降级方案或通知用户
         
         return Token(
             access_token=access_token, 

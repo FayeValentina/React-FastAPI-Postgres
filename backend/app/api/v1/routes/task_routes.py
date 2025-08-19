@@ -463,9 +463,8 @@ async def get_scheduled_jobs(
     Parameters:
         - include_paused: Whether to include paused jobs in the result
     """
-    from app.scheduler import get_scheduled_tasks
     
-    tasks = await get_scheduled_tasks()
+    tasks = await redis_services.scheduler.get_all_schedules()
     
     # Convert to response format
     jobs = []
@@ -755,16 +754,16 @@ async def get_enum_values(
     
     Useful for frontend dropdowns and validation.
     """
-    from app.core.task_registry import get_task_function
+    from app.core.task_registry import get_function
     
     # 获取支持的任务类型及其实现状态
     task_types_list: List[Dict[str, Any]] = []
     for task_type in tr.TASKS.keys():
-        task_func = get_task_function(task_type)
+        task_func = get_function(task_type)
         # 将每个任务的详细信息作为一个字典追加到列表中
         task_types_list.append({
-            "name": task_type.value,
-            "description": f"Task type for {task_type.value.replace('_', ' ').title()}",
+            "name": task_type,
+            "description": f"Task type for {task_type.replace('_', ' ').title()}",
             "implemented": task_func is not None
         })
     

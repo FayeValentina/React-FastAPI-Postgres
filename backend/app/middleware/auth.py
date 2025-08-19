@@ -53,7 +53,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # 验证Bearer令牌
         try:
-            scheme, token = auth_header.split()
+            # 安全地分割Authorization头
+            auth_parts = auth_header.split()
+            if len(auth_parts) != 2:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "认证头格式无效，应为: Bearer <token>"},
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+            
+            scheme, token = auth_parts
             if scheme.lower() != "bearer":
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,

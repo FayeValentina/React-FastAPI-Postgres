@@ -565,7 +565,7 @@ class TaskManager:
                     'id': c.id,
                     'name': c.name,
                     'description': c.description,
-                    'task_type': c.task_type.value if hasattr(c.task_type, 'value') else c.task_type,
+                    'task_type': c.task_type if hasattr(c.task_type, 'value') else c.task_type,
                     'scheduler_type': c.scheduler_type.value if hasattr(c.scheduler_type, 'value') else c.scheduler_type,
                     'status': c.status.value if hasattr(c.status, 'value') else c.status,
                     'parameters': c.parameters or {},

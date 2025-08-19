@@ -1,4 +1,4 @@
-# backend/app/services/scheduler_redis.py
+# backend/app/redis/scheduler.py
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 class SchedulerRedisService:
-    """基于RedisScheduleSource的分布式调度器服务"""
+    """基于RedisScheduleSource的分布式调度器服务 - 使用新的连接池架构"""
     
     def __init__(self):
-        # 使用RedisScheduleSource作为调度源
+        # 使用与连接池相同的Redis URL
         self.schedule_source = RedisScheduleSource(url=settings.redis.CONNECTION_URL)
         self._initialized = False
     
@@ -37,16 +37,18 @@ class SchedulerRedisService:
     async def shutdown(self):
         """关闭调度器"""
         try:
-            await self.schedule_source.shutdown()
-            self._initialized = False
-            logger.info("Redis调度源已关闭")
+            if self._initialized:
+                await self.schedule_source.shutdown()
+                self._initialized = False
+                logger.info("Redis调度源已关闭")
         except Exception as e:
             logger.error(f"Redis调度源关闭失败: {e}")
     
     async def register_task(self, config: TaskConfig) -> bool:
         """注册调度任务到Redis"""
         try:
-            # Task function is accessed via the registry
+            # 确保调度器已初始化
+            await self.initialize()
             
             # 获取任务函数
             task_func = tr.get_function(config.task_type)
@@ -61,7 +63,7 @@ class SchedulerRedisService:
             # 生成唯一的任务ID
             task_id = f"scheduled_task_{config.id}"
             
-            # 🔧 准备 labels，包含超时时间
+            # 准备 labels，包含超时时间
             labels = {
                 "config_id": str(config.id),
                 "task_type": config.task_type,
@@ -108,6 +110,7 @@ class SchedulerRedisService:
     async def unregister_task(self, config_id: int) -> bool:
         """取消注册调度任务"""
         try:
+            await self.initialize()
             task_id = f"scheduled_task_{config_id}"
             await self.schedule_source.delete_schedule(task_id)
             logger.info(f"成功取消调度任务: config_id={config_id}")
@@ -134,6 +137,7 @@ class SchedulerRedisService:
     async def get_all_schedules(self) -> List[Dict[str, Any]]:
         """获取所有调度任务"""
         try:
+            await self.initialize()
             schedules = await self.schedule_source.get_schedules()
             
             tasks = []
@@ -159,6 +163,26 @@ class SchedulerRedisService:
     async def resume_task(self, config: TaskConfig) -> bool:
         """恢复调度任务（通过重新注册实现）"""
         return await self.register_task(config)
+    
+    async def get_scheduler_status(self) -> Dict[str, Any]:
+        """获取调度器状态"""
+        try:
+            schedules = await self.get_all_schedules()
+            return {
+                "initialized": self._initialized,
+                "total_schedules": len(schedules),
+                "redis_url": settings.redis.CONNECTION_URL,
+                "status": "healthy" if self._initialized else "not_initialized"
+            }
+        except Exception as e:
+            logger.error(f"获取调度器状态失败: {e}")
+            return {
+                "initialized": self._initialized,
+                "total_schedules": 0,
+                "redis_url": settings.redis.CONNECTION_URL,
+                "status": "error",
+                "error": str(e)
+            }
     
     def _get_schedule_params(self, scheduler_type: SchedulerType, schedule_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """根据配置创建TaskIQ调度参数"""
