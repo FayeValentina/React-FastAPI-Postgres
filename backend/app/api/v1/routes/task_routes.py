@@ -25,8 +25,8 @@ from app.schemas.job_schemas import (
     ScheduleActionResponse
 )
 from app.core.task_manager import task_manager
-from app.constant.task_registry import ConfigStatus, SchedulerType, ScheduleAction
-from app.constant import task_registry as tr
+from app.core.task_registry import ConfigStatus, SchedulerType, ScheduleAction
+from app.core import task_registry as tr
 from app.db.base import AsyncSessionLocal
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
@@ -755,7 +755,7 @@ async def get_enum_values(
     
     Useful for frontend dropdowns and validation.
     """
-    from app.constant.task_registry import get_task_function
+    from app.core.task_registry import get_task_function
     
     # 获取支持的任务类型及其实现状态
     task_types_list: List[Dict[str, Any]] = []

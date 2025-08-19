@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from app.models.task_execution import ExecutionStatus
+from app.core.task_registry import ExecutionStatus
 from enum import Enum
 
 class SystemStatusResponse(BaseModel):

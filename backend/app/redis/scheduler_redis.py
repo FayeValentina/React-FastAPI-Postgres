@@ -7,8 +7,8 @@ from taskiq_redis import RedisScheduleSource
 
 from app.core.config import settings
 from app.models.task_config import TaskConfig
-from app.constant.task_registry import ConfigStatus, SchedulerType
-from app.constant import task_registry as tr
+from app.core.task_registry import ConfigStatus, SchedulerType
+from app.core import task_registry as tr
 
 logger = logging.getLogger(__name__)
 

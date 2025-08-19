@@ -10,7 +10,7 @@ from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.core.task_manager import TaskManager
 from app.core.task_decorators import with_timeout_handling
-from app.constant.task_registry import task
+from app.core.task_registry import task
 
 logger = logging.getLogger(__name__)
 

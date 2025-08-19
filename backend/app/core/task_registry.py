@@ -72,8 +72,12 @@ class ScheduleAction(str, Enum):
     RESUME = "resume"
     RELOAD = "reload"
 
-# 导入 ExecutionStatus 而不是重新定义
-from app.models.task_execution import ExecutionStatus
+class ExecutionStatus(str, Enum):
+    """执行状态枚举"""
+    SUCCESS = "success"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+    RUNNING = "running"
 
 # 工具函数
 def make_job_id(task_type: str, config_id: int) -> str:

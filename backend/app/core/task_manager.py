@@ -14,8 +14,8 @@ from app.models.task_config import TaskConfig
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
-from app.constant.task_registry import ConfigStatus, SchedulerType
-from app.models.task_execution import TaskExecution, ExecutionStatus
+from app.core.task_registry import ConfigStatus, SchedulerType, ExecutionStatus
+from app.models.task_execution import TaskExecution
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -387,7 +387,7 @@ class TaskManager:
     
     async def list_active_tasks(self) -> List[Dict[str, Any]]:
         """列出活跃的任务执行记录"""
-        from app.constant import task_registry as tr
+        from app.core import task_registry as tr
         
         async with AsyncSessionLocal() as db:
             executions = await crud_task_execution.get_running_executions(db)
@@ -509,7 +509,7 @@ class TaskManager:
     
     def _get_task_function(self, task_type: str):
         """根据任务类型获取任务函数"""
-        from app.constant import task_registry as tr
+        from app.core import task_registry as tr
         return tr.get_function(task_type)
     
     async def get_task_config(self, config_id: int, verify_scheduler_status: Optional[bool] = False, include_stats: Optional[bool] = False) -> Optional[Dict[str, Any]]:

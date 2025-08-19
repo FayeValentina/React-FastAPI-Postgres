@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
-from app.constant.task_registry import ConfigStatus, SchedulerType
+from app.core.task_registry import ConfigStatus, SchedulerType
 
 
 class TaskConfigBase(BaseModel):
@@ -23,7 +23,7 @@ class TaskConfigBase(BaseModel):
     
     @validator('task_type')
     def validate_task_type(cls, v):
-        from app.constant import task_registry as tr
+        from app.core import task_registry as tr
         if not tr.is_supported(v):
             raise ValueError(f'不支持的任务类型: {v}')
         return v

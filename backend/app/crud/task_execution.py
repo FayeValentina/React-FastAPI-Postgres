@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.models.task_execution import TaskExecution, ExecutionStatus
+from app.models.task_execution import TaskExecution
+from app.core.task_registry import ExecutionStatus
 from app.models.task_config import TaskConfig
 from app.core.exceptions import DatabaseError
 from app.utils.common import get_current_time

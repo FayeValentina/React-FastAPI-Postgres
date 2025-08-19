@@ -122,7 +122,7 @@ async def _update_execution_status(
     try:
         from app.db.base import AsyncSessionLocal
         from app.crud.task_execution import crud_task_execution
-        from app.models.task_execution import ExecutionStatus
+        from app.core.task_registry import ExecutionStatus
         
         async with AsyncSessionLocal() as db:
             # 查找已存在的记录
@@ -190,7 +190,7 @@ async def _create_failure_execution(
     try:
         from app.db.base import AsyncSessionLocal
         from app.crud.task_execution import crud_task_execution
-        from app.models.task_execution import ExecutionStatus
+        from app.core.task_registry import ExecutionStatus
         
         async with AsyncSessionLocal() as db:
             await crud_task_execution.create(

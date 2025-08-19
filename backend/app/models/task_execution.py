@@ -6,17 +6,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from enum import Enum as PyEnum
 
 from app.db.base_class import Base
-
+from app.core.task_registry import ExecutionStatus
 if TYPE_CHECKING:
     from .task_config import TaskConfig
-
-
-class ExecutionStatus(str, PyEnum):
-    """执行状态枚举"""
-    SUCCESS = "success"
-    FAILED = "failed"
-    TIMEOUT = "timeout"
-    RUNNING = "running"
 
 
 class TaskExecution(Base):

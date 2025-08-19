@@ -81,7 +81,7 @@ async def test_task_manager_basic_functions():
     
     # 由于TaskManager依赖数据库，我们需要先模拟其核心组件
     from scheduler import scheduler
-    from app.constant.task_registry import TaskType
+    from app.core.task_registry import TaskType
     
     # 测试1: 启动调度器
     try:
