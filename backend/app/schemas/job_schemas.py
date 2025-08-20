@@ -1,8 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from app.core.task_registry import ExecutionStatus
-from enum import Enum
 
 class SystemStatusResponse(BaseModel):
     """系统状态响应"""

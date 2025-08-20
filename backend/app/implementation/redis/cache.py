@@ -1,4 +1,3 @@
-# backend/app/redis/cache.py
 from typing import Optional, Dict, Any, List
 from app.core.redis import RedisBase
 

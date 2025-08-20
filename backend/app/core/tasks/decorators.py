@@ -6,6 +6,7 @@ import functools
 import logging
 from typing import Callable, Any, Optional
 from datetime import datetime
+# Import statements moved to function level to avoid circular imports
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +91,6 @@ def with_timeout_handling(func: Callable) -> Callable:
                 error_message=f"任务被取消(超时): {str(e)}"
             )
             
-            # 重新抛出原始异常，让TaskIQ转换为TimeoutError
-            raise
-            
         except Exception as e:
             # 处理其他异常（不包括超时）
             logger.error(f"任务 {func.__name__} 执行失败 config_id={config_id}, task_id={real_task_id}: {e}")
@@ -120,27 +118,23 @@ async def _update_execution_status(
 ) -> bool:
     """更新已存在的执行记录状态"""
     try:
-        from app.db.base import AsyncSessionLocal
-        from app.crud.task_execution import crud_task_execution
-        from app.core.task_registry import ExecutionStatus
+        from app.core.tasks.executor import TaskExecutor
+        from app.core.tasks.registry import ExecutionStatus
+        # 使用TaskExecutor的封装方法更新记录
+        execution = await TaskExecutor.update_execution_record(
+            task_id=task_id,
+            status=ExecutionStatus(status),
+            result=None,
+            error=error_message,
+            completed_at=completed_at
+        )
         
-        async with AsyncSessionLocal() as db:
-            # 查找已存在的记录
-            execution = await crud_task_execution.get_by_task_id(db, task_id)
-            if execution:
-                # 更新状态
-                await crud_task_execution.update_status(
-                    db=db,
-                    execution_id=execution.id,
-                    status=ExecutionStatus(status),
-                    completed_at=completed_at or datetime.utcnow(),
-                    error_message=error_message
-                )
-                logger.debug(f"已更新执行记录: task_id={task_id}, status={status}")
-                return True
-            else:
-                logger.warning(f"未找到执行记录: task_id={task_id}")
-                return False
+        if execution:
+            logger.debug(f"已更新执行记录: task_id={task_id}, status={status}")
+            return True
+        else:
+            logger.warning(f"未找到执行记录: task_id={task_id}")
+            return False
                 
     except Exception as e:
         logger.error(f"更新执行状态失败: {e}")
@@ -188,20 +182,21 @@ async def _create_failure_execution(
 ) -> None:
     """创建失败执行记录（仅在没有已存在记录时使用）"""
     try:
-        from app.db.base import AsyncSessionLocal
-        from app.crud.task_execution import crud_task_execution
-        from app.core.task_registry import ExecutionStatus
+        from app.core.tasks.executor import TaskExecutor
+        from app.core.tasks.registry import ExecutionStatus
+        # 生成task_id（如果没有提供）
+        final_task_id = task_id or f"{status}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        current_time = datetime.utcnow()
         
-        async with AsyncSessionLocal() as db:
-            await crud_task_execution.create(
-                db=db,
-                config_id=config_id,
-                task_id=task_id or f"{status}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                status=ExecutionStatus(status),
-                started_at=datetime.utcnow(),
-                completed_at=datetime.utcnow(),
-                error_message=error_message
-            )
+        # 使用TaskExecutor的封装方法创建记录
+        await TaskExecutor.create_execution_record(
+            config_id=config_id,
+            task_id=final_task_id,
+            status=ExecutionStatus(status),
+            started_at=current_time,
+            completed_at=current_time,
+            error_message=error_message
+        )
             
         logger.info(f"已创建{status}执行记录: config_id={config_id}, task={task_name}")
         

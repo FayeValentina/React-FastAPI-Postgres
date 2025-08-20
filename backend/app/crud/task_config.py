@@ -1,18 +1,15 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, func, and_, or_
+from sqlalchemy import select, update, delete, func, and_
 from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any, Tuple
-from datetime import datetime
 
 from app.models.task_config import TaskConfig
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.core.task_registry import ConfigStatus, SchedulerType
+from app.core.tasks.registry import ConfigStatus, SchedulerType
 from app.core.exceptions import (
-    DatabaseError,
-    ResourceNotFoundError,
-    ValidationError
+    DatabaseError
 )
 
 

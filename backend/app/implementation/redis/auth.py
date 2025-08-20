@@ -1,4 +1,3 @@
-# backend/app/redis/auth.py
 from typing import Optional, Set
 from datetime import datetime, timedelta
 import json

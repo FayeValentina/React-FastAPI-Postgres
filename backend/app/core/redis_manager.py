@@ -4,7 +4,7 @@ Redis服务管理器 - 使用新的连接池架构
 """
 import logging
 from typing import Dict, Any
-from app.redis import (
+from app.implementation.redis import (
     AuthRedisService,
     CacheRedisService, 
     ScheduleHistoryRedisService,

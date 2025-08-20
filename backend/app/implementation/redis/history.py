@@ -1,4 +1,3 @@
-# backend/app/redis/history.py
 from typing import List, Dict, Any, Optional
 import json
 from datetime import datetime, timedelta

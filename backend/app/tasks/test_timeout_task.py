@@ -8,8 +8,8 @@ import logging
 
 from taskiq import Context, TaskiqDepends
 from app.broker import broker
-from app.core.task_decorators import with_timeout_handling
-from app.core.task_registry import task
+from app.core.tasks.decorators import with_timeout_handling
+from app.core.tasks.registry import task
 
 logger = logging.getLogger(__name__)
 

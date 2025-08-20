@@ -1,4 +1,3 @@
-# backend/app/redis/scheduler.py
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -7,8 +6,8 @@ from taskiq_redis import RedisScheduleSource
 
 from app.core.config import settings
 from app.models.task_config import TaskConfig
-from app.core.task_registry import ConfigStatus, SchedulerType
-from app.core import task_registry as tr
+from app.core.tasks.registry import ConfigStatus, SchedulerType
+from app.core.tasks import registry as tr
 
 logger = logging.getLogger(__name__)
 
