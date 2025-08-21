@@ -51,13 +51,6 @@ def is_supported(task_type: str) -> bool:
 # 保留必要的枚举
 from enum import Enum
 
-class ConfigStatus(str, Enum):
-    """任务配置状态"""
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    PAUSED = "paused"
-    ERROR = "error"
-
 class SchedulerType(str, Enum):
     """调度器类型枚举"""
     CRON = "cron"
@@ -71,13 +64,6 @@ class ScheduleAction(str, Enum):
     PAUSE = "pause"
     RESUME = "resume"
     RELOAD = "reload"
-
-class ExecutionStatus(str, Enum):
-    """执行状态枚举"""
-    SUCCESS = "success"
-    FAILED = "failed"
-    TIMEOUT = "timeout"
-    RUNNING = "running"
 
 # 工具函数
 def make_job_id(task_type: str, config_id: int) -> str:

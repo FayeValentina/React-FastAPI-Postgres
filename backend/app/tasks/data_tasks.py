@@ -8,8 +8,7 @@ import logging
 from taskiq import Context, TaskiqDepends
 from app.broker import broker
 from app.db.base import AsyncSessionLocal
-from app.core.task_manager import TaskManager
-from app.core.tasks.decorators import with_timeout_handling
+from app.core.tasks.decorators import execution_handler
 from app.core.tasks.registry import task
 
 logger = logging.getLogger(__name__)
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout_handling
+@execution_handler
 async def export_data(
     config_id: Optional[int],
     export_format: str = "json",
@@ -55,15 +54,12 @@ async def export_data(
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            # 记录执行结果到数据库
-            await TaskManager.record_task_execution(db, config_id, "success", result)
             
             logger.info(f"数据导出完成: {result}")
             return result
             
         except Exception as e:
             logger.error(f"导出数据时出错: {e}", exc_info=True)
-            await TaskManager.record_task_execution(db, config_id, "failed", error=str(e))
             raise
 
 
@@ -74,7 +70,7 @@ async def export_data(
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout_handling
+@execution_handler
 async def backup_data(
     config_id: Optional[int],
     backup_type: str = "full",
@@ -104,15 +100,12 @@ async def backup_data(
                 "timestamp": datetime.utcnow().isoformat()
             }
             
-            # 记录执行结果到数据库
-            await TaskManager.record_task_execution(db, config_id, "success", result)
             
             logger.info(f"数据备份完成: {result}")
             return result
             
         except Exception as e:
             logger.error(f"备份数据时出错: {e}", exc_info=True)
-            await TaskManager.record_task_execution(db, config_id, "failed", error=str(e))
             raise
 
 

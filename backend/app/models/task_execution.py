@@ -5,7 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
-from app.core.tasks.registry import ExecutionStatus
 if TYPE_CHECKING:
     from .task_config import TaskConfig
 
@@ -21,7 +20,7 @@ class TaskExecution(Base):
     task_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # TaskIQ任务ID，通常是UUID格式
     
     # 执行信息
-    status: Mapped[ExecutionStatus] = mapped_column(Enum(ExecutionStatus))
+    is_success: Mapped[bool] = mapped_column(nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     duration_seconds: Mapped[Optional[float]] = mapped_column(Numeric(10, 3))
@@ -37,4 +36,4 @@ class TaskExecution(Base):
     task_config: Mapped["TaskConfig"] = relationship("TaskConfig", back_populates="task_executions")
     
     def __repr__(self) -> str:
-        return f"<TaskExecution(id={self.id}, config_id={self.config_id}, status={self.status})>"
+        return f"<TaskExecution(id={self.id}, config_id={self.config_id}, success={self.is_success})>"

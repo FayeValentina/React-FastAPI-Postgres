@@ -8,8 +8,7 @@ import logging
 from taskiq import Context, TaskiqDepends
 from app.broker import broker
 from app.db.base import AsyncSessionLocal
-from app.core.task_manager import TaskManager
-from app.core.tasks.decorators import with_timeout_handling
+from app.core.tasks.decorators import execution_handler
 from app.core.tasks.registry import task
 
 logger = logging.getLogger(__name__)
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout_handling
+@execution_handler
 async def send_email(
     config_id: Optional[int],
     to_email: str,
@@ -56,16 +55,13 @@ async def send_email(
                 "sent": True,
                 "timestamp": datetime.utcnow().isoformat()
             }
-            
-            # 记录执行结果到数据库
-            await TaskManager.record_task_execution(db, config_id, "success", result)
+
             
             logger.info(f"邮件发送完成: {result}")
             return result
             
         except Exception as e:
             logger.error(f"发送邮件时出错: {e}", exc_info=True)
-            await TaskManager.record_task_execution(db, config_id, "failed", error=str(e))
             raise
 
 

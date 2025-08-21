@@ -27,7 +27,7 @@ broker = AioPikaBroker(
 scheduler = TaskiqScheduler(
     broker=broker,
     sources=[
-        redis_services.scheduler.schedule_source,
+        redis_services.scheduler.core.schedule_source,
     ],
 )
 

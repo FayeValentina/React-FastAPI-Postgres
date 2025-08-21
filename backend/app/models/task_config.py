@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
-from app.core.tasks.registry import ConfigStatus, SchedulerType
+from app.core.tasks.registry import SchedulerType
 
 if TYPE_CHECKING:
     from .task_execution import TaskExecution
@@ -21,10 +21,9 @@ class TaskConfig(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text)
     
-    # 任务类型和状态
+    # 任务类型和调度类型
     task_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     scheduler_type: Mapped[SchedulerType] = mapped_column(Enum(SchedulerType), nullable=False)
-    status: Mapped[ConfigStatus] = mapped_column(Enum(ConfigStatus), nullable=False, default=ConfigStatus.ACTIVE, index=True)
     
     # 配置参数 (使用JSON存储以支持不同任务类型的不同参数)
     parameters: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default={})
@@ -48,12 +47,7 @@ class TaskConfig(Base):
     )
     
     def __repr__(self) -> str:
-        return f"<TaskConfig(id={self.id}, name='{self.name}', type={self.task_type}, status={self.status})>"
-    
-    @property
-    def is_active(self) -> bool:
-        """判断任务是否为活跃状态"""
-        return self.status == ConfigStatus.ACTIVE
+        return f"<TaskConfig(id={self.id}, name='{self.name}', type={self.task_type})>"
     
     @property
     def is_scheduled(self) -> bool:

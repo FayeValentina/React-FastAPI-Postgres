@@ -8,7 +8,7 @@ import logging
 
 from taskiq import Context, TaskiqDepends
 from app.broker import broker
-from app.core.tasks.decorators import with_timeout_handling
+from app.core.tasks.decorators import execution_handler
 from app.core.tasks.registry import task
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=1,
 )
-@with_timeout_handling
+@execution_handler
 async def test_timeout_task(
     config_id: Optional[int] = None,
     sleep_seconds: int = 30,
@@ -63,7 +63,7 @@ async def test_timeout_task(
     retry_on_error=False,
     max_retries=0,
 )
-@with_timeout_handling
+@execution_handler
 async def test_failure_task(
     config_id: Optional[int] = None,
     error_type: str = "general",
@@ -104,7 +104,7 @@ async def test_failure_task(
     retry_on_error=False,
     max_retries=0,
 )
-@with_timeout_handling
+@execution_handler
 async def test_short_timeout_task(
     config_id: Optional[int] = None,
     sleep_seconds: int = 5,
@@ -136,4 +136,67 @@ async def test_short_timeout_task(
     }
     
     logger.info(f"短超时测试任务完成: {result}")
+    return result
+
+
+@task("HEALTH_CHECK", queue="health")
+@broker.task(
+    task_name="health_check_task",
+    queue="health",
+    retry_on_error=True,
+    max_retries=1,
+)
+@execution_handler
+async def health_check_task(
+    config_id: Optional[int] = None,
+    context: Context = TaskiqDepends(),
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    系统健康检查任务
+    """
+    logger.info(f"执行系统健康检查... (Config ID: {config_id})")
+    
+    result = {
+        "config_id": config_id,
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "message": "系统健康检查通过"
+    }
+    
+    logger.info(f"健康检查完成: {result}")
+    return result
+
+
+@task("TIMEOUT_MONITOR", queue="monitor")
+@broker.task(
+    task_name="timeout_monitor_task",
+    queue="monitor", 
+    retry_on_error=True,
+    max_retries=2,
+)
+@execution_handler
+async def timeout_monitor_task(
+    config_id: Optional[int] = None,
+    monitor_duration: int = 60,
+    context: Context = TaskiqDepends(),
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    超时监控任务
+    """
+    logger.info(f"开始超时监控，持续 {monitor_duration} 秒... (Config ID: {config_id})")
+    
+    # 简单监控逻辑
+    await asyncio.sleep(1)  # 模拟监控过程
+    
+    result = {
+        "config_id": config_id,
+        "monitor_duration": monitor_duration,
+        "status": "completed",
+        "timestamp": datetime.utcnow().isoformat(),
+        "message": f"超时监控完成，监控了 {monitor_duration} 秒"
+    }
+    
+    logger.info(f"超时监控完成: {result}")
     return result

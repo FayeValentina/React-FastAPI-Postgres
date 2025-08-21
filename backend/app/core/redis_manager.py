@@ -4,11 +4,11 @@ Redis服务管理器 - 使用新的连接池架构
 """
 import logging
 from typing import Dict, Any
-from app.implementation.redis import (
+from app.services.redis import (
     AuthRedisService,
     CacheRedisService, 
-    ScheduleHistoryRedisService,
-    SchedulerRedisService
+    ScheduleHistoryRedisService,  # 使用增强的历史服务（包含状态管理）
+    scheduler_service
 )
 from app.core.redis import redis_connection_manager
 
@@ -21,8 +21,8 @@ class RedisServiceManager:
     def __init__(self):
         self.auth = AuthRedisService()
         self.cache = CacheRedisService()
-        self.history = ScheduleHistoryRedisService()
-        self.scheduler = SchedulerRedisService()
+        self.history = ScheduleHistoryRedisService()  # 增强版，包含所有状态管理功能
+        self.scheduler = scheduler_service  # 使用统一的调度服务
         self._connection_manager = redis_connection_manager
         self._initialized = False
     
@@ -76,8 +76,8 @@ class RedisServiceManager:
             history_ok = await self.history.ping()
             health_status["history_service"] = "healthy" if history_ok else "unhealthy"
             
-            scheduler_status = await self.scheduler.get_scheduler_status()
-            health_status["scheduler_service"] = scheduler_status.get("status", "unknown")
+            scheduler_summary = await self.scheduler.get_scheduler_summary()
+            health_status["scheduler_service"] = "healthy" if scheduler_summary.get("total_tasks", 0) >= 0 else "unhealthy"
             
             # 整体状态
             all_healthy = all(
@@ -100,8 +100,8 @@ class RedisServiceManager:
             stats = {
                 "connection_pool": await self._connection_manager.get_pool_info(),
                 "cache_stats": await self.cache.get_cache_stats(),
-                "history_stats": await self.history.get_summary_stats(),
-                "scheduler_stats": await self.scheduler.get_scheduler_status(),
+                "history_stats": await self.history.get_scheduler_summary(),
+                "scheduler_stats": await self.scheduler.get_scheduler_summary(),
                 "initialized": self._initialized
             }
             return stats

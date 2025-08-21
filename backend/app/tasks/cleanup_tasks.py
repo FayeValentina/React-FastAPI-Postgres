@@ -9,7 +9,7 @@ from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.crud.password_reset import crud_password_reset
 from app.crud.reddit_content import crud_reddit_content
-from app.core.tasks.decorators import with_timeout_handling
+from app.core.tasks.decorators import execution_handler
 from app.core.tasks.registry import task
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout_handling
+@execution_handler
 async def cleanup_expired_tokens(
     config_id: Optional[int] = None,
     days_old: int = 7,
@@ -54,7 +54,7 @@ async def cleanup_expired_tokens(
     retry_on_error=True,
     max_retries=3,
 )
-@with_timeout_handling
+@execution_handler
 async def cleanup_old_content(
     config_id: Optional[int] = None,
     days_old: int = 90,

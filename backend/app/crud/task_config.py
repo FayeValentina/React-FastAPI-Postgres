@@ -7,7 +7,7 @@ from app.models.task_config import TaskConfig
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.core.tasks.registry import ConfigStatus, SchedulerType
+from app.core.tasks.registry import SchedulerType
 from app.core.exceptions import (
     DatabaseError
 )
@@ -64,8 +64,6 @@ class CRUDTaskConfig:
         if query.task_type:
             filters.append(TaskConfig.task_type == query.task_type)
         
-        if query.status:
-            filters.append(TaskConfig.status == query.status)
         
         if query.name_search:
             filters.append(
@@ -105,44 +103,22 @@ class CRUDTaskConfig:
     async def get_by_type(
         self,
         db: AsyncSession,
-        task_type: str,
-        status: Optional[ConfigStatus] = None
+        task_type: Optional[str] = None
     ) -> List[TaskConfig]:
         """根据任务类型获取配置"""
-        filters = [TaskConfig.task_type == task_type]
-        
-        if status:
-            filters.append(TaskConfig.status == status)
-        
-        result = await db.execute(
-            select(TaskConfig)
-            .filter(and_(*filters))
-            .order_by(TaskConfig.created_at.desc())
-        )
-        return result.scalars().all()
-    
-    async def get_active_configs(self, db: AsyncSession) -> List[TaskConfig]:
-        """获取所有活跃的任务配置"""
-        result = await db.execute(
-            select(TaskConfig)
-            .filter(TaskConfig.status == ConfigStatus.ACTIVE)
-            .order_by(TaskConfig.priority.desc(), TaskConfig.created_at.desc())
-        )
-        return result.scalars().all()
-    
-    async def get_scheduled_configs(self, db: AsyncSession) -> List[TaskConfig]:
-        """获取所有需要调度的任务配置"""
-        result = await db.execute(
-            select(TaskConfig)
-            .filter(
-                and_(
-                    TaskConfig.status == ConfigStatus.ACTIVE,
-                    TaskConfig.scheduler_type != SchedulerType.MANUAL
-                )
+        if task_type:
+            result = await db.execute(
+                select(TaskConfig)
+                .filter(TaskConfig.task_type == task_type)
+                .order_by(TaskConfig.created_at.desc())
             )
-            .order_by(TaskConfig.priority.desc(), TaskConfig.created_at.desc())
-        )
+        else:
+            result = await db.execute(
+                select(TaskConfig)
+                .order_by(TaskConfig.created_at.desc())
+            )
         return result.scalars().all()
+    
     
     async def create(self, db: AsyncSession, obj_in: TaskConfigCreate) -> TaskConfig:
         """创建任务配置"""
@@ -152,7 +128,6 @@ class CRUDTaskConfig:
                 description=obj_in.description,
                 task_type=obj_in.task_type,
                 scheduler_type=obj_in.scheduler_type,
-                status=obj_in.status,
                 parameters=obj_in.parameters,
                 schedule_config=obj_in.schedule_config,
                 max_retries=obj_in.max_retries,
@@ -216,45 +191,6 @@ class CRUDTaskConfig:
             await db.rollback()
             raise DatabaseError(f"{ERROR_DELETE_TASK_CONFIG}: {str(e)}")
     
-    async def batch_update_status(
-        self,
-        db: AsyncSession,
-        config_ids: List[int],
-        status: ConfigStatus
-    ) -> int:
-        """批量更新任务状态"""
-        try:
-            result = await db.execute(
-                update(TaskConfig)
-                .where(TaskConfig.id.in_(config_ids))
-                .values(status=status, updated_at=get_current_time())
-            )
-            await db.commit()
-            return result.rowcount
-            
-        except Exception as e:
-            await db.rollback()
-            raise DatabaseError(f"批量更新任务状态时出错: {str(e)}")
-    
-    async def update_status(
-        self,
-        db: AsyncSession,
-        config_id: int,
-        status: ConfigStatus
-    ) -> bool:
-        """更新单个任务状态"""
-        try:
-            result = await db.execute(
-                update(TaskConfig)
-                .where(TaskConfig.id == config_id)
-                .values(status=status, updated_at=get_current_time())
-            )
-            await db.commit()
-            return result.rowcount > 0
-            
-        except Exception as e:
-            await db.rollback()
-            raise DatabaseError(f"更新任务状态时出错: {str(e)}")
     
     async def update_parameters(
         self,
@@ -379,27 +315,10 @@ class CRUDTaskConfig:
         
         return {task_type: count for task_type, count in result.all()}
     
-    async def count_by_status(self, db: AsyncSession) -> Dict[ConfigStatus, int]:
-        """按状态统计任务配置数量"""
-        result = await db.execute(
-            select(TaskConfig.status, func.count(TaskConfig.id))
-            .group_by(TaskConfig.status)
-        )
-        
-        return {status: count for status, count in result.all()}
-    
     async def get_total_count(self, db: AsyncSession) -> int:
         """获取任务配置总数"""
         result = await db.execute(
             select(func.count(TaskConfig.id))
-        )
-        return result.scalar() or 0
-    
-    async def get_active_count(self, db: AsyncSession) -> int:
-        """获取活跃任务配置数"""
-        result = await db.execute(
-            select(func.count(TaskConfig.id))
-            .filter(TaskConfig.status == ConfigStatus.ACTIVE)
         )
         return result.scalar() or 0
 
@@ -409,20 +328,12 @@ class CRUDTaskConfig:
             # 总配置数
             total_configs = await self.get_total_count(db)
             
-            # 活跃配置数
-            active_configs = await self.get_active_count(db)
-            
             # 按类型统计
             type_stats = await self.count_by_type(db)
             
-            # 按状态统计
-            status_stats = await self.count_by_status(db)
-            
             return {
                 "total_configs": total_configs,
-                "active_configs": active_configs,
-                "by_type": {str(k): v for k, v in type_stats.items()},
-                "by_status": {str(k): v for k, v in status_stats.items()}
+                "by_type": {str(k): v for k, v in type_stats.items()}
             }
             
         except Exception as e:

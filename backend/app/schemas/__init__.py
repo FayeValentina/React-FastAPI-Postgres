@@ -10,9 +10,20 @@ from .reddit_content import (
     RedditPostBase, RedditPostResponse, RedditCommentBase, RedditCommentResponse,
     RedditContentListResponse, CommentSearchRequest, SubredditStats, RedditConnectionTestResponse
 )
-from .job_schemas import (
-    SystemStatusResponse, TaskExecutionResult, TaskRevokeResponse, QueueStatsResponse, EnumValuesResponse,
-    TaskStatusResponse, ActiveTaskInfo, ScheduledJobInfo, ScheduleActionResponse
+# 新的任务系统schema模块
+from .task_config_schemas import (
+    TaskConfigCreate, TaskConfigUpdate, TaskConfigResponse, TaskConfigDetailResponse,
+    TaskConfigListResponse, TaskConfigDeleteResponse, TaskConfigQuery
+)
+from .task_schedules_schemas import (
+    ScheduleActionResponse, ScheduleListResponse, ScheduleHistoryResponse, ScheduleSummaryResponse
+)
+from .task_executions_schemas import (
+    ConfigExecutionsResponse, RecentExecutionsResponse, FailedExecutionsResponse,
+    ExecutionDetailResponse, ExecutionCleanupResponse
+)
+from .task_system_schemas import (
+    SystemStatusResponse, SystemHealthResponse, SystemEnumsResponse, SystemDashboardResponse
 )
 
 __all__ = [
@@ -29,7 +40,17 @@ __all__ = [
     "RedditPostBase", "RedditPostResponse", "RedditCommentBase", "RedditCommentResponse",
     "RedditContentListResponse", "CommentSearchRequest", "SubredditStats", "RedditConnectionTestResponse",
     
-    # Task models
-    "SystemStatusResponse", "TaskExecutionResult", "TaskRevokeResponse", "QueueStatsResponse", "EnumValuesResponse",
-    "TaskStatusResponse", "ActiveTaskInfo", "ScheduledJobInfo", "ScheduleActionResponse"
+    # Task config models
+    "TaskConfigCreate", "TaskConfigUpdate", "TaskConfigResponse", "TaskConfigDetailResponse",
+    "TaskConfigListResponse", "TaskConfigDeleteResponse", "TaskConfigQuery",
+    
+    # Task schedule models
+    "ScheduleActionResponse", "ScheduleListResponse", "ScheduleHistoryResponse", "ScheduleSummaryResponse",
+    
+    # Task execution models
+    "ConfigExecutionsResponse", "RecentExecutionsResponse", "FailedExecutionsResponse",
+    "ExecutionDetailResponse", "ExecutionCleanupResponse",
+    
+    # Task system models
+    "SystemStatusResponse", "SystemHealthResponse", "SystemEnumsResponse", "SystemDashboardResponse"
 ] 
