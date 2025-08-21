@@ -161,7 +161,8 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from taskiq import ScheduledTask
-from taskiq_redis import RedisScheduleSource
+from taskiq_redis import ListRedisScheduleSource
+from taskiq.serializers import JSONSerializer
 
 from app.core.config import settings
 from app.models.task_config import TaskConfig
@@ -186,7 +187,11 @@ class SchedulerCoreService:
     
     def __init__(self):
         # 使用TaskIQ的Redis连接（独立连接，必需）
-        self.schedule_source = RedisScheduleSource(url=settings.redis.CONNECTION_URL)
+        self.schedule_source = ListRedisScheduleSource(
+            url = settings.redis.CONNECTION_URL,
+            serializer = JSONSerializer(),
+            max_connection_pool_size = 50
+        )
         self._initialized = False
     
     async def initialize(self):

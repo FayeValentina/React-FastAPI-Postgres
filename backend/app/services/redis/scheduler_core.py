@@ -7,9 +7,6 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from taskiq import ScheduledTask
-from taskiq_redis import RedisScheduleSource
-
-from app.core.config import settings
 from app.models.task_config import TaskConfig
 from app.core.tasks.registry import SchedulerType
 from app.core.tasks import registry as tr
@@ -31,8 +28,9 @@ class SchedulerCoreService:
     """
     
     def __init__(self):
-        # 使用TaskIQ的Redis连接（独立连接，必需）
-        self.schedule_source = RedisScheduleSource(url=settings.redis.CONNECTION_URL)
+        # 使用broker中的统一调度源实例，确保序列化一致性
+        from app.broker import schedule_source
+        self.schedule_source = schedule_source
         self._initialized = False
     
     async def initialize(self):

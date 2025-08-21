@@ -7,10 +7,17 @@ import os
 from typing import Optional
 from taskiq import TaskiqEvents, TaskiqScheduler
 from taskiq_aio_pika import AioPikaBroker
-from taskiq_redis import RedisAsyncResultBackend
+from taskiq_redis import RedisAsyncResultBackend, ListRedisScheduleSource
+from taskiq.serializers import JSONSerializer
 
 from app.core.config import settings
-from app.core.redis_manager import redis_services
+
+# 创建统一的调度源实例，确保序列化一致性
+schedule_source = ListRedisScheduleSource(
+    url=settings.redis.CONNECTION_URL,
+    serializer=JSONSerializer(),
+    max_connection_pool_size=50
+)
 
 # 配置 RabbitMQ broker
 broker = AioPikaBroker(
@@ -27,7 +34,7 @@ broker = AioPikaBroker(
 scheduler = TaskiqScheduler(
     broker=broker,
     sources=[
-        redis_services.scheduler.core.schedule_source,
+        schedule_source,
     ],
 )
 
