@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.models.task_execution import TaskExecution, ExecutionStatus
+from app.models.task_execution import TaskExecution
 from app.models.task_config import TaskConfig
 from app.core.exceptions import DatabaseError
 from app.utils.common import get_current_time
@@ -18,9 +18,9 @@ class CRUDTaskExecution:
         db: AsyncSession,
         config_id: int,
         task_id: str,
-        status: ExecutionStatus,
+        is_success: bool,
         started_at: datetime,
-        completed_at: Optional[datetime] = None,
+        completed_at: datetime,
         duration_seconds: Optional[float] = None,
         result: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
@@ -31,7 +31,7 @@ class CRUDTaskExecution:
             db_obj = TaskExecution(
                 config_id=config_id,
                 task_id=task_id,
-                status=status,
+                is_success=is_success,
                 started_at=started_at,
                 completed_at=completed_at,
                 duration_seconds=duration_seconds,
@@ -49,42 +49,6 @@ class CRUDTaskExecution:
             await db.rollback()
             raise DatabaseError(f"创建任务执行记录时出错: {str(e)}")
     
-    async def update_status(
-        self,
-        db: AsyncSession,
-        execution_id: int,
-        status: ExecutionStatus,
-        completed_at: Optional[datetime] = None,
-        duration_seconds: Optional[float] = None,
-        result: Optional[Dict[str, Any]] = None,
-        error_message: Optional[str] = None,
-        error_traceback: Optional[str] = None
-    ) -> Optional[TaskExecution]:
-        """更新任务执行状态"""
-        try:
-            execution = await db.get(TaskExecution, execution_id)
-            if not execution:
-                return None
-            
-            execution.status = status
-            if completed_at:
-                execution.completed_at = completed_at
-            if duration_seconds is not None:
-                execution.duration_seconds = duration_seconds
-            if result is not None:
-                execution.result = result
-            if error_message:
-                execution.error_message = error_message
-            if error_traceback:
-                execution.error_traceback = error_traceback
-            
-            await db.commit()
-            await db.refresh(execution)
-            return execution
-            
-        except Exception as e:
-            await db.rollback()
-            raise DatabaseError(f"更新任务执行状态时出错: {str(e)}")
     
     async def get_by_task_id(
         self,
@@ -159,7 +123,7 @@ class CRUDTaskExecution:
             .where(
                 and_(
                     TaskExecution.started_at >= start_time,
-                    TaskExecution.status == ExecutionStatus.FAILED
+                    TaskExecution.is_success == False
                 )
             )
             .order_by(TaskExecution.started_at.desc())
@@ -167,74 +131,6 @@ class CRUDTaskExecution:
         )
         return result.scalars().all()
     
-    async def get_running_executions(
-        self,
-        db: AsyncSession
-    ) -> List[TaskExecution]:
-        """获取正在运行的执行记录"""
-        result = await db.execute(
-            select(TaskExecution)
-            .options(selectinload(TaskExecution.task_config))
-            .where(TaskExecution.status == ExecutionStatus.RUNNING)
-            .order_by(TaskExecution.started_at.desc())
-        )
-        return result.scalars().all()
-    
-    async def get_execution_stats(
-        self,
-        db: AsyncSession,
-        config_id: Optional[int] = None,
-        days: int = 7
-    ) -> Dict[str, Any]:
-        """获取执行统计"""
-        start_time = get_current_time() - timedelta(days=days)
-        
-        # 构建基础过滤条件
-        base_filter = TaskExecution.started_at >= start_time
-        if config_id:
-            base_filter = and_(base_filter, TaskExecution.config_id == config_id)
-        
-        # 总执行次数
-        total_result = await db.execute(
-            select(func.count(TaskExecution.id)).where(base_filter)
-        )
-        total = total_result.scalar() or 0
-        
-        # 各状态统计
-        status_result = await db.execute(
-            select(TaskExecution.status, func.count(TaskExecution.id))
-            .where(base_filter)
-            .group_by(TaskExecution.status)
-        )
-        
-        status_stats = {status.value: 0 for status in ExecutionStatus}
-        for status, count in status_result.all():
-            status_stats[status] = count
-        
-        # 平均执行时间 (只统计成功的任务)
-        avg_duration_result = await db.execute(
-            select(func.avg(TaskExecution.duration_seconds))
-            .where(
-                and_(
-                    base_filter,
-                    TaskExecution.status == ExecutionStatus.SUCCESS,
-                    TaskExecution.duration_seconds.isnot(None)
-                )
-            )
-        )
-        avg_duration = float(avg_duration_result.scalar() or 0.0)
-        
-        # 计算成功率
-        success_count = status_stats.get("success", 0)
-        success_rate = (success_count / total * 100) if total > 0 else 0.0
-        
-        return {
-            "total_executions": total,
-            "status_breakdown": status_stats,
-            "success_rate": success_rate,
-            "avg_duration_seconds": avg_duration,
-            "period_days": days
-        }
     
     async def cleanup_old_executions(
         self,
@@ -273,16 +169,24 @@ class CRUDTaskExecution:
             )
             total_executions = total_result.scalar() or 0
             
-            # 各状态统计
-            status_result = await db.execute(
-                select(TaskExecution.status, func.count(TaskExecution.id))
-                .where(TaskExecution.started_at >= start_time)
-                .group_by(TaskExecution.status)
+            # 成功和失败统计
+            success_result = await db.execute(
+                select(func.count(TaskExecution.id))
+                .where(and_(
+                    TaskExecution.started_at >= start_time,
+                    TaskExecution.is_success == True
+                ))
             )
+            success_count = success_result.scalar() or 0
             
-            status_stats = {}
-            for status, count in status_result.all():
-                status_stats[status.value] = count
+            failed_result = await db.execute(
+                select(func.count(TaskExecution.id))
+                .where(and_(
+                    TaskExecution.started_at >= start_time,
+                    TaskExecution.is_success == False
+                ))
+            )
+            failed_count = failed_result.scalar() or 0
             
             # 按任务类型统计
             type_result = await db.execute(
@@ -294,7 +198,7 @@ class CRUDTaskExecution:
             
             type_stats = {}
             for task_type, count in type_result.all():
-                type_stats[task_type.value] = count
+                type_stats[str(task_type)] = count
             
             # 平均执行时间
             avg_duration_result = await db.execute(
@@ -302,25 +206,22 @@ class CRUDTaskExecution:
                 .where(
                     and_(
                         TaskExecution.started_at >= start_time,
-                        TaskExecution.status == ExecutionStatus.SUCCESS,
+                        TaskExecution.is_success == True,
                         TaskExecution.duration_seconds.isnot(None)
                     )
                 )
             )
             avg_duration = float(avg_duration_result.scalar() or 0.0)
             
-            # 成功率
-            success_count = status_stats.get("success", 0)
+            # 成功率和失败率
             success_rate = (success_count / total_executions * 100) if total_executions > 0 else 0.0
-            
-            # 失败率
-            failed_count = status_stats.get("failed", 0)
             failure_rate = (failed_count / total_executions * 100) if total_executions > 0 else 0.0
             
             return {
                 "period_days": days,
                 "total_executions": total_executions,
-                "status_breakdown": status_stats,
+                "success_count": success_count,
+                "failed_count": failed_count,
                 "type_breakdown": type_stats,
                 "success_rate": success_rate,
                 "failure_rate": failure_rate,
@@ -353,21 +254,30 @@ class CRUDTaskExecution:
             )
             total_executions = total_result.scalar() or 0
             
-            # 各状态统计
-            status_result = await db.execute(
-                select(TaskExecution.status, func.count(TaskExecution.id))
+            # 成功和失败统计
+            success_result = await db.execute(
+                select(func.count(TaskExecution.id))
                 .where(
                     and_(
                         TaskExecution.config_id == config_id,
-                        TaskExecution.started_at >= start_time
+                        TaskExecution.started_at >= start_time,
+                        TaskExecution.is_success == True
                     )
                 )
-                .group_by(TaskExecution.status)
             )
+            success_count = success_result.scalar() or 0
             
-            status_stats = {}
-            for status, count in status_result.all():
-                status_stats[status.value] = count
+            failed_result = await db.execute(
+                select(func.count(TaskExecution.id))
+                .where(
+                    and_(
+                        TaskExecution.config_id == config_id,
+                        TaskExecution.started_at >= start_time,
+                        TaskExecution.is_success == False
+                    )
+                )
+            )
+            failed_count = failed_result.scalar() or 0
             
             # 平均执行时间
             avg_duration_result = await db.execute(
@@ -376,26 +286,23 @@ class CRUDTaskExecution:
                     and_(
                         TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time,
-                        TaskExecution.status == ExecutionStatus.SUCCESS,
+                        TaskExecution.is_success == True,
                         TaskExecution.duration_seconds.isnot(None)
                     )
                 )
             )
             avg_duration = float(avg_duration_result.scalar() or 0.0)
             
-            # 成功率
-            success_count = status_stats.get("success", 0)
+            # 成功率和失败率
             success_rate = (success_count / total_executions * 100) if total_executions > 0 else 0.0
-            
-            # 失败率
-            failed_count = status_stats.get("failed", 0)
             failure_rate = (failed_count / total_executions * 100) if total_executions > 0 else 0.0
             
             return {
                 "config_id": config_id,
                 "period_days": days,
                 "total_executions": total_executions,
-                "status_breakdown": status_stats,
+                "success_count": success_count,
+                "failed_count": failed_count,
                 "success_rate": success_rate,
                 "failure_rate": failure_rate,
                 "avg_duration_seconds": avg_duration,

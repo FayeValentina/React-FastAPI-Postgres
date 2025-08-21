@@ -9,14 +9,8 @@ class Token(BaseModel):
     token_type: str
     expires_at: Optional[datetime] = None
 
-
-class TokenData(BaseModel):
-    username: str | None = None
-
-
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
-
 
 class TokenRevocationRequest(BaseModel):
     token: str

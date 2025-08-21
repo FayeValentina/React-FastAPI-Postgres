@@ -5,21 +5,28 @@ from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
-from app.constant.task_registry import TaskType, ConfigStatus, SchedulerType
+from app.core.tasks.registry import SchedulerType
 
 
 class TaskConfigBase(BaseModel):
     """任务配置基础模型"""
     name: str = Field(..., description="任务名称", min_length=1, max_length=200)
     description: Optional[str] = Field(None, description="任务描述", max_length=500)
-    task_type: TaskType = Field(..., description="任务类型")
+    task_type: str = Field(..., description="任务类型")
     scheduler_type: SchedulerType = Field(..., description="调度器类型")
-    status: ConfigStatus = Field(ConfigStatus.ACTIVE, description="任务状态")
+    # status: ConfigStatus = Field(ConfigStatus.ACTIVE, description="任务状态")  # 已删除status字段
     parameters: Dict[str, Any] = Field({}, description="任务参数(JSON)")
     schedule_config: Dict[str, Any] = Field({}, description="调度配置(JSON)")
     max_retries: int = Field(0, description="最大重试次数", ge=0, le=10)
     timeout_seconds: Optional[int] = Field(None, description="任务超时时间(秒)", gt=0)
     priority: int = Field(5, description="任务优先级(1-10)", ge=1, le=10)
+    
+    @validator('task_type')
+    def validate_task_type(cls, v):
+        from app.core.tasks import registry as tr
+        if not tr.is_supported(v):
+            raise ValueError(f'不支持的任务类型: {v}')
+        return v
 
 
 class TaskConfigCreate(TaskConfigBase):
@@ -33,7 +40,7 @@ class TaskConfigCreate(TaskConfigBase):
             return v
         
         # 清理任务参数验证  
-        if task_type in [TaskType.CLEANUP_CONTENT, TaskType.CLEANUP_EVENTS]:
+        if task_type in ["CLEANUP_CONTENT"]:
             if 'days_old' not in v:
                 raise ValueError(f'{task_type}任务缺少必要参数: days_old')
             if not isinstance(v['days_old'], int) or v['days_old'] <= 0:
@@ -68,7 +75,7 @@ class TaskConfigUpdate(BaseModel):
     """更新任务配置"""
     name: Optional[str] = Field(None, description="任务名称", min_length=1, max_length=200)
     description: Optional[str] = Field(None, description="任务描述", max_length=500)
-    status: Optional[ConfigStatus] = Field(None, description="任务状态")
+    # status: Optional[ConfigStatus] = Field(None, description="任务状态")  # 已删除status字段
     parameters: Optional[Dict[str, Any]] = Field(None, description="任务参数(JSON)")
     schedule_config: Optional[Dict[str, Any]] = Field(None, description="调度配置(JSON)")
     max_retries: Optional[int] = Field(None, description="最大重试次数", ge=0, le=10)
@@ -76,22 +83,49 @@ class TaskConfigUpdate(BaseModel):
     priority: Optional[int] = Field(None, description="任务优先级(1-10)", ge=1, le=10)
 
 
+# =============================================================================
+# 响应模型 - 对应配置管理端点
+# =============================================================================
+
 class TaskConfigResponse(TaskConfigBase):
-    """任务配置响应"""
+    """任务配置基础响应模型"""
     id: int = Field(..., description="配置ID")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")
-    scheduler_status: Optional[str] = Field(None, description="调度器中的状态")
-    stats: Optional[Dict[str, Any]] = Field(None, description="统计信息")
+    # 新增：来自Redis的调度状态（统一服务，无重叠）
+    schedule_status: Optional[str] = Field(None, description="Redis中的调度状态")
+    is_scheduled: Optional[bool] = Field(None, description="是否正在调度中")
+    status_consistent: Optional[bool] = Field(None, description="状态是否一致")
     model_config = ConfigDict(from_attributes=True)
+
+
+class TaskConfigDetailResponse(TaskConfigResponse):
+    """任务配置详情响应 - GET /configs/{id}"""
+    recent_history: Optional[list] = Field(None, description="最近历史事件")
+    stats: Optional[Dict[str, Any]] = Field(None, description="统计信息")
+
+
+class TaskConfigListResponse(BaseModel):
+    """任务配置列表响应 - GET /configs"""
+    items: list[TaskConfigResponse] = Field(..., description="配置列表")
+    total: int = Field(..., description="总数")
+    page: int = Field(..., description="当前页")
+    page_size: int = Field(..., description="每页大小")
+    pages: int = Field(..., description="总页数")
+
+
+class TaskConfigDeleteResponse(BaseModel):
+    """任务配置删除响应 - DELETE /configs/{id}"""
+    success: bool = Field(..., description="删除是否成功")
+    message: str = Field(..., description="删除结果消息")
 
 
 
 
 class TaskConfigQuery(BaseModel):
     """任务配置查询参数"""
-    task_type: Optional[TaskType] = Field(None, description="任务类型")
-    status: Optional[ConfigStatus] = Field(None, description="任务状态")
+    task_type: Optional[str] = Field(None, description="任务类型")
+    # status: Optional[ConfigStatus] = Field(None, description="任务状态")  # 已删除status字段
     name_search: Optional[str] = Field(None, description="名称搜索", max_length=100)
     page: int = Field(1, description="页码", ge=1)
     page_size: int = Field(20, description="每页大小", ge=1, le=100)
@@ -99,7 +133,3 @@ class TaskConfigQuery(BaseModel):
     order_desc: bool = Field(True, description="降序排序")
 
 
-class TaskConfigDeleteResponse(BaseModel):
-    """任务配置删除响应"""
-    success: bool = Field(..., description="删除是否成功")
-    message: str = Field(..., description="删除结果消息")

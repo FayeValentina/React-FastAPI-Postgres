@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import datetime
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,9 +11,9 @@ from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.utils.common import create_exception_handlers
-from app.core.task_manager import task_manager
+# from app.core.task_manager import task_manager  # 已删除，使用新架构
 from app.broker import broker
-from app.core.redis_timeout_store import redis_timeout_store 
+from app.core.redis_manager import redis_services
 
 # 配置日志系统
 setup_logging()
@@ -25,15 +26,52 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
     
     try:
+        # 自动发现并注册所有任务
+        from app.core.tasks.registry import auto_discover_tasks
+        auto_discover_tasks()
+        logger.info("任务自动注册完成")
+        
         # 启动时
         await broker.startup()
-        await task_manager.initialize()
         
-        # 初始化Redis超时存储连接池
-        await redis_timeout_store.connect()
-        logger.info("Redis超时存储已初始化")
+        # 初始化Redis服务管理器（包含所有Redis服务）
+        await redis_services.initialize()
+        logger.info("Redis服务管理器初始化成功")
         
-        logger.info("TaskIQ任务管理器启动成功")
+        # 初始化调度器（已包含在redis_services中）
+        logger.info("调度器服务已通过Redis服务管理器初始化")
+        
+        # 从数据库加载调度任务到Redis
+        from app.db.base import AsyncSessionLocal
+        from app.crud.task_config import crud_task_config
+        from app.core.tasks.registry import SchedulerType
+        
+        async with AsyncSessionLocal() as db:
+            # 获取所有任务配置（不再筛选status）
+            configs = await crud_task_config.get_by_type(db, None)  # 获取所有配置
+            
+            loaded_count = 0
+            failed_count = 0
+            
+            for config in configs:
+                # 只加载需要调度的任务
+                if config.scheduler_type != SchedulerType.MANUAL:
+                    try:
+                        success, message = await redis_services.scheduler.register_task(config)
+                        if success:
+                            loaded_count += 1
+                            logger.debug(f"成功加载调度任务: {config.name} (ID: {config.id})")
+                        else:
+                            failed_count += 1
+                            logger.warning(f"加载任务失败: {config.name} - {message}")
+                    except Exception as e:
+                        failed_count += 1
+                        logger.error(f"加载任务 {config.name} 失败: {e}")
+            
+            logger.info(f"从数据库加载调度任务完成: 成功 {loaded_count} 个, 失败 {failed_count} 个")
+        
+        logger.info("应用启动成功")
+        
     except Exception as e:
         logger.error(f"启动失败: {e}")
     
@@ -42,9 +80,10 @@ async def lifespan(app: FastAPI):
     # 关闭时
     try:
         await broker.shutdown()
+        # await task_manager.shutdown()  # 已删除，调度器通过redis_services管理
         
-        # 关闭Redis超时存储连接
-        await redis_timeout_store.disconnect()
+        # 关闭所有Redis服务
+        await redis_services.close_all()
         
         logger.info("应用关闭成功")
     except Exception as e:

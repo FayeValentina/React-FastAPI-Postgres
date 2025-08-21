@@ -5,12 +5,19 @@ TaskIQ Broker 配置
 import uuid
 import os
 from typing import Optional
-from taskiq import TaskiqEvents
+from taskiq import TaskiqEvents, TaskiqScheduler
 from taskiq_aio_pika import AioPikaBroker
-from taskiq_redis import RedisAsyncResultBackend
+from taskiq_redis import RedisAsyncResultBackend, ListRedisScheduleSource
+from taskiq.serializers import JSONSerializer
 
 from app.core.config import settings
-from app.core.redis_timeout_store import redis_timeout_store  # 导入Redis存储
+
+# 创建统一的调度源实例，确保序列化一致性
+schedule_source = ListRedisScheduleSource(
+    url=settings.redis.CONNECTION_URL,
+    serializer=JSONSerializer(),
+    max_connection_pool_size=50
+)
 
 # 配置 RabbitMQ broker
 broker = AioPikaBroker(
@@ -24,16 +31,25 @@ broker = AioPikaBroker(
     )
 )
 
+scheduler = TaskiqScheduler(
+    broker=broker,
+    sources=[
+        schedule_source,
+    ],
+)
+
 # 配置任务事件监听器
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def on_worker_startup(state: dict) -> None:
     """Worker 启动时的初始化"""
-    # 连接Redis超时存储
-    await redis_timeout_store.connect()
+    # 注意：不再需要在这里连接Redis超时存储
+    # Redis服务的初始化已经移到了main.py的lifespan中
+    pass
 
 
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
 async def on_worker_shutdown(state: dict) -> None:
     """Worker 关闭时的清理"""
-    # 断开Redis超时存储
-    await redis_timeout_store.disconnect()
+    # 注意：不再需要在这里断开Redis超时存储
+    # Redis服务的清理已经移到了main.py的lifespan中
+    pass

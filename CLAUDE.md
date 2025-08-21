@@ -41,18 +41,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 backend/                    # FastAPI backend
 ├── app/
-│   ├── api/v1/            # API routes (auth, users, tasks, bot_config, scraping, reddit_content)
-│   ├── core/              # Configuration, security, logging, constants, exceptions, task_registry
-│   ├── crud/              # Database operations (user, token, task_config, task_execution, schedule_event, etc.)
+│   ├── api/v1/            # API routes (auth, users, tasks, reddit_content)
+│   │   └── routes/        # Route modules (auth_routes, user_routes, task_routes, reddit_content_routes)
+│   ├── constant/          # Application constants
+│   ├── core/              # Core configurations and components
+│   │   ├── redis/         # Redis connection management (base, config, pool)
+│   │   └── tasks/         # Task system registry and decorators
+│   ├── crud/              # Database operations (user, password_reset, task_config, task_execution, reddit_content)
 │   ├── db/                # Database connection and base classes
 │   ├── dependencies/      # Dependency injection (current_user, request_context)
 │   ├── middleware/        # Auth and logging middleware
-│   ├── models/            # SQLAlchemy models (user, token, task_config, task_execution, schedule_event, etc.)
-│   ├── schemas/           # Pydantic schemas (auth, user, task_config, job_schemas, etc.)
-│   ├── services/          # Business logic (email_service, task_manager, scraping_orchestrator)
+│   ├── models/            # SQLAlchemy models (user, password_reset, task_config, task_execution, reddit_content)
+│   ├── schemas/           # Pydantic schemas modularized by functionality:
+│   │   ├── auth.py        # Authentication schemas
+│   │   ├── user.py        # User management schemas
+│   │   ├── task_config_schemas.py      # Task configuration schemas
+│   │   ├── task_schedules_schemas.py   # Schedule management schemas
+│   │   ├── task_executions_schemas.py  # Execution management schemas
+│   │   ├── task_system_schemas.py      # System monitoring schemas
+│   │   └── reddit_content.py           # Reddit content schemas
+│   ├── services/          # Business logic services
+│   │   ├── email_service.py            # Email service
+│   │   ├── reddit_scraper_service.py   # Reddit scraping service
+│   │   └── redis/         # Redis-based services
+│   │       ├── auth.py                 # Authentication Redis service
+│   │       ├── cache.py                # Caching Redis service
+│   │       ├── history.py              # Enhanced schedule history service (state + history + metadata)
+│   │       ├── scheduler_core.py       # Core TaskIQ scheduler service
+│   │       └── scheduler.py            # Unified scheduler service (combines core + history)
 │   ├── tasks/             # TaskIQ background tasks (cleanup, notification, data tasks)
 │   ├── tests/             # Test files
-│   └── utils/             # Common utilities (common, permissions)
+│   └── utils/             # Common utilities (common)
 ├── alembic/               # Database migrations
 ├── broker.py              # TaskIQ broker configuration
 ├── scheduler.py           # TaskIQ scheduler configuration
@@ -72,7 +91,11 @@ frontend/                  # React frontend
 ### Backend Architecture
 - **FastAPI** with async/await support using asyncpg for PostgreSQL
 - **JWT Authentication** with access and refresh tokens (dual-token system)
-- **TaskIQ Task Management System** with Redis/RabbitMQ message broker
+- **Refactored TaskIQ Task System** (v2.4) with optimized Redis architecture:
+  - **Eliminated double Redis connections** and functional overlap
+  - **Separated concerns**: PostgreSQL for static configuration, Redis for dynamic scheduling state
+  - **Unified services**: Combined scheduler core + enhanced history service
+  - **Simplified execution status**: Boolean `is_success` instead of complex status enums
 - **Reddit Scraping System** with bot configuration and session management
 - **Middleware Stack** (order matters):
   1. AuthMiddleware - JWT validation (excludes auth endpoints)
@@ -81,7 +104,7 @@ frontend/                  # React frontend
 - **Configuration** using Pydantic Settings with nested configs (postgres, security, cors, redis, etc.)
 - **Database**: SQLAlchemy 2.0 with automatic Alembic migrations
 - **Logging**: Loguru for structured logging
-- **Background Tasks**: TaskIQ 0.11.x for distributed task processing and scheduling
+- **Background Tasks**: TaskIQ 0.11.x with optimized Redis connection management
 
 ### API Endpoints
 **Authentication** (`/api/v1/auth`)
@@ -122,59 +145,74 @@ frontend/                  # React frontend
 - `GET /reddit/posts/{post_id}/comments` - Get post comments
 - `GET /reddit/comments` - Get Reddit comments
 
-**Task Management** (`/api/v1/tasks`)
-- `GET /tasks/system/status` - Get system status (scheduler, broker, task counts)
-- `GET /tasks/system/health` - Get system health check
-- `GET /tasks/configs` - List task configurations (with filtering/pagination)
-- `GET /tasks/configs/{config_id}` - Get specific task configuration
-- `POST /tasks/configs` - Create new task configuration
-- `PUT /tasks/configs/{config_id}` - Update task configuration
-- `PATCH /tasks/configs/{config_id}` - Partially update task configuration
-- `DELETE /tasks/configs/{config_id}` - Delete task configuration
-- `POST /tasks/configs/batch` - Batch create configurations
-- `DELETE /tasks/configs/batch` - Batch delete configurations
-- `POST /tasks/configs/{config_id}/schedule` - Manage scheduled task (start/stop/pause/resume)
-- `GET /tasks/scheduled` - Get all scheduled jobs
-- `POST /tasks/configs/{config_id}/execute` - Execute task immediately
-- `POST /tasks/execute/by-type` - Execute task by type
-- `POST /tasks/execute/batch` - Batch execute configurations
-- `GET /tasks/status/{task_id}` - Get task execution status
-- `GET /tasks/active` - Get active running tasks
-- `GET /tasks/queues` - Get queue statistics
-- `POST /tasks/revoke/{task_id}` - Revoke/cancel task
-- `GET /tasks/task-types` - Get supported task types
-- `GET /tasks/enums` - Get enum values for dropdowns
-- `POST /tasks/validate` - Validate task configuration
+**Task Management** (`/api/v1/tasks`) - **Refactored Architecture v2.4** (25 endpoints with modular schemas)
+- **Configuration Management** (5 endpoints):
+  - `GET /tasks/configs` - List task configurations (with filtering/pagination)
+  - `POST /tasks/configs` - Create new task configuration
+  - `GET /tasks/configs/{config_id}` - Get specific task configuration
+  - `PUT /tasks/configs/{config_id}` - Update task configuration
+  - `DELETE /tasks/configs/{config_id}` - Delete task configuration
+- **Schedule Management** (7 endpoints):
+  - `POST /tasks/schedules/{config_id}/{action}` - Start/stop/pause/resume scheduled tasks
+  - `GET /tasks/schedules` - Get all scheduled jobs
+  - `GET /tasks/schedules/{config_id}` - Get specific schedule status
+  - `GET /tasks/schedules/{config_id}/history` - Get schedule history
+  - `DELETE /tasks/schedules/{config_id}` - Stop and remove schedule
+  - `POST /tasks/schedules/batch/{action}` - Batch schedule operations
+  - `GET /tasks/schedules/summary` - Get scheduler status summary
+- **Execution Management** (6 endpoints):
+  - `GET /tasks/executions/by-config/{config_id}` - Get executions for specific config
+  - `GET /tasks/executions/recent` - Get recent execution records
+  - `GET /tasks/executions/failed` - Get failed execution records
+  - `GET /tasks/executions/{config_id}/stats` - Get execution statistics
+  - `GET /tasks/executions/{execution_id}` - Get specific execution details
+  - `DELETE /tasks/executions/cleanup` - Clean up old execution records
+- **Immediate Execution** (3 endpoints):
+  - `POST /tasks/execute/{config_id}` - Execute specific config immediately
+  - `POST /tasks/execute/by-type/{task_type}` - Execute by task type
+  - `POST /tasks/execute/batch` - Batch execute multiple configs
+- **System Monitoring** (4 endpoints):
+  - `GET /tasks/system/status` - Get comprehensive system status
+  - `GET /tasks/system/health` - Get system health check
+  - `GET /tasks/system/enums` - Get enum values for dropdowns
+  - `GET /tasks/system/dashboard` - Get dashboard data
 
-### Core Models
+### Core Models (Refactored v2.4)
 - **User**: Basic user information (id, email, username, full_name, age, is_active, is_superuser)
 - **RefreshToken**: JWT refresh token management with rotation
 - **PasswordReset**: Password reset tokens with expiration and usage tracking
-- **TaskConfig**: Task configuration (name, type, scheduler, parameters, schedule_config)
-- **TaskExecution**: Task execution records with status and results
-- **ScheduleEvent**: Schedule event logging (executed, error, missed, paused, resumed)
-- **BotConfig**: Reddit bot configuration (subreddits, keywords, posting rules)
-- **ScrapeSession**: Scraping session management and tracking
+- **TaskConfig**: Task configuration (name, type, scheduler, parameters, schedule_config) - **Simplified**: Removed complex status enum
+- **TaskExecution**: Task execution records with `is_success` boolean - **Simplified**: Replaced status enum with binary success/failure
 - **RedditPost**: Reddit post data and metadata
 - **RedditComment**: Reddit comment data and relationships
 
-### Schema Models
-- **UserCreate**: User registration data
-- **UserUpdate**: Unified user update model (supports partial updates)
-- **UserResponse**: User data response
-- **LoginRequest**: Login credentials
-- **Token**: JWT token response
-- **PasswordResetRequest**: Forgot password request (email)
-- **PasswordResetConfirm**: Reset password with token and new password
-- **PasswordResetResponse**: Generic response for password reset operations
-- **TaskConfigCreate/Update/Response**: Task configuration schemas (supports dual cron format)
-- **SystemStatusResponse**: System status with scheduler/broker state
-- **TaskExecutionResult**: Task execution response
-- **ScheduledJobInfo**: Scheduled job information
-- **BotConfigCreate/Update/Response**: Bot configuration schemas
-- **ScrapeSessionCreate/Update/Response**: Scraping session schemas
-- **RedditPostResponse**: Reddit post data schema
-- **RedditCommentResponse**: Reddit comment data schema
+**Removed Models** (eliminated during refactoring):
+- ~~**ScheduleEvent**~~: Schedule event logging (merged into Redis history service)
+- ~~**BotConfig**~~: Reddit bot configuration (consolidated)
+- ~~**ScrapeSession**~~: Scraping session management (consolidated)
+
+### Schema Models (Modularized v2.4)
+- **Authentication Schemas** (`auth.py`): LoginRequest, Token, PasswordResetRequest/Confirm/Response
+- **User Management Schemas** (`user.py`): UserCreate, UserUpdate, UserResponse
+- **Task Configuration Schemas** (`task_config_schemas.py`):
+  - TaskConfigBase, TaskConfigCreate, TaskConfigUpdate, TaskConfigResponse
+  - Supports dual cron format (expression + individual fields)
+  - Includes Redis scheduling state integration
+- **Schedule Management Schemas** (`task_schedules_schemas.py`):
+  - ScheduledJobInfo, ScheduleActionRequest, ScheduleStatusResponse
+  - ScheduleHistoryResponse, SchedulerSummaryResponse
+- **Execution Management Schemas** (`task_executions_schemas.py`):
+  - TaskExecutionResponse, ExecutionStatsResponse, ExecutionFilterRequest
+  - Simplified with `is_success` boolean instead of complex status enums
+- **System Monitoring Schemas** (`task_system_schemas.py`):
+  - SystemStatusResponse, HealthCheckResponse, DashboardDataResponse
+- **Reddit Content Schemas** (`reddit_content.py`): RedditPostResponse, RedditCommentResponse
+
+**Architecture Benefits**:
+- **Type Safety**: All 25 API endpoints have response_model validation
+- **Modular Organization**: Schemas grouped by functionality instead of single large file
+- **Zero Redundancy**: Eliminated duplicate schema classes
+- **Enhanced Integration**: Database config + Redis scheduling state combined in responses
 
 ### Frontend Architecture
 - **React 18** with TypeScript and Vite
@@ -239,14 +277,30 @@ frontend/                  # React frontend
   4. Start FastAPI server
 - **No Manual Steps Required**: Just run `docker compose up`
 
-### TaskIQ Task System Architecture
+### TaskIQ Task System Architecture (Refactored v2.4)
 
-#### Components
+#### Optimized Components
 - **TaskIQ Broker** (`broker.py`): Message broker configuration using Redis/RabbitMQ
 - **TaskIQ Scheduler** (`scheduler.py`): Handles scheduled task execution with database synchronization
-- **Task Manager** (`services/task_manager.py`): High-level task management service
-- **Task Registry** (`core/task_registry.py`): Task type definitions and configuration
-- **Task Routes** (`api/v1/routes/task_routes.py`): RESTful API for task management
+- **Core Services** (eliminated functional overlap):
+  - **SchedulerCoreService** (`services/redis/scheduler_core.py`): Pure TaskIQ scheduling with independent Redis connection
+  - **ScheduleHistoryRedisService** (`services/redis/history.py`): **Enhanced** - unified state, history, and metadata management
+  - **SchedulerService** (`services/redis/scheduler.py`): Unified interface combining core + history services
+- **Task Registry** (`core/tasks/registry.py`): Task type definitions and configuration - **Simplified**: Removed complex status enums
+- **Task Routes** (`api/v1/routes/task_routes.py`): **Completely rewritten** - 25 RESTful API endpoints with modular architecture
+- **Redis Manager** (`core/redis_manager.py`): **Optimized** - unified connection pool management
+
+**Eliminated Components** (removed during refactoring):
+- ~~**Task Manager**~~ (`services/task_manager.py`): Removed over-abstracted intermediate layer
+- ~~**TaskServiceBase**~~, ~~**TaskExecutor**~~: Removed over-engineered base classes
+- ~~**Implementation Layer**~~ (`app/implementation/`): Removed entire over-abstracted directory
+
+#### Key Architectural Improvements
+- **Connection Optimization**: Eliminated double Redis connections, unified connection pool
+- **Functional Consolidation**: History service enhanced to handle state + metadata + history (no overlap)
+- **Simplified Status Model**: Binary `is_success` instead of complex status state machines
+- **Direct Service Calls**: API layer calls CRUD + Redis services directly (no intermediate abstractions)
+- **Data Composition**: API responses combine PostgreSQL config + Redis scheduling state seamlessly
 
 #### Task Types
 - `cleanup_tokens` - Clean up expired authentication tokens
@@ -286,12 +340,26 @@ The system accepts both formats for CRON scheduling:
 }
 ```
 
-#### Task Status Flow
-1. **pending** - Task submitted but not yet started
-2. **running** - Task currently executing
-3. **success** - Task completed successfully
-4. **failed** - Task failed with error
-5. **revoked** - Task cancelled/revoked
+#### Task Status Flow (Simplified v2.4)
+**Database Execution Status** (PostgreSQL - `TaskExecution.is_success`):
+- `true` - Task completed successfully
+- `false` - Task failed with error
+
+**Redis Scheduling Status** (`ScheduleStatus` enum):
+- `inactive` - Task not scheduled
+- `active` - Task actively scheduled in TaskIQ
+- `paused` - Task temporarily suspended
+- `error` - Scheduling error occurred
+
+**TaskIQ Runtime Status** (handled by TaskIQ broker):
+- `pending` - Task submitted but not yet started
+- `running` - Task currently executing
+- `revoked` - Task cancelled/revoked
+
+**Architecture Separation**:
+- **PostgreSQL**: Stores static configuration and execution results
+- **Redis**: Manages dynamic scheduling state and history
+- **TaskIQ**: Handles runtime task execution and queuing
 
 ### Development Notes
 - The backend automatically runs migrations on startup via docker-compose
@@ -326,27 +394,35 @@ The system accepts both formats for CRON scheduling:
 - **Forms**: Clear errors only when user starts typing, not on component mount
 - **Loading States**: Use `getApiState(url)` from api-store to get loading/error states for specific endpoints
 
-### Backend Development
-- **Constants**: Use `StatusCode` and `ErrorMessages` from `app.core.constants` instead of magic numbers/strings
+### Backend Development (Updated v2.4)
+- **Constants**: Use constants from `app.constant.constants` instead of magic numbers/strings
 - **Error Handling**: All custom exceptions should extend `ApiError` base class
 - **HTTP Status**: Use correct status codes (201 for creation, 409 for conflicts, 403 for permissions)
 - **Database Operations**: Use CRUD classes for all database operations
 - **Transaction Handling**: Always use `db.add()`, `await db.commit()`, and `await db.refresh()` for database updates
 - **Password Security**: Use `get_password_hash()` and `verify_password()` from `app.core.security`
-- **Task Management**: Use `TaskManager` service for all task operations, not direct scheduler access
-- **SQLAlchemy Relations**: Use `lazy="select"` for relations that work with `selectinload` 
+- **Task Management**: Use `redis_services.scheduler` for task operations (unified interface)
+- **Task Status**: Use boolean `is_success` for execution results, `ScheduleStatus` enum for scheduling state
+- **SQLAlchemy Relations**: Use `lazy="select"` for relations that work with `selectinload`
 - **Cron Scheduling**: Support both `cron_expression` and individual cron fields in schemas
+- **Service Architecture**: Direct calls to CRUD + Redis services, avoid over-abstraction
+- **Schema Organization**: Use modular schemas (`task_config_schemas`, `task_schedules_schemas`, etc.)
+- **Connection Management**: Use unified Redis connection pool, avoid multiple Redis connections
 - **Imports**: Ensure all models are properly exported from `__init__.py` files
 
-### Common Patterns
+### Common Patterns (Updated v2.4)
 - **API Calls**: Use api-store methods with automatic loading/error state management
 - **Redirects**: Let `ProtectedRoute` handle authentication redirects automatically
 - **Loading States**: Managed by api-store and accessed via `getApiState(url)`
 - **Error Display**: Show errors immediately, clear only on user interaction
-- **Task Management**: Use TaskManager service → CRUD → TaskIQ pattern
+- **Task Management**: Direct pattern - API → CRUD + Redis services (no intermediate layers)
 - **Task Configuration**: Support dual cron format (expression or individual fields)
-- **Background Tasks**: Implement via TaskIQ with distributed processing
-- **Schedule Management**: Database-driven with automatic scheduler synchronization
+- **Background Tasks**: Implement via TaskIQ with optimized Redis connection management
+- **Schedule Management**: Database-driven with Redis state synchronization
+- **Data Composition**: Combine PostgreSQL config + Redis scheduling state in API responses
+- **Status Management**: Use binary `is_success` for execution, enum for scheduling state
+- **Service Separation**: Core scheduling (TaskIQ) + Enhanced history (state + metadata + events)
+- **Connection Optimization**: Single unified Redis connection pool for all services except TaskIQ scheduler
 
 ### Route Structure
 - `/login` - User login page
@@ -365,3 +441,5 @@ Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
 ALWAYS prefer editing an existing file to creating a new one.
 NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+- to memorize
+- to memorize
