@@ -132,64 +132,6 @@ class CRUDTaskExecution:
         return result.scalars().all()
     
     
-    async def get_execution_stats(
-        self,
-        db: AsyncSession,
-        config_id: Optional[int] = None,
-        days: int = 7
-    ) -> Dict[str, Any]:
-        """获取执行统计"""
-        start_time = get_current_time() - timedelta(days=days)
-        
-        # 构建基础过滤条件
-        base_filter = TaskExecution.started_at >= start_time
-        if config_id:
-            base_filter = and_(base_filter, TaskExecution.config_id == config_id)
-        
-        # 总执行次数
-        total_result = await db.execute(
-            select(func.count(TaskExecution.id)).where(base_filter)
-        )
-        total = total_result.scalar() or 0
-        
-        # 成功和失败统计
-        success_result = await db.execute(
-            select(func.count(TaskExecution.id))
-            .where(and_(base_filter, TaskExecution.is_success == True))
-        )
-        success_count = success_result.scalar() or 0
-        
-        failed_result = await db.execute(
-            select(func.count(TaskExecution.id))
-            .where(and_(base_filter, TaskExecution.is_success == False))
-        )
-        failed_count = failed_result.scalar() or 0
-        
-        # 平均执行时间 (只统计成功的任务)
-        avg_duration_result = await db.execute(
-            select(func.avg(TaskExecution.duration_seconds))
-            .where(
-                and_(
-                    base_filter,
-                    TaskExecution.is_success == True,
-                    TaskExecution.duration_seconds.isnot(None)
-                )
-            )
-        )
-        avg_duration = float(avg_duration_result.scalar() or 0.0)
-        
-        # 计算成功率
-        success_rate = (success_count / total * 100) if total > 0 else 0.0
-        
-        return {
-            "total_executions": total,
-            "success_count": success_count,
-            "failed_count": failed_count,
-            "success_rate": success_rate,
-            "avg_duration_seconds": avg_duration,
-            "period_days": days
-        }
-    
     async def cleanup_old_executions(
         self,
         db: AsyncSession,

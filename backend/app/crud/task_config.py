@@ -192,51 +192,6 @@ class CRUDTaskConfig:
             raise DatabaseError(f"{ERROR_DELETE_TASK_CONFIG}: {str(e)}")
     
     
-    async def update_parameters(
-        self,
-        db: AsyncSession,
-        config_id: int,
-        parameters: Dict[str, Any]
-    ) -> TaskConfig:
-        """更新任务参数"""
-        try:
-            stmt = (
-                update(TaskConfig)
-                .where(TaskConfig.id == config_id)
-                .values(parameters=parameters, updated_at=get_current_time())
-                .returning(TaskConfig)
-            )
-            
-            result = await db.execute(stmt)
-            await db.commit()
-            return result.scalar_one()
-            
-        except Exception as e:
-            await db.rollback()
-            raise DatabaseError(f"更新任务参数时出错: {str(e)}")
-    
-    async def update_schedule_config(
-        self,
-        db: AsyncSession,
-        config_id: int,
-        schedule_config: Dict[str, Any]
-    ) -> TaskConfig:
-        """更新调度配置"""
-        try:
-            stmt = (
-                update(TaskConfig)
-                .where(TaskConfig.id == config_id)
-                .values(schedule_config=schedule_config, updated_at=get_current_time())
-                .returning(TaskConfig)
-            )
-            
-            result = await db.execute(stmt)
-            await db.commit()
-            return result.scalar_one()
-            
-        except Exception as e:
-            await db.rollback()
-            raise DatabaseError(f"更新调度配置时出错: {str(e)}")
     
     async def get_execution_stats(
         self,
