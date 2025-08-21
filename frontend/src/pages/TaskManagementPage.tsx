@@ -3,277 +3,116 @@ import {
   Box,
   Typography,
   Button,
-  Grid,
   Alert,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Snackbar,
-  Checkbox,
-  FormControlLabel,
-  Chip,
+  Tabs,
+  Tab,
+  Paper,
 } from '@mui/material';
-import { 
+import {
+  Add as AddIcon,
   Refresh as RefreshIcon,
-  CleaningServices as CleanupIcon,
-  PlayArrow as BatchPlayIcon,
-  Pause as BatchPauseIcon,
-  Delete as BatchDeleteIcon,
+  Dashboard as DashboardIcon,
 } from '@mui/icons-material';
 import { useApiStore } from '../stores/api-store';
 import { useAuthStore } from '../stores/auth-store';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
-import { useKeyboardShortcuts, SHORTCUTS } from '../hooks/useKeyboardShortcuts';
-import AutoRefreshControl from '../components/Common/AutoRefreshControl';
-import LoadingState from '../components/Common/LoadingState';
-import ErrorBoundary from '../components/Common/ErrorBoundary';
 import ManagementLayout from '../components/Layout/ManagementLayout';
-import TaskCard from '../components/Tasks/TaskCard';
-import TaskDetailDialog from '../components/Tasks/TaskDetailDialog';
-import CleanupManagerDialog from '../components/Tasks/CleanupManagerDialog';
-import BatchUpdateDialog from '../components/Tasks/BatchUpdateDialog';
-import SystemHealthPanel from '../components/Tasks/SystemHealthPanel';
-import { EnhancedSchedule, TaskFilters, CleanupConfig, BatchUpdateConfig } from '../types/task';
+import TaskConfigList from '../components/Tasks/TaskConfigList';
+import TaskConfigDialog from '../components/Tasks/TaskConfigDialog';
+import TaskSchedulePanel from '../components/Tasks/TaskSchedulePanel';
+import TaskExecutionPanel from '../components/Tasks/TaskExecutionPanel';
+import { TaskConfig, TaskConfigCreate, TaskConfigUpdate } from '../types/task';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 const TaskManagementPage: React.FC = () => {
-  const { fetchData, postData, deleteData, getApiState } = useApiStore();
+  const { fetchData, postData, patchData, deleteData, getApiState } = useApiStore();
   const { user } = useAuthStore();
-  const [schedules, setSchedules] = useState<EnhancedSchedule[]>([]);
-  const [selectedSchedule, setSelectedSchedule] = useState<EnhancedSchedule | null>(null);
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [scheduleToDelete, setScheduleToDelete] = useState<EnhancedSchedule | null>(null);
-  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
-  const [batchUpdateDialogOpen, setBatchUpdateDialogOpen] = useState(false);
-  const [filters, setFilters] = useState<TaskFilters>({});
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   
-  // 批量操作相关状态
-  const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
-  const [batchMode, setBatchMode] = useState(false);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(60000); // 60秒
+  const [tabValue, setTabValue] = useState(0);
+  const [configs, setConfigs] = useState<TaskConfig[]>([]);
+  const [selectedConfig, setSelectedConfig] = useState<TaskConfig | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  const schedulesApiUrl = '/v1/tasks/schedules?enhanced=true';
-  const { loading: schedulesLoading, error: schedulesError } = getApiState(schedulesApiUrl);
+  const configsUrl = '/v1/tasks/configs';
+  const { loading, error } = getApiState(configsUrl);
 
-  // Check if user is superuser
   const isSuperuser = user?.is_superuser || false;
 
-  const loadSchedules = useCallback(async () => {
+  const loadConfigs = useCallback(async () => {
     if (!isSuperuser) return;
     
     try {
-      const data = await fetchData<EnhancedSchedule[]>(schedulesApiUrl);
-      setSchedules(data || []);
+      const response = await fetchData<{ items: TaskConfig[], total: number }>(configsUrl);
+      setConfigs(response.items || []);
     } catch (error) {
-      console.error('Failed to load schedules:', error);
+      console.error('Failed to load configs:', error);
     }
-  }, [fetchData, schedulesApiUrl, isSuperuser]);
+  }, [fetchData, configsUrl, isSuperuser]);
 
-  const handleRefresh = useCallback(async () => {
-    await loadSchedules();
-    setRefreshTrigger(prev => prev + 1); // 触发 SystemHealthPanel 刷新
-  }, [loadSchedules]);
+  useEffect(() => {
+    loadConfigs();
+  }, [loadConfigs]);
 
-  // 使用自动刷新Hook
-  const autoRefresh = useAutoRefresh(
-    handleRefresh,
-    {
-      interval: autoRefreshInterval,
-      enabled: true,
-      immediate: isSuperuser,
-    }
-  );
+  const handleCreateConfig = () => {
+    setSelectedConfig(null);
+    setDialogOpen(true);
+  };
 
-  // 处理刷新间隔变化
-  const handleIntervalChange = useCallback((newInterval: number) => {
-    setAutoRefreshInterval(newInterval);
-    autoRefresh.setInterval(newInterval);
-  }, [autoRefresh]);
+  const handleEditConfig = (config: TaskConfig) => {
+    setSelectedConfig(config);
+    setDialogOpen(true);
+  };
 
-  // 键盘快捷键
-  useKeyboardShortcuts([
-    {
-      ...SHORTCUTS.REFRESH,
-      callback: autoRefresh.refresh,
-      description: '刷新任务列表',
-      disabled: schedulesLoading,
-    },
-    {
-      ...SHORTCUTS.CTRL_R,
-      callback: autoRefresh.refresh,
-      description: '刷新任务列表',
-      disabled: schedulesLoading,
-    },
-    {
-      ...SHORTCUTS.SPACE,
-      callback: autoRefresh.toggle,
-      description: '切换自动刷新',
-      disabled: schedulesLoading,
-    },
-    {
-      ...SHORTCUTS.ESCAPE,
-      callback: () => {
-        if (historyDialogOpen) {
-          setHistoryDialogOpen(false);
-        } else if (deleteDialogOpen) {
-          setDeleteDialogOpen(false);
-        } else if (cleanupDialogOpen) {
-          setCleanupDialogOpen(false);
-        } else if (batchUpdateDialogOpen) {
-          setBatchUpdateDialogOpen(false);
-        } else if (batchMode) {
-          setBatchMode(false);
-          setSelectedScheduleIds([]);
-        }
-      },
-      description: '关闭对话框或退出批量模式',
-    },
-    {
-      key: 'b',
-      ctrlKey: true,
-      callback: () => {
-        setBatchMode(!batchMode);
-        setSelectedScheduleIds([]);
-      },
-      description: '切换批量操作模式',
-      disabled: schedulesLoading,
-    },
-  ]);
-
-  // 批量操作处理函数
-  const handleBatchAction = async (action: 'pause' | 'resume' | 'delete') => {
-    if (selectedScheduleIds.length === 0) {
-      setSnackbarMessage('请选择要操作的任务');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    try {
-      const updates: BatchUpdateConfig = {
-        schedule_ids: selectedScheduleIds,
-        updates: { action }
-      };
-      
-      await postData('/v1/tasks/schedules/batch-update', updates);
-      setSnackbarMessage(`批量${action === 'pause' ? '暂停' : action === 'resume' ? '恢复' : '删除'}操作成功`);
-      setSnackbarOpen(true);
-      setSelectedScheduleIds([]);
-      setBatchMode(false);
-      await loadSchedules();
-    } catch (error) {
-      console.error(`Failed to batch ${action}:`, error);
-      setSnackbarMessage(`批量操作失败: ${action}`);
-      setSnackbarOpen(true);
+  const handleDeleteConfig = async (config: TaskConfig) => {
+    if (window.confirm(`确定要删除任务配置 "${config.name}" 吗？`)) {
+      try {
+        await deleteData(`/v1/tasks/configs/${config.id}`);
+        await loadConfigs();
+      } catch (error) {
+        console.error('Failed to delete config:', error);
+      }
     }
   };
 
-  // 清理任务处理函数
-  const handleCleanup = async () => {
+  const handleSaveConfig = async (data: TaskConfigCreate | TaskConfigUpdate) => {
     try {
-      const cleanupConfig: CleanupConfig = { action: 'trigger' };
-      await postData('/v1/tasks/cleanup', cleanupConfig);
-      setSnackbarMessage('清理操作已启动');
-      setSnackbarOpen(true);
-      setCleanupDialogOpen(false);
-      await loadSchedules();
+      if (selectedConfig) {
+        await patchData(`/v1/tasks/configs/${selectedConfig.id}`, data);
+      } else {
+        await postData('/v1/tasks/configs', data);
+      }
+      setDialogOpen(false);
+      await loadConfigs();
     } catch (error) {
-      console.error('Failed to trigger cleanup:', error);
-      setSnackbarMessage('清理操作失败');
-      setSnackbarOpen(true);
+      console.error('Failed to save config:', error);
     }
   };
 
-  const handleScheduleAction = async (scheduleId: string, action: string) => {
+  const handleScheduleAction = async (configId: number, action: string) => {
     try {
-      await postData(`/v1/tasks/schedules/${scheduleId}/action?action=${action}`, {});
-      setSnackbarMessage(`任务操作成功: ${action}`);
-      setSnackbarOpen(true);
-      await loadSchedules();
+      await postData(`/v1/tasks/schedules/${configId}/${action}`, {});
+      await loadConfigs();
     } catch (error) {
       console.error(`Failed to ${action} schedule:`, error);
-      setSnackbarMessage(`任务操作失败: ${action}`);
-      setSnackbarOpen(true);
     }
   };
-
-  const handleRunSchedule = (schedule: EnhancedSchedule) => {
-    handleScheduleAction(schedule.schedule_id, 'run');
-  };
-
-  const handlePauseSchedule = (schedule: EnhancedSchedule) => {
-    handleScheduleAction(schedule.schedule_id, 'pause');
-  };
-
-  const handleResumeSchedule = (schedule: EnhancedSchedule) => {
-    handleScheduleAction(schedule.schedule_id, 'resume');
-  };
-
-  const handleDeleteSchedule = (schedule: EnhancedSchedule) => {
-    setScheduleToDelete(schedule);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!scheduleToDelete) return;
-
-    try {
-      await deleteData(`/v1/tasks/schedules/${scheduleToDelete.schedule_id}`);
-      setSnackbarMessage('任务删除成功');
-      setSnackbarOpen(true);
-      await loadSchedules();
-      setDeleteDialogOpen(false);
-      setScheduleToDelete(null);
-    } catch (error) {
-      console.error('Failed to delete schedule:', error);
-      setSnackbarMessage('任务删除失败');
-      setSnackbarOpen(true);
-    }
-  };
-
-  const handleViewHistory = (schedule: EnhancedSchedule) => {
-    setSelectedSchedule(schedule);
-    setHistoryDialogOpen(true);
-  };
-
-  // 批量选择处理函数
-  const handleSelectSchedule = (scheduleId: string, selected: boolean) => {
-    if (selected) {
-      setSelectedScheduleIds(prev => [...prev, scheduleId]);
-    } else {
-      setSelectedScheduleIds(prev => prev.filter(id => id !== scheduleId));
-    }
-  };
-
-  const handleSelectAll = () => {
-    const allIds = filteredSchedules.map(s => s.schedule_id);
-    setSelectedScheduleIds(allIds);
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedScheduleIds([]);
-  };
-
-  const filteredSchedules = schedules.filter(schedule => {
-    if (filters.status && schedule.computed_status !== filters.status) {
-      return false;
-    }
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      return schedule.name.toLowerCase().includes(searchLower) || 
-             schedule.schedule_id.toLowerCase().includes(searchLower);
-    }
-    return true;
-  });
 
   if (!isSuperuser) {
     return (
@@ -286,245 +125,79 @@ const TaskManagementPage: React.FC = () => {
   }
 
   return (
-    <ErrorBoundary>
-      <ManagementLayout>
-        <Box>
+    <ManagementLayout>
+      <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" gutterBottom>
-            任务调度管理
+            任务管理中心
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               variant="outlined"
-              startIcon={<CleanupIcon />}
-              onClick={() => setCleanupDialogOpen(true)}
-              disabled={schedulesLoading}
+              startIcon={<DashboardIcon />}
+              onClick={() => window.location.href = '/management/monitoring'}
             >
-              清理管理
+              系统监控
             </Button>
             <Button
-              variant={batchMode ? 'contained' : 'outlined'}
-              onClick={() => {
-                setBatchMode(!batchMode);
-                setSelectedScheduleIds([]);
-              }}
-              disabled={schedulesLoading}
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={loadConfigs}
+              disabled={loading}
             >
-              批量操作
+              刷新
             </Button>
-            {batchMode && selectedScheduleIds.length > 0 && (
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={() => setBatchUpdateDialogOpen(true)}
-                disabled={schedulesLoading}
-              >
-                高级批量更新
-              </Button>
-            )}
-            <AutoRefreshControl
-              isRunning={autoRefresh.isRunning}
-              interval={autoRefreshInterval}
-              onStart={autoRefresh.start}
-              onStop={autoRefresh.stop}
-              onToggle={autoRefresh.toggle}
-              onRefresh={autoRefresh.refresh}
-              onSetInterval={handleIntervalChange}
-              disabled={schedulesLoading}
-            />
-          </Box>
-        </Box>
-
-        {/* Batch Operations Bar */}
-        {batchMode && (
-          <Box sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                已选择 {selectedScheduleIds.length} 个任务
-              </Typography>
-              {selectedScheduleIds.length > 0 && (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button
-                    size="small"
-                    startIcon={<BatchPauseIcon />}
-                    onClick={() => handleBatchAction('pause')}
-                  >
-                    批量暂停
-                  </Button>
-                  <Button
-                    size="small"
-                    startIcon={<BatchPlayIcon />}
-                    onClick={() => handleBatchAction('resume')}
-                  >
-                    批量恢复
-                  </Button>
-                  <Button
-                    size="small"
-                    startIcon={<BatchDeleteIcon />}
-                    onClick={() => handleBatchAction('delete')}
-                    color="error"
-                  >
-                    批量删除
-                  </Button>
-                </Box>
-              )}
-              <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
-                <Button size="small" onClick={handleSelectAll}>全选</Button>
-                <Button size="small" onClick={handleDeselectAll}>取消全选</Button>
-              </Box>
-            </Box>
-          </Box>
-        )}
-
-        {/* System Health Panel */}
-        <SystemHealthPanel refreshTrigger={refreshTrigger} />
-
-        {/* Filter Bar */}
-        <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            label="搜索任务"
-            variant="outlined"
-            size="small"
-            value={filters.search || ''}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            sx={{ minWidth: 200 }}
-          />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>状态筛选</InputLabel>
-            <Select
-              value={filters.status || ''}
-              label="状态筛选"
-              onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateConfig}
+              disabled={loading}
             >
-              <MenuItem value="">全部</MenuItem>
-              <MenuItem value="running">运行中</MenuItem>
-              <MenuItem value="scheduled">已调度</MenuItem>
-              <MenuItem value="paused">已暂停</MenuItem>
-              <MenuItem value="failed">失败</MenuItem>
-            </Select>
-          </FormControl>
+              创建任务
+            </Button>
+          </Box>
         </Box>
 
-        {schedulesError && (
+        {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {schedulesError.message || '加载失败，请稍后重试'}
+            {error.message || '加载失败，请稍后重试'}
           </Alert>
         )}
 
-        {schedulesLoading && schedules.length === 0 ? (
-          <LoadingState
-            type="card"
-            count={6}
-            message="正在加载任务调度信息..."
+        <Paper sx={{ mb: 3 }}>
+          <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+            <Tab label="任务配置" />
+            <Tab label="调度管理" />
+            <Tab label="执行记录" />
+          </Tabs>
+        </Paper>
+
+        <TabPanel value={tabValue} index={0}>
+          <TaskConfigList
+            configs={configs}
+            loading={loading}
+            onEdit={handleEditConfig}
+            onDelete={handleDeleteConfig}
+            onScheduleAction={handleScheduleAction}
           />
-        ) : filteredSchedules.length === 0 ? (
-          <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              没有找到任务
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {filters.search || filters.status ? '尝试调整筛选条件' : '系统中还没有配置任何定时任务'}
-            </Typography>
-          </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {filteredSchedules.map((schedule) => (
-              <Grid item xs={12} sm={6} lg={4} key={schedule.schedule_id}>
-                <Box sx={{ position: 'relative' }}>
-                  {batchMode && (
-                    <Checkbox
-                      checked={selectedScheduleIds.includes(schedule.schedule_id)}
-                      onChange={(e) => handleSelectSchedule(schedule.schedule_id, e.target.checked)}
-                      sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
-                    />
-                  )}
-                  <TaskCard
-                    task={{
-                      id: schedule.schedule_id,
-                      name: schedule.name,
-                      trigger: schedule.trigger,
-                      next_run_time: schedule.next_run_time,
-                      pending: schedule.pending,
-                      status: schedule.computed_status || 'idle',
-                    }}
-                    schedule={schedule}
-                    onRun={handleRunSchedule}
-                    onPause={handlePauseSchedule}
-                    onResume={handleResumeSchedule}
-                    onDelete={handleDeleteSchedule}
-                    onViewHistory={handleViewHistory}
-                    disabled={schedulesLoading}
-                    batchMode={batchMode}
-                  />
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
-        )}
+        </TabPanel>
 
-        {/* Task Detail Dialog */}
-        <TaskDetailDialog
-          open={historyDialogOpen}
-          jobId={selectedSchedule?.schedule_id || null}
-          jobName={selectedSchedule?.name || ''}
-          schedule={selectedSchedule || undefined}
-          onClose={() => setHistoryDialogOpen(false)}
+        <TabPanel value={tabValue} index={1}>
+          <TaskSchedulePanel configs={configs} />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={2}>
+          <TaskExecutionPanel configs={configs} />
+        </TabPanel>
+
+        <TaskConfigDialog
+          open={dialogOpen}
+          config={selectedConfig}
+          onClose={() => setDialogOpen(false)}
+          onSave={handleSaveConfig}
         />
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-          <DialogTitle>确认删除</DialogTitle>
-          <DialogContent>
-            <Typography>
-              确定要删除任务 "{scheduleToDelete?.name}" 吗？此操作无法撤销。
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)}>取消</Button>
-            <Button onClick={confirmDelete} color="error" variant="contained">
-              删除
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Cleanup Management Dialog */}
-        <CleanupManagerDialog
-          open={cleanupDialogOpen}
-          onClose={() => setCleanupDialogOpen(false)}
-          onCleanupComplete={() => {
-            setSnackbarMessage('清理操作已完成');
-            setSnackbarOpen(true);
-            loadSchedules();
-          }}
-        />
-
-        {/* Batch Update Dialog */}
-        <BatchUpdateDialog
-          open={batchUpdateDialogOpen}
-          onClose={() => {
-            setBatchUpdateDialogOpen(false);
-            setSelectedScheduleIds([]);
-            setBatchMode(false);
-          }}
-          schedules={schedules}
-          selectedScheduleIds={selectedScheduleIds}
-          onUpdateComplete={() => {
-            setSnackbarMessage('批量更新操作已完成');
-            setSnackbarOpen(true);
-            loadSchedules();
-          }}
-        />
-
-        {/* Snackbar for feedback */}
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={6000}
-          onClose={() => setSnackbarOpen(false)}
-          message={snackbarMessage}
-        />
-        </Box>
-      </ManagementLayout>
-    </ErrorBoundary>
+      </Box>
+    </ManagementLayout>
   );
 };
 

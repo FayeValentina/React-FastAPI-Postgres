@@ -11,8 +11,6 @@ import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import BotManagementPage from './pages/BotManagementPage';
-import SessionManagementPage from './pages/SessionManagementPage';
 import TaskManagementPage from './pages/TaskManagementPage';
 import SystemMonitoringPage from './pages/SystemMonitoringPage';
 
@@ -77,17 +75,7 @@ const AppRoutes: React.FC = () => {
         } />
         
         {/* 综合管理路由 */}
-        <Route path="/management" element={<Navigate to="/management/scraper/bots" replace />} />
-        <Route path="/management/scraper/bots" element={
-          <ProtectedRoute>
-            <BotManagementPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/management/scraper/sessions" element={
-          <ProtectedRoute>
-            <SessionManagementPage />
-          </ProtectedRoute>
-        } />
+        <Route path="/management" element={<Navigate to="/management/tasks" replace />} />
         <Route path="/management/tasks" element={
           <ProtectedRoute>
             <TaskManagementPage />
@@ -100,10 +88,8 @@ const AppRoutes: React.FC = () => {
         } />
         
         {/* 保持向后兼容性 */}
-        <Route path="/scraper" element={<Navigate to="/management/scraper/bots" replace />} />
-        <Route path="/scraper/*" element={<Navigate to="/management/scraper/bots" replace />} />
-        <Route path="/tasks" element={<Navigate to="/management/tasks" replace />} />
-        <Route path="/tasks/*" element={<Navigate to="/management/tasks" replace />} />
+        <Route path="/management/scraper/*" element={<Navigate to="/management/tasks" replace />} />
+        <Route path="/scraper/*" element={<Navigate to="/management/tasks" replace />} />
 
         {/* 管理员路由 (如果用户有is_superuser=true) */}
         {/* <Route path="/admin" element={
