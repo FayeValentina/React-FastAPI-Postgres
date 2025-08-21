@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Card,
   CardContent,
@@ -14,43 +14,14 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { useApiStore } from '../../stores/api-store';
-import { SystemInfo } from '../../types/task';
+import { SystemHealth } from '../../types/task';
 
 interface SystemHealthPanelProps {
-  refreshTrigger?: number;
+  health?: SystemHealth | null;
 }
 
-const SystemHealthPanel: React.FC<SystemHealthPanelProps> = ({ refreshTrigger }) => {
-  const { fetchData, getApiState } = useApiStore();
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-
-  const systemUrl = '/v1/tasks/system?include_health=true&include_stats=true';
-  const { loading, error } = getApiState(systemUrl);
-
-  useEffect(() => {
-    loadSystemInfo();
-    const interval = setInterval(loadSystemInfo, 120000); // 每30秒刷新
-    return () => clearInterval(interval);
-  }, []);
-
-  // 监听外部刷新触发器
-  useEffect(() => {
-    if (refreshTrigger) {
-      loadSystemInfo();
-    }
-  }, [refreshTrigger]);
-
-  const loadSystemInfo = async () => {
-    try {
-      const data = await fetchData<SystemInfo>(systemUrl);
-      setSystemInfo(data);
-    } catch (error) {
-      console.error('Failed to load system info:', error);
-    }
-  };
-
-  if (loading && !systemInfo) {
+const SystemHealthPanel: React.FC<SystemHealthPanelProps> = ({ health }) => {
+  if (!health) {
     return (
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ display: 'flex', justifyContent: 'center' }}>
@@ -60,11 +31,17 @@ const SystemHealthPanel: React.FC<SystemHealthPanelProps> = ({ refreshTrigger })
     );
   }
 
-  if (error || !systemInfo) {
-    return null;
-  }
+  // Map health status to score for display
+  const getHealthScore = (status: string) => {
+    switch (status) {
+      case 'healthy': return 1.0;
+      case 'degraded': return 0.6;
+      case 'unhealthy': return 0.2;
+      default: return 0;
+    }
+  };
 
-  const healthScore = systemInfo.health?.health_score || 0;
+  const healthScore = getHealthScore(health.status);
   const healthColor = healthScore >= 0.8 ? 'success' : healthScore >= 0.5 ? 'warning' : 'error';
   const healthIcon = healthScore >= 0.8 ? <HealthyIcon /> : healthScore >= 0.5 ? <WarningIcon /> : <ErrorIcon />;
 
@@ -89,50 +66,41 @@ const SystemHealthPanel: React.FC<SystemHealthPanelProps> = ({ refreshTrigger })
         />
 
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
-          {systemInfo.stats && (
-            <>
-              <Box>
-                <Typography variant="caption" color="text.secondary">调度器状态</Typography>
-                <Typography variant="body1">
-                  <Chip
-                    label={systemInfo.stats.scheduler_running ? '运行中' : '已停止'}
-                    color={systemInfo.stats.scheduler_running ? 'success' : 'error'}
-                    size="small"
-                  />
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">总任务数</Typography>
-                <Typography variant="h6">{systemInfo.stats.total_jobs}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">活跃任务</Typography>
-                <Typography variant="h6">{systemInfo.stats.active_jobs}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">暂停任务</Typography>
-                <Typography variant="h6">{systemInfo.stats.paused_jobs}</Typography>
-              </Box>
-            </>
-          )}
+          <Box>
+            <Typography variant="caption" color="text.secondary">系统状态</Typography>
+            <Typography variant="body1">
+              <Chip
+                label={health.status.toUpperCase()}
+                color={healthColor}
+                size="small"
+              />
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">检查时间</Typography>
+            <Typography variant="body2">
+              {new Date(health.timestamp).toLocaleString('zh-CN')}
+            </Typography>
+          </Box>
         </Box>
 
-        {systemInfo.health?.unhealthy_jobs && systemInfo.health.unhealthy_jobs.length > 0 && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
+        {Object.keys(health.components).length > 0 && (
+          <Box sx={{ mt: 2 }}>
             <Typography variant="subtitle2" gutterBottom>
-              异常任务 ({systemInfo.health.unhealthy_jobs.length})
+              组件状态
             </Typography>
-            {systemInfo.health.unhealthy_jobs.slice(0, 3).map((job) => (
-              <Typography key={job.job_id} variant="caption" display="block">
-                • {job.name} - {job.status}
-              </Typography>
+            {Object.entries(health.components).map(([name, component]) => (
+              <Alert 
+                key={name}
+                severity={component.status === 'healthy' ? 'success' : 'warning'}
+                sx={{ mb: 1 }}
+              >
+                <Typography variant="body2">
+                  <strong>{name}:</strong> {component.message}
+                </Typography>
+              </Alert>
             ))}
-            {systemInfo.health.unhealthy_jobs.length > 3 && (
-              <Typography variant="caption" display="block">
-                ...还有 {systemInfo.health.unhealthy_jobs.length - 3} 个异常任务
-              </Typography>
-            )}
-          </Alert>
+          </Box>
         )}
       </CardContent>
     </Card>
