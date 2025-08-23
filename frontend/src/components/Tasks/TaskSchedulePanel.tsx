@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -34,11 +34,7 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
   const summaryUrl = '/v1/tasks/schedules/summary';
   const { loading } = getApiState(schedulesUrl);
 
-  useEffect(() => {
-    loadSchedules();
-  }, []);
-
-  const loadSchedules = async () => {
+  const loadSchedules = useCallback(async () => {
     try {
       const [schedulesData, summaryData] = await Promise.all([
         fetchData<{ schedules: ScheduleInfo[] }>(schedulesUrl),
@@ -49,7 +45,11 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
     } catch (error) {
       console.error('Failed to load schedules:', error);
     }
-  };
+  }, [fetchData, schedulesUrl, summaryUrl]);
+
+  useEffect(() => {
+    loadSchedules();
+  }, [loadSchedules]);
 
   const getConfigName = (configId?: number) => {
     if (!configId) return '-';

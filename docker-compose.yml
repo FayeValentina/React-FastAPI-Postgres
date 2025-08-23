@@ -1,23 +1,46 @@
 version: "3.8"
 
 services:
+  # nginx 反向代理服务
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+      - "443:443"  # 为将来的 SSL 配置预留
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - dbNetWork
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     env_file:
       - .env
-    ports:
-      - "${FRONTEND_PORT}:3000"
+    # 移除端口映射，只通过 nginx 访问
+    expose:
+      - "3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://backend:${BACKEND_PORT}
+      - NODE_ENV=development
     depends_on:
       - backend
     networks:
       - dbNetWork
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${FRONTEND_PORT}"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -26,8 +49,9 @@ services:
     build: ./backend
     env_file:
       - .env
-    ports:
-      - "${BACKEND_PORT}:8000"
+    # 移除端口映射，只通过 nginx 访问
+    expose:
+      - "8000"
     volumes:
       - ./backend:/app
     environment:
@@ -54,18 +78,10 @@ services:
     command: >
       bash -c "
         echo '等待数据库准备...' &&
-        echo '检查依赖同步状态...' &&
-        if ! poetry check; then
-          echo '更新poetry.lock文件...' &&
-          poetry lock &&
-          poetry install --no-interaction --no-ansi;
-        fi &&
-        echo '检查数据库模型变化...' &&
-        poetry run alembic revision --autogenerate -m 'Auto migration' 2>/dev/null || echo '没有检测到模型变化' &&
         echo '应用数据库迁移...' &&
         poetry run alembic upgrade head &&
         echo '启动应用服务器...' &&
-        poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+        poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-exclude '**/.venv/**' --reload-exclude '**/node_modules/**'
       "
     networks:
       - dbNetWork
@@ -74,8 +90,8 @@ services:
     image: postgres:17
     env_file:
       - .env
-    ports:
-      - "${POSTGRES_PORT}:5432"
+    expose:
+      - "5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -95,7 +111,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${PGADMIN_PORT}:80"
+      - "127.0.0.1:${PGADMIN_PORT}:80"
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
@@ -112,9 +128,10 @@ services:
     image: rabbitmq:4-management
     env_file:
       - .env
+    expose:
+      - "5672"
     ports:
-      - "${RABBITMQ_PORT}:5672"
-      - "15672:15672"
+      - "127.0.0.1:${RABBITMQ_PLUGIN_PORT}:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
@@ -133,8 +150,8 @@ services:
     image: redis:7-alpine
     env_file:
       - .env
-    ports:
-      - "${REDIS_PORT}:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     command: >
@@ -187,7 +204,6 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 10 &&
-        poetry install --no-interaction --no-ansi &&
         poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --log-level ${LOG_LEVEL:-INFO}
       "
     networks:
@@ -224,7 +240,6 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 15 &&
-        poetry install --no-interaction --no-ansi &&
         poetry run taskiq scheduler app.broker:scheduler --log-level ${LOG_LEVEL:-INFO}
       "
     networks:
@@ -236,7 +251,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${REDISINSIGHT_PORT:-8001}:5540"
+      - "127.0.0.1:${REDISINSIGHT_PORT:-8001}:5540"
     volumes:
       - redisinsight_data:/db
     environment:
@@ -253,6 +268,7 @@ volumes:
   rabbitmq_data:
   redis_data:
   redisinsight_data:
+  nginx_logs:
 
 networks:
   dbNetWork:

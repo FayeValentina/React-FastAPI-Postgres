@@ -1,10 +1,11 @@
 """
-重构原backend\app\services\redis\scheduler.py文件
+重构原backend/app/services/redis/scheduler.py文件
 核心调度服务 - 只负责TaskIQ调度，不做状态管理
 """
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from croniter import croniter
 
 from taskiq import ScheduledTask
 from app.models.task_config import TaskConfig
@@ -190,10 +191,37 @@ class SchedulerCoreService:
     def _get_next_run_time(self, scheduled_task) -> Optional[str]:
         """获取下次运行时间"""
         try:
+            # 处理 CRON 类型任务
             if hasattr(scheduled_task, 'cron') and scheduled_task.cron:
-                return "calculated_next_run_time"  # 可使用croniter计算
+                try:
+                    cron = croniter(scheduled_task.cron, datetime.now())
+                    next_run = cron.get_next(datetime)
+                    return next_run.isoformat()
+                except Exception as e:
+                    logger.error(f"计算CRON下次运行时间失败: {e}, cron表达式: {scheduled_task.cron}")
+                    return None
+            
+            # 处理 DATE 类型任务
             elif hasattr(scheduled_task, 'time') and scheduled_task.time:
-                return scheduled_task.time.isoformat()
-        except:
-            pass
-        return None
+                scheduled_time = scheduled_task.time
+                # 如果是字符串，转换为datetime对象
+                if isinstance(scheduled_time, str):
+                    try:
+                        scheduled_time = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+                    except ValueError:
+                        logger.error(f"无效的日期时间格式: {scheduled_time}")
+                        return None
+                
+                # 只返回未来的时间
+                if scheduled_time > datetime.now():
+                    return scheduled_time.isoformat()
+                else:
+                    # 已过期的一次性任务
+                    return None
+            
+            # MANUAL 类型或其他类型没有下次运行时间
+            return None
+            
+        except Exception as e:
+            logger.error(f"获取下次运行时间失败: {e}")
+            return None

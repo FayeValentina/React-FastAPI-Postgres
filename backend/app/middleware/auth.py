@@ -7,15 +7,16 @@ import re
 from app.core.security import verify_token
 
 # 默认排除认证的路径 - 集中定义避免重复
+# 注意: 由于root_path="/api"已在main.py配置，这里只需要相对路径
 DEFAULT_EXCLUDE_PATHS = [
-    "/api/v1/auth/login",
-    "/api/v1/auth/register",
-    "/api/v1/auth/refresh",
-    "/api/v1/auth/forgot-password",
-    "/api/v1/auth/reset-password",
-    "/api/v1/auth/verify-reset-token",
+    "/v1/auth/login",
+    "/v1/auth/register", 
+    "/v1/auth/refresh",
+    "/v1/auth/forgot-password",
+    "/v1/auth/reset-password",
+    "/v1/auth/verify-reset-token",
     "/docs",
-    "/redoc",
+    "/redoc", 
     "/openapi.json",
 ]
 
@@ -39,7 +40,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next: Callable):
         # 检查请求路径是否需要验证
-        if self._should_exclude(request.url.path):
+        if self._should_exclude(request):
             return await call_next(request)
         
         # 获取Authorization头
@@ -107,20 +108,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # 继续处理请求
         return await call_next(request)
     
-    def _should_exclude(self, path: str) -> bool:
+    def _should_exclude(self, request: Request) -> bool:
         """检查路径是否应该被排除认证"""
+        path = request.url.path
+        
+        # 获取FastAPI的root_path配置，自动去掉前缀实现解耦
+        root_path = request.scope.get("root_path", "")
+        if root_path and path.startswith(root_path):
+            # 去掉root_path前缀，获得相对路径
+            relative_path = path[len(root_path):]
+        else:
+            relative_path = path
+            
         # 检查确切路径匹配
-        if path in self.exclude_paths:
+        if relative_path in self.exclude_paths:
             return True
             
         # 检查前缀匹配
         for exclude_path in self.exclude_paths:
-            if exclude_path.endswith("*") and path.startswith(exclude_path[:-1]):
+            if exclude_path.endswith("*") and relative_path.startswith(exclude_path[:-1]):
                 return True
         
         # 检查正则表达式匹配
         for pattern in self.exclude_path_regexes:
-            if pattern.match(path):
+            if pattern.match(relative_path):
                 return True
                 
         return False 

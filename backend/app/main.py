@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 import datetime
 from fastapi import FastAPI, Depends, Request
-from fastapi.middleware.cors import CORSMiddleware
+# 删除 CORS 导入
+# from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api import router
 from app.core.config import settings
@@ -94,6 +95,7 @@ app = FastAPI(
     title="FastAPI Demo",
     description="A demo FastAPI application with restructured routes",
     version="1.0.0",
+    root_path="/api",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -123,25 +125,20 @@ app.add_middleware(
     ]
 )
 
-# 2. CORS中间件 (倒数第二执行)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors.ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 2. 删除整个 CORS 中间件配置
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=settings.cors.ORIGINS,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
-# 3. JWT认证中间件 (倒数第三执行，但实际是第一个处理请求的中间件)
-# 这样可以确保在进行其他操作前验证用户身份
+# 3. JWT认证中间件
 app.add_middleware(
     AuthMiddleware,
-    exclude_paths=DEFAULT_EXCLUDE_PATHS,  # 使用集中定义的排除路径列表
-    exclude_path_regexes=[
-        "^/api/v1/public/.*$",  # 所有公共API不需要认证
-        "^/static/.*$"          # 静态文件不需要认证
-    ]
+    exclude_paths=DEFAULT_EXCLUDE_PATHS  # 使用集中定义的排除路径列表
 )
 
 # 包含API路由
-app.include_router(router, prefix="/api")
+app.include_router(router)

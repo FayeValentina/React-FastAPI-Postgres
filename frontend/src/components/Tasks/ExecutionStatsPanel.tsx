@@ -37,15 +37,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  Legend,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  Area,
-  AreaChart,
 } from 'recharts';
 import { useApiStore } from '../../stores/api-store';
-import { ExecutionStatsResponse } from '../../types/task';
+import { ExecutionStats } from '../../types/task';
 
 interface ExecutionStatsPanelProps {
   refreshTrigger?: number;
@@ -54,14 +49,14 @@ interface ExecutionStatsPanelProps {
 const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigger = 0 }) => {
   const { fetchData, getApiState } = useApiStore();
   
-  const [stats, setStats] = useState<ExecutionStatsResponse | null>(null);
+  const [stats, setStats] = useState<ExecutionStats | null>(null);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d');
   const [viewMode, setViewMode] = useState<'overview' | 'trends' | 'details'>('overview');
 
   const buildStatsUrl = () => {
     const params = new URLSearchParams();
     params.append('days', timeRange === '7d' ? '7' : timeRange === '30d' ? '30' : '90');
-    return `/v1/tasks/executions?${params.toString()}`;
+    return `/v1/tasks/executions/stats?${params.toString()}`;
   };
 
   const statsUrl = buildStatsUrl();
@@ -69,7 +64,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
 
   const loadStats = useCallback(async () => {
     try {
-      const data = await fetchData<ExecutionStatsResponse>(statsUrl);
+      const data = await fetchData<ExecutionStats>(statsUrl);
       setStats(data);
     } catch (error) {
       console.error('Failed to load execution stats:', error);
@@ -90,19 +85,12 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-CN', { 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
 
 
   const renderOverviewCards = () => {
     if (!stats) return null;
 
-    const { summary } = stats;
-    const successRate = summary.overall_success_rate;
+    const successRate = stats.success_rate;
 
     return (
       <Grid container spacing={3} sx={{ mb: 3 }}>
@@ -110,7 +98,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <StatsIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
             <Typography variant="h4" color="primary">
-              {summary.total_executions.toLocaleString()}
+              {stats.total_executions.toLocaleString()}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               总执行次数
@@ -140,7 +128,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <PerformanceIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
             <Typography variant="h4" color="info.main">
-              {formatDuration(summary.avg_execution_time)}
+              {formatDuration(stats.avg_duration_seconds)}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               平均执行时间
@@ -152,7 +140,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <TimelineIcon sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
             <Typography variant="h4" color="warning.main">
-              {summary.failed_executions.toLocaleString()}
+              {stats.failed_count.toLocaleString()}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               失败次数
@@ -164,87 +152,37 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
   };
 
   const renderTrendsChart = () => {
-    if (!stats || !stats.time_series) return null;
+    if (!stats) return null;
 
-    const chartData = stats.time_series.map(item => ({
-      date: formatDate(item.date),
-      successful: item.successful_runs,
-      failed: item.failed_runs,
-      total: item.total_runs,
-      successRate: item.total_runs > 0 ? (item.successful_runs / item.total_runs * 100) : 0,
-      avgDuration: item.avg_duration,
+    // 显示任务类型分布图表
+    const typeBreakdown = stats.type_breakdown || {};
+    const chartData = Object.entries(typeBreakdown).map(([type, count]) => ({
+      type,
+      count: count as number
     }));
+
+    if (chartData.length === 0) {
+      return (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          暂无任务类型分布数据
+        </Alert>
+      );
+    }
 
     return (
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              执行趋势
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <RechartsTooltip />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="successful"
-                  stackId="1"
-                  stroke="#4caf50"
-                  fill="#4caf50"
-                  name="成功"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="failed"
-                  stackId="1"
-                  stroke="#f44336"
-                  fill="#f44336"
-                  name="失败"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              成功率趋势
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <RechartsTooltip formatter={(value: number) => [`${value.toFixed(1)}%`, '成功率']} />
-                <Line
-                  type="monotone"
-                  dataKey="successRate"
-                  stroke="#2196f3"
-                  strokeWidth={3}
-                  dot={{ fill: '#2196f3', strokeWidth: 2, r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
         <Grid item xs={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
-              平均执行时间趋势
+              任务类型分布
             </Typography>
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
+                <XAxis dataKey="type" />
                 <YAxis />
-                <RechartsTooltip formatter={(value: number) => [formatDuration(value), '平均时间']} />
-                <Bar dataKey="avgDuration" fill="#ff9800" />
+                <RechartsTooltip />
+                <Bar dataKey="count" fill="#2196f3" />
               </BarChart>
             </ResponsiveContainer>
           </Paper>
@@ -254,30 +192,42 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
   };
 
   const renderTopJobsTable = () => {
-    if (!stats || !stats.summary.most_active_jobs) return null;
+    if (!stats || !stats.type_breakdown) return null;
+
+    const typeBreakdown = stats.type_breakdown;
+    const sortedTypes = Object.entries(typeBreakdown)
+      .sort(([,a], [,b]) => (b as number) - (a as number))
+      .slice(0, 5);
+
+    if (sortedTypes.length === 0) {
+      return (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          暂无任务类型数据
+        </Alert>
+      );
+    }
 
     return (
       <Paper sx={{ mt: 3 }}>
         <Box sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>
-            最活跃的任务 (Top {stats.summary.most_active_jobs.length})
+            最活跃的任务类型 (Top {sortedTypes.length})
           </Typography>
           <TableContainer>
             <Table size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>排名</TableCell>
-                  <TableCell>任务名称</TableCell>
-                  <TableCell>任务ID</TableCell>
+                  <TableCell>任务类型</TableCell>
                   <TableCell align="right">执行次数</TableCell>
                   <TableCell align="right">占比</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stats.summary.most_active_jobs.map((job, index) => {
-                  const percentage = (job.execution_count / stats.summary.total_executions * 100);
+                {sortedTypes.map(([type, count], index) => {
+                  const percentage = (count as number) / stats.total_executions * 100;
                   return (
-                    <TableRow key={job.job_id}>
+                    <TableRow key={type}>
                       <TableCell>
                         <Chip
                           label={`#${index + 1}`}
@@ -287,17 +237,12 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                          {job.job_name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="caption" color="text.secondary">
-                          {job.job_id}
+                          {type}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                          {job.execution_count.toLocaleString()}
+                          {(count as number).toLocaleString()}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
@@ -398,7 +343,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
                 onChange={(e) => setViewMode(e.target.value as 'overview' | 'trends' | 'details')}
               >
                 <MenuItem value="overview">概览</MenuItem>
-                <MenuItem value="trends">趋势</MenuItem>
+                <MenuItem value="trends">类型分布</MenuItem>
                 <MenuItem value="details">详细</MenuItem>
               </Select>
             </FormControl>

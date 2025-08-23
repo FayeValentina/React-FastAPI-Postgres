@@ -2,6 +2,7 @@
 TaskIQ Broker 配置
 统一管理任务队列和调度器
 """
+
 import uuid
 import os
 from typing import Optional
@@ -16,18 +17,20 @@ from app.core.config import settings
 schedule_source = ListRedisScheduleSource(
     url=settings.redis.CONNECTION_URL,
     serializer=JSONSerializer(),
-    max_connection_pool_size=50
+    max_connection_pool_size=50,
 )
 
 # 配置 RabbitMQ broker
-broker = AioPikaBroker(
-    url=settings.rabbitmq.URL,
-).with_id_generator(
-    lambda: str(uuid.uuid4())
-).with_result_backend(
-    RedisAsyncResultBackend(
-        redis_url=settings.redis.CONNECTION_URL,
-        result_ex_time=settings.taskiq.RESULT_EX_TIME,
+broker = (
+    AioPikaBroker(
+        url=settings.rabbitmq.URL,
+    )
+    .with_id_generator(lambda: str(uuid.uuid4()))
+    .with_result_backend(
+        RedisAsyncResultBackend(
+            redis_url=settings.redis.CONNECTION_URL,
+            result_ex_time=settings.taskiq.RESULT_EX_TIME,
+        )
     )
 )
 
@@ -37,6 +40,7 @@ scheduler = TaskiqScheduler(
         schedule_source,
     ],
 )
+
 
 # 配置任务事件监听器
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)

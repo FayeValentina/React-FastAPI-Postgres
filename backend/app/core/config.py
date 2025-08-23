@@ -256,7 +256,7 @@ class Settings(BaseSettings):
     # 基本配置
     PROJECT_NAME: str = "FastAPI Backend"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/api/v1"
+    API_V1_STR: str = "/v1"
     ENVIRONMENT: str = "development"
     
     # 服务配置

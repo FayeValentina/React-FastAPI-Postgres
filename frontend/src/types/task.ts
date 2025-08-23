@@ -5,8 +5,8 @@ export interface TaskConfig {
   description?: string;
   task_type: string;
   scheduler_type: 'manual' | 'interval' | 'cron' | 'date';
-  parameters: Record<string, any>;
-  schedule_config: Record<string, any>;
+  parameters: Record<string, unknown>;
+  schedule_config: Record<string, unknown>;
   max_retries: number;
   timeout_seconds?: number;
   priority: number;
@@ -24,8 +24,8 @@ export interface TaskConfigCreate {
   description?: string;
   task_type: string;
   scheduler_type: 'manual' | 'interval' | 'cron' | 'date';
-  parameters: Record<string, any>;
-  schedule_config: Record<string, any>;
+  parameters: Record<string, unknown>;
+  schedule_config: Record<string, unknown>;
   max_retries?: number;
   timeout_seconds?: number;
   priority?: number;
@@ -39,7 +39,7 @@ export interface ScheduleInfo {
   task_name: string;
   config_id?: number;
   schedule: string;
-  labels: Record<string, any>;
+  labels: Record<string, string>;
   next_run?: string;
 }
 
@@ -71,7 +71,7 @@ export interface TaskExecution {
   started_at: string;
   completed_at?: string;
   duration_seconds?: number;
-  result?: Record<string, any>;
+  result?: Record<string, unknown>;
   error_message?: string;
   error_traceback?: string;
   created_at: string;

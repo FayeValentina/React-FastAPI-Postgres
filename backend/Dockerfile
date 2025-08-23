@@ -17,12 +17,12 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false && \
     poetry config virtualenvs.in-project false
 
-# Generate lock file if it doesn't exist or is outdated, then install dependencies
+# Generate lock file if it doesn't exist or is outdated, then install ALL dependencies
 RUN if [ ! -f poetry.lock ] || ! poetry check; then \
         echo "Generating/updating poetry.lock file..." && \
         poetry lock; \
     fi && \
-    poetry install --no-interaction --no-ansi --only=main
+    poetry install --no-interaction --no-ansi
 
 # Verify installation by attempting to import key modules
 RUN python -c "import taskiq; import fastapi; import sqlalchemy; print('Dependencies installed successfully')"

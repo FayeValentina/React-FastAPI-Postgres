@@ -16,9 +16,6 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  SmartToy as BotIcon,
-  PlayArrow as SessionIcon,
-  Article as ContentIcon,
   ArrowBack as ArrowBackIcon,
   Schedule as TaskIcon,
   Dashboard as DashboardIcon,

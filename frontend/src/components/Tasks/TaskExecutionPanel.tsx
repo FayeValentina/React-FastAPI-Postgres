@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -42,11 +42,7 @@ const TaskExecutionPanel: React.FC<TaskExecutionPanelProps> = ({ configs }) => {
   
   const { loading } = getApiState(executionsUrl);
 
-  useEffect(() => {
-    loadExecutions();
-  }, [filter]);
-
-  const loadExecutions = async () => {
+  const loadExecutions = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (!filter.configId) {
@@ -65,7 +61,11 @@ const TaskExecutionPanel: React.FC<TaskExecutionPanelProps> = ({ configs }) => {
     } catch (error) {
       console.error('Failed to load executions:', error);
     }
-  };
+  }, [fetchData, executionsUrl, statsUrl, filter.configId, filter.days]);
+
+  useEffect(() => {
+    loadExecutions();
+  }, [loadExecutions]);
 
   const formatDuration = (seconds?: number) => {
     if (!seconds) return '-';
