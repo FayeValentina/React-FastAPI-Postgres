@@ -11,10 +11,19 @@ from dotenv import load_dotenv
 # 导入枚举自动生成支持
 import alembic_autogenerate_enums
 
-# 加载 .env 文件（如果存在）
+# 加载环境特定的 .env 文件（如果存在）
 # 在 Docker 环境中，环境变量已通过 docker-compose 传递，不需要加载 .env 文件
-if os.path.exists('.env'):
-    load_dotenv()
+def get_env_file() -> str:
+    """动态选择环境文件"""
+    environment = os.getenv("ENVIRONMENT", "dev")
+    if environment == "prod":
+        return ".env.prod"
+    else:
+        return ".env.dev"
+
+env_file = get_env_file()
+if os.path.exists(env_file):
+    load_dotenv(env_file)
 
 # 添加项目根目录到 Python 路径
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

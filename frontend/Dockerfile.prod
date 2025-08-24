@@ -1,0 +1,23 @@
+# 构建阶段
+FROM node:20-slim as builder
+
+WORKDIR /app
+
+# 复制package文件并安装所有依赖
+COPY package*.json ./
+RUN npm ci
+
+# 复制源码并构建
+COPY . .
+RUN npm run build
+
+# 生产阶段：轻量级容器，只包含构建结果
+FROM alpine:latest
+
+WORKDIR /app
+
+# 复制构建好的文件
+COPY --from=builder /app/dist ./dist
+
+# 容器启动后立即退出，构建结果保留在volume中
+CMD ["echo", "Frontend build completed"]

@@ -165,7 +165,7 @@ const TaskManagementPage: React.FC = () => {
         )}
 
         <Paper sx={{ mb: 3 }}>
-          <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+          <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)}>
             <Tab label="任务配置" />
             <Tab label="调度管理" />
             <Tab label="执行记录" />

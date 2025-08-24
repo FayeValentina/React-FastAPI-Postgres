@@ -1,8 +1,8 @@
 """initial_migration
 
-Revision ID: 6bd226770f06
+Revision ID: ff407dfb6bcd
 Revises: 
-Create Date: 2025-08-17 17:54:47.079338
+Create Date: 2025-08-24 16:58:30.869413
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '6bd226770f06'
+revision: str = 'ff407dfb6bcd'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,9 +24,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('task_type', sa.Enum('BOT_SCRAPING', 'MANUAL_SCRAPING', 'BATCH_SCRAPING', 'CLEANUP_TOKENS', 'CLEANUP_CONTENT', 'CLEANUP_EVENTS', 'SEND_EMAIL', 'SEND_NOTIFICATION', 'DATA_EXPORT', 'DATA_BACKUP', 'DATA_ANALYSIS', 'HEALTH_CHECK', 'SYSTEM_MONITOR', 'LOG_ROTATION', 'TIMEOUT_MONITOR', 'CLEANUP_TIMEOUT_TASKS', name='tasktype'), nullable=False),
+    sa.Column('task_type', sa.String(length=50), nullable=False),
     sa.Column('scheduler_type', sa.Enum('CRON', 'DATE', 'MANUAL', name='schedulertype'), nullable=False),
-    sa.Column('status', sa.Enum('ACTIVE', 'INACTIVE', 'PAUSED', 'ERROR', name='configstatus'), nullable=False),
     sa.Column('parameters', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('schedule_config', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('max_retries', sa.Integer(), nullable=False),
@@ -38,7 +37,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_task_configs_id'), 'task_configs', ['id'], unique=False)
     op.create_index(op.f('ix_task_configs_name'), 'task_configs', ['name'], unique=False)
-    op.create_index(op.f('ix_task_configs_status'), 'task_configs', ['status'], unique=False)
     op.create_index(op.f('ix_task_configs_task_type'), 'task_configs', ['task_type'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -70,42 +68,11 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_password_resets_token'), 'password_resets', ['token'], unique=True)
-    op.create_table('refresh_tokens',
-    sa.Column('id', sa.String(), nullable=False),
-    sa.Column('token', sa.String(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('is_valid', sa.Boolean(), nullable=False),
-    sa.Column('issued_at', sa.DateTime(), nullable=False),
-    sa.Column('expires_at', sa.DateTime(), nullable=False),
-    sa.Column('revoked_at', sa.DateTime(), nullable=True),
-    sa.Column('user_agent', sa.String(), nullable=True),
-    sa.Column('ip_address', sa.String(), nullable=True),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_refresh_tokens_id'), 'refresh_tokens', ['id'], unique=False)
-    op.create_index(op.f('ix_refresh_tokens_token'), 'refresh_tokens', ['token'], unique=True)
-    op.create_table('schedule_events',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('config_id', sa.Integer(), nullable=False),
-    sa.Column('job_id', sa.String(), nullable=False),
-    sa.Column('job_name', sa.String(), nullable=False),
-    sa.Column('event_type', sa.Enum('EXECUTED', 'ERROR', 'MISSED', 'SCHEDULED', 'PAUSED', 'RESUMED', name='scheduleeventtype'), nullable=False),
-    sa.Column('result', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('error_message', sa.Text(), nullable=True),
-    sa.Column('error_traceback', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['config_id'], ['task_configs.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_schedule_events_config_id'), 'schedule_events', ['config_id'], unique=False)
-    op.create_index(op.f('ix_schedule_events_id'), 'schedule_events', ['id'], unique=False)
-    op.create_index(op.f('ix_schedule_events_job_id'), 'schedule_events', ['job_id'], unique=False)
     op.create_table('task_executions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('config_id', sa.Integer(), nullable=True),
     sa.Column('task_id', sa.String(), nullable=False),
-    sa.Column('status', sa.Enum('SUCCESS', 'FAILED', 'TIMEOUT', 'RUNNING', name='executionstatus'), nullable=False),
+    sa.Column('is_success', sa.Boolean(), nullable=False),
     sa.Column('started_at', sa.DateTime(), nullable=False),
     sa.Column('completed_at', sa.DateTime(), nullable=True),
     sa.Column('duration_seconds', sa.Numeric(precision=10, scale=3), nullable=True),
@@ -128,13 +95,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_task_executions_id'), table_name='task_executions')
     op.drop_index(op.f('ix_task_executions_config_id'), table_name='task_executions')
     op.drop_table('task_executions')
-    op.drop_index(op.f('ix_schedule_events_job_id'), table_name='schedule_events')
-    op.drop_index(op.f('ix_schedule_events_id'), table_name='schedule_events')
-    op.drop_index(op.f('ix_schedule_events_config_id'), table_name='schedule_events')
-    op.drop_table('schedule_events')
-    op.drop_index(op.f('ix_refresh_tokens_token'), table_name='refresh_tokens')
-    op.drop_index(op.f('ix_refresh_tokens_id'), table_name='refresh_tokens')
-    op.drop_table('refresh_tokens')
     op.drop_index(op.f('ix_password_resets_token'), table_name='password_resets')
     op.drop_table('password_resets')
     op.drop_index(op.f('ix_users_username'), table_name='users')
@@ -144,7 +104,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_age'), table_name='users')
     op.drop_table('users')
     op.drop_index(op.f('ix_task_configs_task_type'), table_name='task_configs')
-    op.drop_index(op.f('ix_task_configs_status'), table_name='task_configs')
     op.drop_index(op.f('ix_task_configs_name'), table_name='task_configs')
     op.drop_index(op.f('ix_task_configs_id'), table_name='task_configs')
     op.drop_table('task_configs')

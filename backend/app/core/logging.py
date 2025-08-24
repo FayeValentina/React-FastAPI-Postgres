@@ -110,15 +110,27 @@ def setup_logging(
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append({
-            "sink": str(log_path),
-            "serialize": json_logs,
-            "level": log_level,
-            "rotation": "00:00",  # 每天轮换
-            "retention": "30 days",  # 保留30天
-            "compression": "zip",  # 压缩旧日志
-            "format": log_format if not json_logs else None
-        })
+        
+        # 根据是否使用 JSON 格式分别配置
+        if json_logs:
+            handlers.append({
+                "sink": str(log_path),
+                "serialize": True,
+                "level": log_level,
+                "rotation": "00:00",  # 每天轮换
+                "retention": "30 days",  # 保留30天
+                "compression": "zip"  # 压缩旧日志
+            })
+        else:
+            handlers.append({
+                "sink": str(log_path),
+                "serialize": False,
+                "level": log_level,
+                "rotation": "00:00",  # 每天轮换
+                "retention": "30 days",  # 保留30天
+                "compression": "zip",  # 压缩旧日志
+                "format": log_format
+            })
 
     # 配置 loguru
     logger.configure(handlers=handlers)

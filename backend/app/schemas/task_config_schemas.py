@@ -39,12 +39,11 @@ class TaskConfigCreate(TaskConfigBase):
         if not task_type:
             return v
         
-        # 清理任务参数验证  
-        if task_type in ["CLEANUP_CONTENT"]:
-            if 'days_old' not in v:
-                raise ValueError(f'{task_type}任务缺少必要参数: days_old')
-            if not isinstance(v['days_old'], int) or v['days_old'] <= 0:
-                raise ValueError('days_old必须为正整数')
+        # 清理任务参数验证 - 允许使用默认值，不强制要求参数
+        if task_type in ["CLEANUP_CONTENT", "CLEANUP_TOKENS"]:
+            if 'days_old' in v:
+                if not isinstance(v['days_old'], int) or v['days_old'] <= 0:
+                    raise ValueError('days_old必须为正整数')
                 
         return v
     

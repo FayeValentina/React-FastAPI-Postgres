@@ -65,6 +65,17 @@ log/
 .docker/
 docker-compose.override.yml
 
+# SSL/TLS证书和私钥文件
+nginx/ssl/
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+*.csr
+*.cert
+*.certificate
+
 # Alembic
 alembic/versions/__pycache__/
 alembic/__pycache__/

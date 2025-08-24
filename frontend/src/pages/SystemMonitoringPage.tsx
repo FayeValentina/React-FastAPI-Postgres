@@ -70,7 +70,7 @@ const SystemMonitoringPage: React.FC = () => {
     }
   );
 
-  const getHealthColor = (status: string) => {
+  const getHealthColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
     switch (status) {
       case 'healthy': return 'success';
       case 'degraded': return 'warning';
@@ -133,7 +133,7 @@ const SystemMonitoringPage: React.FC = () => {
               <Typography variant="h6">系统健康状态</Typography>
               <Chip
                 label={systemHealth.status.toUpperCase()}
-                color={getHealthColor(systemHealth.status) as any}
+                color={getHealthColor(systemHealth.status)}
                 size="small"
               />
               <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>

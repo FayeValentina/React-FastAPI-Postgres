@@ -1,6 +1,19 @@
+import os
 from typing import Any, List, Optional, Union
 from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def get_env_file() -> str:
+    """动态选择环境文件"""
+    environment = os.getenv("ENVIRONMENT", "dev")
+    if environment == "prod":
+        return ".env.prod"
+    else:
+        return ".env.dev"
+
+
+ENV_FILE = get_env_file()
 
 
 class PostgresSettings(BaseSettings):
@@ -46,7 +59,7 @@ class PostgresSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -65,7 +78,7 @@ class PgAdminSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGADMIN_",
         env_nested_delimiter="__",
-        env_file=[ ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -80,7 +93,7 @@ class SecuritySettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[ ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -101,7 +114,7 @@ class CORSSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="BACKEND_CORS_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -115,7 +128,7 @@ class LoggingSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LOG_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -131,7 +144,7 @@ class RedditSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="REDDIT_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -147,7 +160,7 @@ class TwitterSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="TWITTER_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -159,7 +172,7 @@ class AISettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="AI_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -176,7 +189,7 @@ class EmailSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="EMAIL_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -197,7 +210,7 @@ class RabbitMQSettings(BaseSettings):
     
     model_config = SettingsConfigDict(
         env_prefix="RABBITMQ_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -224,7 +237,7 @@ class RedisSettings(BaseSettings):
     
     model_config = SettingsConfigDict(
         env_prefix="REDIS_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -246,7 +259,7 @@ class TaskIQSettings(BaseSettings):
     
     model_config = SettingsConfigDict(
         env_prefix="TASKIQ_",
-        env_file=[".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -282,7 +295,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[ ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )

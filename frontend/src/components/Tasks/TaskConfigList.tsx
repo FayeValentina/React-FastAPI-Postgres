@@ -36,7 +36,7 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
   onDelete,
   onScheduleAction,
 }) => {
-  const getSchedulerTypeColor = (type: string) => {
+  const getSchedulerTypeColor = (type: string): 'default' | 'primary' | 'secondary' | 'warning' => {
     switch (type) {
       case 'manual': return 'default';
       case 'interval': return 'primary';
@@ -46,7 +46,7 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
     }
   };
 
-  const getStatusColor = (status?: string) => {
+  const getStatusColor = (status?: string): 'default' | 'success' | 'warning' | 'error' => {
     switch (status) {
       case 'active': return 'success';
       case 'paused': return 'warning';
@@ -86,7 +86,7 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
                 {config.is_scheduled && (
                   <Chip
                     label={config.schedule_status || 'scheduled'}
-                    color={getStatusColor(config.schedule_status) as any}
+                    color={getStatusColor(config.schedule_status)}
                     size="small"
                   />
                 )}
@@ -106,7 +106,7 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
                 />
                 <Chip
                   label={config.scheduler_type}
-                  color={getSchedulerTypeColor(config.scheduler_type) as any}
+                  color={getSchedulerTypeColor(config.scheduler_type)}
                   size="small"
                 />
               </Box>

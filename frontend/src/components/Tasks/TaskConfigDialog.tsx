@@ -14,7 +14,7 @@ import {
   Typography,
   Divider,
 } from '@mui/material';
-import { TaskConfig, TaskConfigCreate, TaskConfigUpdate } from '../../types/task';
+import { TaskConfig, TaskConfigCreate, TaskConfigUpdate, SystemEnums } from '../../types/task';
 import { useApiStore } from '../../stores/api-store';
 
 interface TaskConfigDialogProps {
@@ -47,7 +47,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
   useEffect(() => {
     // 加载系统枚举值
-    fetchData('/v1/tasks/system/enums').then((data: any) => {
+    fetchData<SystemEnums>('/v1/tasks/system/enums').then((data) => {
       setTaskTypes(data.task_types || []);
     });
   }, [fetchData]);
@@ -81,7 +81,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
     setErrors({});
   }, [config]);
 
-  const handleChange = (field: keyof TaskConfigCreate, value: any) => {
+  const handleChange = (field: keyof TaskConfigCreate, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [field]: value,
@@ -125,7 +125,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
       Object.keys(formData).forEach((key) => {
         const k = key as keyof TaskConfigCreate;
         if (formData[k] !== config[k as keyof TaskConfig]) {
-          (updateData as any)[k] = formData[k];
+          (updateData as Record<string, unknown>)[k] = formData[k];
         }
       });
       onSave(updateData);
