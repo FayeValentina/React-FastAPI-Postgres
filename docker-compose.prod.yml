@@ -197,6 +197,7 @@ services:
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
@@ -212,7 +213,7 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 15 &&
-        poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --log-level WARNING
+        poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
       "
     networks:
       - prodNetWork
@@ -244,6 +245,7 @@ services:
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
@@ -261,7 +263,7 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 20 &&
-        poetry run taskiq scheduler app.broker:scheduler --log-level WARNING
+        poetry run taskiq scheduler app.broker:scheduler --log-level ${LOG_LEVEL:-WARNING}
       "
     networks:
       - prodNetWork
