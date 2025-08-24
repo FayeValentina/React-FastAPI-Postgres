@@ -5,13 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Common Development Commands
 
 ### Docker Development (Primary)
-- `docker compose up --build` - Start all services (frontend, backend, postgres, pgadmin, redis, rabbitmq, taskiq workers/scheduler)
-- `docker compose up` - Start all services (uses cache, faster startup)
-- `docker compose down` - Stop all services
-- `docker compose logs backend` - View backend logs
-- `docker compose logs frontend` - View frontend logs
-- `docker compose logs taskiq_scheduler` - View TaskIQ scheduler logs
-- `docker compose logs taskiq_worker` - View TaskIQ worker logs
+- `docker compose -f docker-compose.dev.yml up --build` - Start development environment
+- `docker compose -f docker-compose.dev.yml up` - Start dev services (uses cache)
+- `docker compose -f docker-compose.dev.yml down` - Stop dev services  
+- `docker compose -f docker-compose.prod.yml up --build` - Start production environment
+- `docker compose -f docker-compose.dev.yml logs backend` - View backend logs
+- `docker compose -f docker-compose.dev.yml logs frontend` - View frontend logs
+- `docker compose -f docker-compose.dev.yml logs taskiq_scheduler` - View TaskIQ scheduler logs
+- `docker compose -f docker-compose.dev.yml logs taskiq_worker` - View TaskIQ worker logs
 
 ### Frontend (React + Vite + TypeScript)
 - `cd frontend && npm run dev` - Start development server
@@ -80,7 +81,7 @@ backend/                    # FastAPI backend
 frontend/                  # React frontend
 ├── src/
 │   ├── components/        # React components (Layout, ProtectedRoute, TokenExpiryDialog, Scraper components)
-│   ├── pages/             # Page components (Login, Register, Dashboard, Profile, ForgotPassword, ResetPassword, BotManagementPage, SessionManagementPage, DemoPage, UserPage)
+│   ├── pages/             # Page components (Login, Register, Dashboard, Profile, ForgotPassword, ResetPassword, TaskManagementPage, SystemMonitoringPage, DemoPage, UserPage)
 │   ├── services/          # API client (axios, authManager, uiManager, interceptors)
 │   ├── stores/            # Zustand stores (auth-store, api-store, ui-store)
 │   ├── types/             # TypeScript types (auth, user, bot, session, api)
@@ -106,6 +107,52 @@ frontend/                  # React frontend
 - **Logging**: Loguru for structured logging
 - **Background Tasks**: TaskIQ 0.11.x with optimized Redis connection management
 
+### Infrastructure Architecture
+
+#### Environment Separation (Dev/Prod)
+**Docker Architecture:**
+- **Development Environment**: 
+  - Hot-reload enabled containers with volume mounts
+  - Full dependency installation for debugging
+  - Real-time development server (uvicorn --reload)
+- **Production Environment**:
+  - Multi-stage builds for optimized images
+  - Security-hardened containers (non-root user)
+  - Production-only dependencies (`poetry install --only main`)
+  - Gunicorn WSGI server with UvicornWorker
+
+**Nginx Reverse Proxy:**
+- **Development Configuration**:
+  - Proxy mode to frontend development server (port 3000)
+  - WebSocket support for hot module replacement
+  - No caching for real-time updates
+  - Basic security headers
+- **Production Configuration**:
+  - Direct static file serving from nginx
+  - SSL/TLS termination with HTTP to HTTPS redirect
+  - Advanced security headers (CSP, HSTS, XSS Protection)
+  - Rate limiting (API: 10r/s, Auth: 5r/m)
+  - Long-term caching for static assets (1 year + immutable)
+  - Gzip compression optimized
+
+#### Frontend Build Strategy
+- **Development**: Live development server with volume-protected node_modules
+- **Production**: Dedicated builder container → Static file extraction → Nginx serving
+
+#### Service Architecture
+```
+Production Flow:
+Internet → Nginx (SSL + Static Files) → Backend API → Database/Redis/RabbitMQ
+
+Development Flow:
+Internet → Nginx → Frontend Container (Hot Reload) → Backend Container → Database/Redis/RabbitMQ
+```
+
+#### Container Resource Management
+- **Production**: Memory limits and health checks for all services
+- **Development**: Unlimited resources for debugging flexibility
+- **Networking**: Dedicated networks (prodNetWork/dbNetWork) with service isolation
+
 ### API Endpoints
 **Authentication** (`/api/v1/auth`)
 - `POST /auth/login` - User login (username/email + password)
@@ -125,25 +172,14 @@ frontend/                  # React frontend
 - `PATCH /users/{user_id}` - Update user (unified endpoint for partial updates)
 - `DELETE /users/{user_id}` - Delete user (admin only)
 
-**Bot Configuration** (`/api/v1/bot-configs`)
-- `GET /bot-configs` - Get bot configurations
-- `POST /bot-configs` - Create new bot configuration
-- `GET /bot-configs/{config_id}` - Get specific bot configuration
-- `PATCH /bot-configs/{config_id}` - Update bot configuration
-- `DELETE /bot-configs/{config_id}` - Delete bot configuration
-
-**Scraping Management** (`/api/v1/scraping`)
-- `POST /scraping/start` - Start scraping session
-- `POST /scraping/stop` - Stop scraping session
-- `GET /scraping/status` - Get scraping status
-- `GET /scraping/sessions` - Get scraping sessions
-- `GET /scraping/sessions/{session_id}` - Get specific session
-
-**Reddit Content** (`/api/v1/reddit`)
-- `GET /reddit/posts` - Get Reddit posts
-- `GET /reddit/posts/{post_id}` - Get specific Reddit post
-- `GET /reddit/posts/{post_id}/comments` - Get post comments
-- `GET /reddit/comments` - Get Reddit comments
+**Reddit Content Management** (`/api/v1/reddit`)
+- `GET /reddit/posts` - Get Reddit posts with filtering and pagination
+- `GET /reddit/posts/{post_id}` - Get specific Reddit post details
+- `GET /reddit/posts/{post_id}/comments` - Get comments for specific post
+- `GET /reddit/comments` - Get Reddit comments with filtering
+- `GET /reddit/comments/{comment_id}` - Get specific comment details
+- `DELETE /reddit/posts/{post_id}` - Delete specific Reddit post
+- `DELETE /reddit/comments/{comment_id}` - Delete specific Reddit comment
 
 **Task Management** (`/api/v1/tasks`) - **Refactored Architecture v2.4** (25 endpoints with modular schemas)
 - **Configuration Management** (5 endpoints):
@@ -186,10 +222,11 @@ frontend/                  # React frontend
 - **RedditPost**: Reddit post data and metadata
 - **RedditComment**: Reddit comment data and relationships
 
-**Removed Models** (eliminated during refactoring):
-- ~~**ScheduleEvent**~~: Schedule event logging (merged into Redis history service)
-- ~~**BotConfig**~~: Reddit bot configuration (consolidated)
-- ~~**ScrapeSession**~~: Scraping session management (consolidated)
+**Legacy Models** (removed/refactored during v2.4 update):
+- ~~**RefreshToken**~~: JWT tokens now managed via Redis-based system
+- ~~**ScheduleEvent**~~: Schedule event logging merged into Redis history service
+- ~~**BotConfig**~~: Bot configuration system consolidated into task management
+- ~~**ScrapeSession**~~: Scraping session management integrated into task execution system
 
 ### Schema Models (Modularized v2.4)
 - **Authentication Schemas** (`auth.py`): LoginRequest, Token, PasswordResetRequest/Confirm/Response
@@ -424,6 +461,33 @@ The system accepts both formats for CRON scheduling:
 - **Service Separation**: Core scheduling (TaskIQ) + Enhanced history (state + metadata + events)
 - **Connection Optimization**: Single unified Redis connection pool for all services except TaskIQ scheduler
 
+### Environment-Specific Development Guidelines
+
+#### Development Environment Usage
+- **Start Services**: `docker compose -f docker-compose.dev.yml up --build`
+- **Hot Reload**: Frontend and backend support real-time code changes
+- **Debugging**: Full dependency access, detailed logging (INFO level)
+- **Database Access**: PgAdmin at http://localhost:5050
+- **Message Queue**: RabbitMQ Management at http://localhost:15672
+- **Redis Monitoring**: RedisInsight at http://localhost:5540
+- **File Changes**: Volume mounts enable instant code sync
+- **Security**: Basic security headers, no rate limiting for development
+
+#### Production Environment Usage
+- **Start Services**: `docker compose -f docker-compose.prod.yml up --build`
+- **SSL Configuration**: Requires valid SSL certificates in `nginx/ssl/`
+- **Domain Setup**: Configure `warabi.dpdns.org` in nginx configuration
+- **Security**: Full security headers, rate limiting, HTTPS redirect
+- **Performance**: Optimized builds, static file caching, resource limits
+- **Monitoring**: Health checks and structured JSON logging
+- **User Security**: Non-root containers, minimal attack surface
+
+#### Environment File Management
+- **Development**: Use `.env.dev` with localhost configurations
+- **Production**: Use `.env.prod` with production credentials and URLs
+- **Consistency**: All environments follow unified variable order
+- **Security**: Production uses stronger passwords and security settings
+
 ### Route Structure
 - `/login` - User login page
 - `/register` - User registration page  
@@ -432,9 +496,10 @@ The system accepts both formats for CRON scheduling:
 - `/dashboard` - Main dashboard (protected)
 - `/profile` - User profile management (protected)
 - `/user` - User management page (protected)
-- `/scraper/bots` - Bot configuration management (protected)
-- `/scraper/sessions` - Scraping session monitoring (protected)
+- `/management/tasks` - Task configuration and management (protected)
+- `/management/monitoring` - System monitoring and task execution status (protected)
 - `/demo` - Demo page for testing features
+- **Legacy Route Redirects**: `/scraper/*` and `/management/scraper/*` redirect to `/management/tasks`
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
