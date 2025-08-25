@@ -1,7 +1,7 @@
 """
 数据处理任务定义
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
 
@@ -26,7 +26,8 @@ async def export_data(
     config_id: Optional[int],
     export_format: str = "json",
     date_range: Dict[str, str] = None,
-    context: Context = TaskiqDepends()
+    context: Context = TaskiqDepends(),
+    test_para: Optional[List[Dict[str,any]]] = None 
 ) -> Dict[str, Any]:
     """
     导出数据

@@ -44,6 +44,7 @@ from app.schemas.task_system_schemas import (
     SystemStatusResponse,
     SystemHealthResponse,
     SystemEnumsResponse,
+    TaskInfoResponse,
     SystemDashboardResponse
 )
 from app.core.tasks.registry import SchedulerType, ScheduleAction
@@ -736,6 +737,24 @@ async def get_system_enums(
         }
     except Exception as e:
         logger.error(f"获取枚举值失败: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/system/task-info", response_model=TaskInfoResponse)
+async def get_task_info(
+    current_user: Annotated[User, Depends(get_current_superuser)] = None,
+) -> Dict[str, Any]:
+    """获取所有任务的详细参数信息"""
+    try:
+        tasks_info = tr.list_all_tasks()
+        
+        return {
+            "tasks": tasks_info,
+            "total_count": len(tasks_info),
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"获取任务信息失败: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

@@ -77,6 +77,43 @@ class SystemEnumsResponse(BaseModel):
     schedule_statuses: List[str] = Field(..., description="调度状态列表")
 
 
+class TypeInfo(BaseModel):
+    """结构化类型信息"""
+    type: str = Field(..., description="类型名称")
+    args: Optional[List['TypeInfo']] = Field(None, description="类型参数")
+    raw: str = Field(..., description="原始类型字符串")
+
+# 支持前向引用
+TypeInfo.model_rebuild()
+
+
+class TaskParameterInfo(BaseModel):
+    """任务参数信息"""
+    name: str = Field(..., description="参数名")
+    type: str = Field(..., description="参数类型（字符串格式）")
+    type_info: TypeInfo = Field(..., description="结构化类型信息")
+    default: Optional[str] = Field(None, description="默认值")
+    required: bool = Field(..., description="是否必需")
+    kind: str = Field(..., description="参数种类")
+
+
+class TaskInfo(BaseModel):
+    """任务信息"""
+    name: str = Field(..., description="任务名称")
+    worker_name: str = Field(..., description="工作函数名")
+    queue: str = Field(..., description="队列名")
+    doc: str = Field(..., description="任务描述")
+    parameters: List[TaskParameterInfo] = Field(..., description="参数列表")
+    has_parameters: bool = Field(..., description="是否有参数")
+
+
+class TaskInfoResponse(BaseModel):
+    """任务信息响应 - GET /system/task-info"""
+    tasks: List[TaskInfo] = Field(..., description="任务信息列表")
+    total_count: int = Field(..., description="任务总数")
+    generated_at: str = Field(..., description="生成时间")
+
+
 class DashboardExecutionStats(BaseModel):
     """仪表板执行统计"""
     last_7_days: ExecutionStatsInfo = Field(..., description="最近7天统计")

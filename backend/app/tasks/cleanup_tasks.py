@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 async def cleanup_expired_tokens(
     config_id: Optional[int] = None,
     days_old: int = 7,
-    context: Context = TaskiqDepends(),
-    **kwargs  # 接收task_id等额外参数
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     清理过期的令牌
@@ -58,8 +57,7 @@ async def cleanup_expired_tokens(
 async def cleanup_old_content(
     config_id: Optional[int] = None,
     days_old: int = 90,
-    context: Context = TaskiqDepends(),
-    **kwargs
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     清理旧内容

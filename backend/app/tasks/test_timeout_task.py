@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 async def test_timeout_task(
     config_id: Optional[int] = None,
     sleep_seconds: int = 30,
-    context: Context = TaskiqDepends(),
-    **kwargs
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     测试任务超时功能的任务
@@ -67,8 +66,7 @@ async def test_timeout_task(
 async def test_failure_task(
     config_id: Optional[int] = None,
     error_type: str = "general",
-    context: Context = TaskiqDepends(),
-    **kwargs
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     测试任务失败的任务
@@ -108,8 +106,7 @@ async def test_failure_task(
 async def test_short_timeout_task(
     config_id: Optional[int] = None,
     sleep_seconds: int = 5,
-    context: Context = TaskiqDepends(),
-    **kwargs
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     测试短超时的任务（用于确保超时能被捕获）
@@ -149,8 +146,7 @@ async def test_short_timeout_task(
 @execution_handler
 async def health_check_task(
     config_id: Optional[int] = None,
-    context: Context = TaskiqDepends(),
-    **kwargs
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     系统健康检查任务
@@ -179,8 +175,7 @@ async def health_check_task(
 async def timeout_monitor_task(
     config_id: Optional[int] = None,
     monitor_duration: int = 60,
-    context: Context = TaskiqDepends(),
-    **kwargs
+    context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
     超时监控任务
