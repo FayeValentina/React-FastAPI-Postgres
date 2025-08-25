@@ -140,5 +140,20 @@ app.add_middleware(
     exclude_paths=DEFAULT_EXCLUDE_PATHS  # 使用集中定义的排除路径列表
 )
 
+# 添加简单的健康检查端点（无需认证）
+@app.get("/health")
+async def health_check():
+    """
+    简单的健康检查端点
+    - 无需认证
+    - 无需数据库连接
+    - 只检查应用是否能响应HTTP请求
+    """
+    return {
+        "status": "ok", 
+        "service": "backend",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
 # 包含API路由
 app.include_router(router)

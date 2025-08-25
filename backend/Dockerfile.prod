@@ -40,11 +40,4 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV POETRY_CACHE_DIR=/tmp/poetry_cache
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/system/health || exit 1
-
 EXPOSE 8000
-
-# 默认命令（会被docker-compose覆盖）
-CMD ["poetry", "run", "gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]

@@ -13,7 +13,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL证书目录
       - frontend_build:/usr/share/nginx/html:ro  # 挂载构建后的静态文件
-      - nginx_logs:/var/log/nginx
+      - prod_nginx_logs:/var/log/nginx
     depends_on:
       - frontend_builder
       - backend
@@ -87,7 +87,7 @@ services:
     networks:
       - prodNetWork
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/system/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -111,7 +111,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - prod_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -140,7 +140,7 @@ services:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
       - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST}
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - prod_rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 30s
@@ -163,7 +163,7 @@ services:
     expose:
       - "6379"
     volumes:
-      - redis_data:/data
+      - prod_redis_data:/data
     command: >
       sh -c "
         redis-server --requirepass '${REDIS_PASSWORD}' --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -313,7 +313,7 @@ services:
     ports:
       - "127.0.0.1:${REDISINSIGHT_PORT:-5540}:5540"
     volumes:
-      - redisinsight_data:/db
+      - prod_redisinsight_data:/db
     environment:
       - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-8001}
     depends_on:
@@ -330,15 +330,15 @@ services:
           memory: 128M
 
 volumes:
-  postgres_data:
+  prod_postgres_data:
     driver: local
-  rabbitmq_data:
+  prod_rabbitmq_data:
     driver: local
-  redis_data:
+  prod_redis_data:
     driver: local
-  redisinsight_data:
+  prod_redisinsight_data:
     driver: local
-  nginx_logs:
+  prod_nginx_logs:
     driver: local
   frontend_build:
     driver: local
