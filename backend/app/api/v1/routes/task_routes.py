@@ -47,11 +47,12 @@ from app.schemas.task_system_schemas import (
     TaskInfoResponse,
     SystemDashboardResponse
 )
-from app.core.tasks.registry import SchedulerType, ScheduleAction
-from app.core.tasks import registry as tr
+from app.utils.registry_decorators import SchedulerType, ScheduleAction
+from app.utils import registry_decorators as tr
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
 from app.core.redis_manager import redis_services
+from app.utils.cache_decorators import cache_static, cache_stats_data, cache_list_data
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,7 @@ async def create_task_config(
 
 
 @router.get("/configs", response_model=TaskConfigListResponse)
+@cache_list_data("task_configs")
 async def list_task_configs(
     task_type: Optional[str] = Query(None, description="按任务类型过滤"),
     name_search: Optional[str] = Query(None, description="按名称搜索"),
@@ -561,6 +563,7 @@ async def get_failed_executions(
 
 
 @router.get("/executions/stats")
+@cache_stats_data("execution_stats")
 async def get_execution_stats(
     config_id: Optional[int] = Query(None, description="配置ID（可选）"),
     days: int = Query(30, ge=1, le=365, description="统计天数"),
@@ -639,6 +642,7 @@ async def cleanup_old_executions(
 # =============================================================================
 
 @router.get("/system/status", response_model=SystemStatusResponse)
+@cache_stats_data("system_status") 
 async def get_system_status(
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -724,6 +728,7 @@ async def get_system_health(
 
 
 @router.get("/system/enums", response_model=SystemEnumsResponse)
+@cache_static("system_enums")
 async def get_system_enums(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -741,6 +746,7 @@ async def get_system_enums(
 
 
 @router.get("/system/task-info", response_model=TaskInfoResponse)
+@cache_static("task_info")
 async def get_task_info(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -759,6 +765,7 @@ async def get_task_info(
 
 
 @router.get("/system/dashboard", response_model=SystemDashboardResponse)
+@cache_stats_data("system_dashboard")
 async def get_system_dashboard(
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,

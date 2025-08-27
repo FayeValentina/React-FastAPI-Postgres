@@ -7,7 +7,7 @@ from app.models.task_config import TaskConfig
 from app.models.task_execution import TaskExecution
 from app.schemas.task_config_schemas import TaskConfigCreate, TaskConfigUpdate, TaskConfigQuery
 from app.utils.common import get_current_time
-from app.core.tasks.registry import SchedulerType
+from app.utils.registry_decorators import SchedulerType
 from app.core.exceptions import (
     DatabaseError
 )

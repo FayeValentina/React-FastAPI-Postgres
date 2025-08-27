@@ -6,7 +6,6 @@ import logging
 from app.db.base import get_async_session
 from app.crud.user import crud_user
 from app.models.user import User
-from app.core.redis_manager import redis_services
 from app.core.exceptions import (
     AuthenticationError, 
     UserNotFoundError, 
@@ -44,33 +43,11 @@ async def get_current_user_from_request(
     except (ValueError, TypeError):
         raise AuthenticationError("无效的用户ID格式")
     
-    # 首先尝试从Redis缓存获取用户信息
-    cached_user = await redis_services.cache.get_user_cache(user_id)
-    if cached_user:
-        # 将缓存数据转换为User对象
-        user = User(**cached_user)
-        request.state.current_user = user
-        return user
-    
-    # 缓存未命中，从数据库查询
+    # 从数据库查询用户信息
     user = await crud_user.get(db, id=user_id)
     if not user:
         logger.warning(f"有效令牌但找不到用户ID: {user_id}")
         raise UserNotFoundError()
-    
-    # 将用户信息存入Redis缓存
-    user_dict = {
-        "id": user.id,
-        "email": user.email,
-        "username": user.username,
-        "full_name": user.full_name,
-        "age": user.age,
-        "is_active": user.is_active,
-        "is_superuser": user.is_superuser,
-        "created_at": user.created_at.isoformat(),
-        "updated_at": user.updated_at.isoformat()
-    }
-    await redis_services.cache.set_user_cache(user_id, user_dict)
     
     request.state.current_user = user
     return user

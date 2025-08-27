@@ -19,6 +19,7 @@ from app.core.exceptions import (
     InsufficientPermissionsError
 )
 from app.utils.common import handle_error
+from app.utils.cache_decorators import cache_invalidate, cache_user_data, cache_list_data
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -39,6 +40,7 @@ async def create_user(
         raise handle_error(e)
 
 @router.patch("/{user_id}", response_model=UserResponse)
+@cache_invalidate(["user_profile", "user_list"], user_specific=True)
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
@@ -61,14 +63,12 @@ async def update_user(
         
         updated_user = await crud_user.update(db, db_obj=db_user, obj_in=user_update)
         
-        # 更新后清除用户缓存
-        await redis_services.cache.invalidate_user_cache(user_id)
-        
         return updated_user
     except Exception as e:
         raise handle_error(e)
 
 @router.get("", response_model=List[UserResponse])
+@cache_list_data("user_list")
 async def get_users(
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),  # 只有已认证用户可以查看用户列表
@@ -141,6 +141,7 @@ async def get_users(
     return users
 
 @router.get("/{user_id}", response_model=UserResponse)
+@cache_user_data("user_profile")
 async def get_user(
     user_id: int,
     db: AsyncSession = Depends(get_async_session),
@@ -169,6 +170,7 @@ async def get_user(
         raise handle_error(e)
 
 @router.delete("/{user_id}", response_model=UserResponse)
+@cache_invalidate(["user_profile", "user_list"], user_specific=True)
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_async_session),
@@ -189,9 +191,6 @@ async def delete_user(
             raise ValueError("不能删除自己的账户")
             
         deleted_user = await crud_user.delete(db, id=user_id)
-        
-        # 删除后清除用户缓存
-        await redis_services.cache.invalidate_user_cache(user_id)
         
         return deleted_user
     except Exception as e:

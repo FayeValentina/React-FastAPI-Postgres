@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
-from app.core.tasks.registry import SchedulerType
+from app.utils.registry_decorators import SchedulerType
 
 if TYPE_CHECKING:
     from .task_execution import TaskExecution
