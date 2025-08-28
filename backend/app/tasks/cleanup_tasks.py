@@ -9,8 +9,8 @@ from app.broker import broker
 from app.db.base import AsyncSessionLocal
 from app.crud.password_reset import crud_password_reset
 from app.crud.reddit_content import crud_reddit_content
-from app.core.tasks.decorators import execution_handler
-from app.core.tasks.registry import task
+from app.utils.record_decorators import execution_handler
+from app.utils.registry_decorators import task
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from croniter import croniter
 
 from taskiq import ScheduledTask
 from app.models.task_config import TaskConfig
-from app.core.tasks.registry import SchedulerType
-from app.core.tasks import registry as tr
+from app.utils.registry_decorators import SchedulerType
+from app.utils import registry_decorators as tr
 
 logger = logging.getLogger(__name__)
 

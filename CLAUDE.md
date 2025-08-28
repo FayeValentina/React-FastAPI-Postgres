@@ -30,11 +30,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Note**: Database migrations are handled automatically on Docker startup
 
 ### Task Queue Management
-- Redis accessible at localhost:6379 (message broker and result backend)
+- Redis accessible at localhost:6379 (message broker, result backend, and API caching)
 - RabbitMQ accessible at localhost:5672 (alternative message broker)
 - RabbitMQ Management UI at http://localhost:15672 (guest/guest)
 - TaskIQ scheduler runs scheduled tasks automatically
 - TaskIQ workers process background tasks
+
+### Cache Management
+- **Redis Cache Inspection**: `docker exec react-fastapi-postgres-redis-1 redis-cli KEYS "*cache*"`
+- **Cache Key Structure**: `cache:api:{decorator_prefix}:u{user_id}:params`
+- **Cache Monitoring**: All cache operations logged with `[CACHE_*_DEBUG]` prefixes
+- **Cache TTL**: Different decorators use different TTL values (5min-1hour)
 
 ## Architecture Overview
 
@@ -72,7 +78,10 @@ backend/                    # FastAPI backend
 │   │       └── scheduler.py            # Unified scheduler service (combines core + history)
 │   ├── tasks/             # TaskIQ background tasks (cleanup, notification, data tasks)
 │   ├── tests/             # Test files
-│   └── utils/             # Common utilities (common)
+│   └── utils/             # Common utilities and decorators
+│       ├── cache_decorators.py    # Redis-based API response caching system
+│       ├── registry_decorators.py # Task registration system with parameter analysis
+│       └── common.py              # Common utility functions
 ├── alembic/               # Database migrations
 ├── broker.py              # TaskIQ broker configuration
 ├── scheduler.py           # TaskIQ scheduler configuration
@@ -93,11 +102,20 @@ frontend/                  # React frontend
 - **FastAPI** with async/await support using asyncpg for PostgreSQL
 - **JWT Authentication** with access and refresh tokens (dual-token system)
 - **Refactored TaskIQ Task System** (v2.4) with optimized Redis architecture:
+  - **Advanced Task Registration**: Automatic parameter analysis and type introspection
   - **Eliminated double Redis connections** and functional overlap
   - **Separated concerns**: PostgreSQL for static configuration, Redis for dynamic scheduling state
   - **Unified services**: Combined scheduler core + enhanced history service
   - **Simplified execution status**: Boolean `is_success` instead of complex status enums
+  - **Auto-discovery**: Automatic task module discovery and registration
 - **Reddit Scraping System** with bot configuration and session management
+- **Advanced Caching System** with Redis-based API response caching:
+  - **User-specific caching**: Automatic user isolation (`user_me:u1`, `user_profile:u1:2`)
+  - **Query parameter support**: Intelligent query parameter serialization (`user_list:u1:q(name=test)`)
+  - **Precise cache invalidation**: Dynamic key resolution and pattern-based cleanup
+  - **Flexible decorators**: `@cache_user_data`, `@cache_list_data`, `@cache_static`, `@cache_stats_data`
+  - **Automatic serialization**: Handles SQLAlchemy models, Pydantic objects, and complex types
+  - **Key consistency**: Guaranteed matching between cache set and invalidation operations
 - **Middleware Stack** (order matters):
   1. AuthMiddleware - JWT validation (excludes auth endpoints)
   2. CORSMiddleware - Cross-origin requests
@@ -314,6 +332,80 @@ Internet → Nginx → Frontend Container (Hot Reload) → Backend Container →
   4. Start FastAPI server
 - **No Manual Steps Required**: Just run `docker compose up`
 
+### Task Registration System (Advanced Parameter Analysis)
+
+#### Core Components (`registry_decorators.py`)
+- **`@task(name, queue="default")`**: Task registration decorator with automatic parameter analysis
+- **Parameter Extraction**: Analyzes function signatures to extract type hints, defaults, and requirements
+- **Type Analysis**: Recursive parsing of complex types (Union, Optional, Generic types)
+- **Global Registry**: Central `TASKS` dictionary containing all registered task metadata
+
+#### Advanced Features
+- **Complex Type Parsing**: Handles `Union[str, int]`, `Optional[List[Dict]]`, nested generics
+- **Parameter Metadata**:
+  - Name, type annotation, default value, required status
+  - Parameter kind (positional, keyword, etc.)
+  - Structured type information for API generation
+- **Auto-Discovery**: `auto_discover_tasks()` automatically imports and registers all tasks from `app.tasks`
+- **Documentation Support**: Extracts and stores function docstrings
+
+#### Registry Access Functions
+```python
+# Core access functions
+get_worker_name(task_type: str) -> str          # Get TaskIQ worker function name
+get_queue(task_type: str) -> str                # Get queue assignment
+get_parameters(task_type: str) -> List[Dict]    # Get parameter metadata
+get_task_info(task_type: str) -> Dict           # Get complete task info
+list_all_tasks() -> List[Dict]                  # List all registered tasks
+
+# Utility functions
+is_supported(task_type: str) -> bool            # Check if task exists
+all_queues() -> Set[str]                        # Get all queue names
+make_job_id(task_type: str, config_id: int)     # Generate job IDs
+```
+
+#### Enums and Constants
+- **`SchedulerType`**: `CRON`, `DATE`, `MANUAL` - Task scheduling types
+- **`ScheduleAction`**: `START`, `STOP`, `PAUSE`, `RESUME`, `RELOAD` - Schedule operations
+
+#### Usage Examples
+```python
+@task("cleanup_tokens", queue="maintenance")
+async def cleanup_expired_tokens(
+    max_age_days: int = 7,
+    batch_size: Optional[int] = None,
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """Clean up expired authentication tokens"""
+    # Task implementation...
+```
+
+#### Parameter Analysis Output
+```json
+{
+  "name": "cleanup_tokens",
+  "worker_name": "cleanup_expired_tokens", 
+  "queue": "maintenance",
+  "parameters": [
+    {
+      "name": "max_age_days",
+      "type": "int",
+      "default": "7",
+      "required": false,
+      "kind": "positional_or_keyword"
+    },
+    {
+      "name": "batch_size", 
+      "type": "(int | None)",
+      "default": "None",
+      "required": false,
+      "kind": "positional_or_keyword"
+    }
+  ],
+  "doc": "Clean up expired authentication tokens"
+}
+```
+
 ### TaskIQ Task System Architecture (Refactored v2.4)
 
 #### Optimized Components
@@ -398,6 +490,52 @@ The system accepts both formats for CRON scheduling:
 - **Redis**: Manages dynamic scheduling state and history
 - **TaskIQ**: Handles runtime task execution and queuing
 
+### Caching System Architecture (Redis-based)
+
+#### Core Components
+- **`cache_decorators.py`**: Advanced API response caching with Redis backend
+- **Key Components**:
+  - `ParameterExtractor`: Extracts user ID, path params, and query params from Request objects
+  - `CacheKeyBuilder`: Constructs consistent cache keys with user isolation and parameter handling
+  - `CacheSerializer`: Handles complex object serialization (SQLAlchemy, Pydantic, datetime, etc.)
+
+#### Cache Decorators (Tested & Verified)
+- **`@cache_response(key_prefix, ttl, user_specific, include_query_params)`**: Base decorator
+- **`@cache_user_data(key_prefix)`**: User-specific caching (TTL: 5min)
+- **`@cache_list_data(key_prefix)`**: List data with query params (TTL: 3min) 
+- **`@cache_static(key_prefix)`**: Static data caching (TTL: 1hour)
+- **`@cache_stats_data(key_prefix)`**: Statistics caching (TTL: 10min)
+- **`@cache_invalidate(key_templates, user_specific)`**: Precise cache invalidation
+
+#### Cache Key Architecture (Verified)
+- **User Isolation**: All keys include user ID for security (`user_me:u1`)
+- **Parameter Handling**: Path params and query params included (`user_profile:u1:2`, `user_list:u1:q(name=test)`)
+- **Redis Storage**: Prefixed with `cache:api:` namespace for organization
+- **Key Consistency**: Guaranteed matching between set and invalidation operations
+
+#### Tested Cache Behaviors
+- **Cache Hit/Miss**: Proper detection and logging with `[CACHE_HIT_DEBUG]`/`[CACHE_MISS_DEBUG]`
+- **Serialization**: Handles SQLAlchemy models, datetime objects, and complex nested data
+- **Invalidation**: 
+  - Dynamic keys: `user_profile:{user_id}` → `user_profile:u1:2` (precise deletion)
+  - Static patterns: `user_list` → `user_list:u1*` (pattern deletion)
+- **Query Parameters**: Sorted serialization ensures consistent cache keys
+
+#### Usage Examples (Production-Tested)
+```python
+# User-specific profile caching
+@cache_user_data("user_me")
+async def get_current_user(request: Request, ...): ...
+
+# List data with query parameter support  
+@cache_list_data("user_list", user_specific=True)
+async def get_users(request: Request, name: str = None, ...): ...
+
+# Cache invalidation on data modification
+@cache_invalidate(["user_profile:{user_id}", "user_list"], user_specific=True) 
+async def update_user(request: Request, user_id: int, ...): ...
+```
+
 ### Development Notes
 - The backend automatically runs migrations on startup via docker-compose
 - Frontend proxy is handled by Vite dev server configuration  
@@ -438,6 +576,16 @@ The system accepts both formats for CRON scheduling:
 - **Database Operations**: Use CRUD classes for all database operations
 - **Transaction Handling**: Always use `db.add()`, `await db.commit()`, and `await db.refresh()` for database updates
 - **Password Security**: Use `get_password_hash()` and `verify_password()` from `app.core.security`
+- **Caching Strategy**: Use appropriate cache decorators for API endpoints:
+  - `@cache_user_data("key")` for user-specific data (TTL: 5min)
+  - `@cache_list_data("key")` for lists with query parameters (TTL: 3min)
+  - `@cache_static("key")` for static data (TTL: 1hour)
+  - `@cache_stats_data("key")` for statistics (TTL: 10min)
+- **Cache Invalidation**: Use `@cache_invalidate(["key1", "key2:{param}"])` for data modifications
+- **Cache Key Patterns**: Follow consistent naming - `resource_action:u{user_id}:params`
+- **Task Registration**: Use `@task("task_name", queue="queue_name")` with proper type hints
+- **Task Parameter Design**: Include type hints, default values, and comprehensive docstrings
+- **Queue Organization**: Group related tasks by queue (`maintenance`, `notifications`, `data_processing`)
 - **Task Management**: Use `redis_services.scheduler` for task operations (unified interface)
 - **Task Status**: Use boolean `is_success` for execution results, `ScheduleStatus` enum for scheduling state
 - **SQLAlchemy Relations**: Use `lazy="select"` for relations that work with `selectinload`
@@ -460,6 +608,18 @@ The system accepts both formats for CRON scheduling:
 - **Status Management**: Use binary `is_success` for execution, enum for scheduling state
 - **Service Separation**: Core scheduling (TaskIQ) + Enhanced history (state + metadata + events)
 - **Connection Optimization**: Single unified Redis connection pool for all services except TaskIQ scheduler
+- **Caching Patterns**: 
+  - Cache read operations with `@cache_*` decorators
+  - Invalidate cache on write operations with `@cache_invalidate`
+  - Use user-specific caching for personalized data
+  - Include query parameters in cache keys for list endpoints
+  - Follow key naming convention: `resource_action:u{user_id}:params`
+- **Task Registration Patterns**:
+  - Use descriptive task names that match their function
+  - Organize by queue based on task type and priority
+  - Include comprehensive type hints for automatic parameter analysis
+  - Write clear docstrings for task documentation
+  - Use auto-discovery with `auto_discover_tasks("app.tasks")`
 
 ### Environment-Specific Development Guidelines
 

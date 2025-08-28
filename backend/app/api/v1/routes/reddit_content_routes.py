@@ -12,6 +12,7 @@ from app.models.user import User
 from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InsufficientPermissionsError
 from app.utils.common import handle_error
+from app.utils.cache_decorators import cache_list_data, cache_stats_data
 
 router = APIRouter(tags=["reddit-content"])
 

@@ -2,7 +2,7 @@
 增强的调度状态和历史服务 - 统一管理所有调度相关数据
 """
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 from datetime import datetime
 from enum import Enum
@@ -164,12 +164,12 @@ class ScheduleHistoryRedisService(RedisBase):
     
     # ========== 综合查询接口 ==========
     
-    async def get_task_full_info(self, config_id: int) -> Dict[str, Any]:
+    async def get_task_full_info(self, config_id: int, history_limit: int = 5) -> Dict[str, Any]:
         """获取任务完整信息（状态+元数据+最近历史）"""
         try:
             status = await self.get_task_status(config_id)
             metadata = await self.get_task_metadata(config_id)
-            recent_history = await self.get_history(config_id, limit=5)
+            recent_history = await self.get_history(config_id, limit=history_limit)
             
             return {
                 "config_id": config_id,

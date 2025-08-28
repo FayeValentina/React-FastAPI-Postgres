@@ -10,7 +10,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-async def create_execution_record(
+async def _create_execution_record(
     config_id: Optional[int],
     task_id: str,
     is_success: bool,
@@ -95,7 +95,7 @@ def execution_handler(func: Callable) -> Callable:
             
             # 成功时记录
             if real_task_id:
-                await create_execution_record(
+                await _create_execution_record(
                     config_id=config_id,
                     task_id=real_task_id,
                     is_success=True,
@@ -112,7 +112,7 @@ def execution_handler(func: Callable) -> Callable:
             
             # 取消时记录失败
             if real_task_id:
-                await create_execution_record(
+                await _create_execution_record(
                     config_id=config_id,
                     task_id=real_task_id,
                     is_success=False,
@@ -128,7 +128,7 @@ def execution_handler(func: Callable) -> Callable:
             
             # 失败时记录
             if real_task_id:
-                await create_execution_record(
+                await _create_execution_record(
                     config_id=config_id,
                     task_id=real_task_id,
                     is_success=False,

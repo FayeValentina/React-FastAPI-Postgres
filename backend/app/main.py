@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     
     try:
         # 自动发现并注册所有任务
-        from app.core.tasks.registry import auto_discover_tasks
+        from app.utils.registry_decorators import auto_discover_tasks
         auto_discover_tasks()
         logger.info("任务自动注册完成")
         
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
         # 从数据库加载调度任务到Redis
         from app.db.base import AsyncSessionLocal
         from app.crud.task_config import crud_task_config
-        from app.core.tasks.registry import SchedulerType
+        from app.utils.registry_decorators import SchedulerType
         
         async with AsyncSessionLocal() as db:
             # 获取所有任务配置（不再筛选status）
