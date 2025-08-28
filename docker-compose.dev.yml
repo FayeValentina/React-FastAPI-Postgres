@@ -91,8 +91,8 @@ services:
     image: postgres:17
     env_file:
       - .env.dev
-    expose:
-      - "5432"
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -151,8 +151,8 @@ services:
     image: redis:7-alpine
     env_file:
       - .env.dev
-    expose:
-      - "6379"
+    ports:
+      - "127.0.0.1:${REDIS_PORT}:6379"
     volumes:
       - dev_redis_data:/data
     command: >
@@ -262,7 +262,7 @@ services:
     volumes:
       - dev_redisinsight_data:/db
     environment:
-      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-8001}
+      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-5540}
     depends_on:
       redis:
         condition: service_healthy

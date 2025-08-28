@@ -10,7 +10,7 @@
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Any, Dict, List, Optional
 from datetime import datetime
@@ -52,7 +52,7 @@ from app.utils import registry_decorators as tr
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
 from app.core.redis_manager import redis_services
-from app.utils.cache_decorators import cache_static, cache_stats_data, cache_list_data
+from app.utils import cache_list_data, cache_response, cache_stats_data, cache_static, cache_invalidate
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,9 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # =============================================================================
 
 @router.post("/configs", response_model=TaskConfigResponse, status_code=201)
+@cache_invalidate(["task_configs", "system_status", "system_dashboard"])
 async def create_task_config(
+    request: Request,
     config: TaskConfigCreate,
     auto_schedule: bool = Query(False, description="自动启动调度"),
     db: AsyncSession = Depends(get_async_session),
@@ -114,6 +116,7 @@ async def create_task_config(
 @router.get("/configs", response_model=TaskConfigListResponse)
 @cache_list_data("task_configs")
 async def list_task_configs(
+    request: Request,
     task_type: Optional[str] = Query(None, description="按任务类型过滤"),
     name_search: Optional[str] = Query(None, description="按名称搜索"),
     page: int = Query(1, ge=1, description="页码"),
@@ -177,7 +180,9 @@ async def list_task_configs(
 
 
 @router.get("/configs/{config_id}", response_model=TaskConfigDetailResponse)
+@cache_response("task_config_detail", include_query_params=True)
 async def get_task_config(
+    request: Request,
     config_id: int = Path(..., description="配置ID"),
     include_stats: bool = Query(False, description="包含统计信息"),
     db: AsyncSession = Depends(get_async_session),
@@ -228,7 +233,9 @@ async def get_task_config(
 
 
 @router.patch("/configs/{config_id}", response_model=TaskConfigResponse)
+@cache_invalidate(["task_configs", "system_status", "system_dashboard"])
 async def update_task_config(
+    request: Request,
     config_id: int,
     update_data: TaskConfigUpdate,
     db: AsyncSession = Depends(get_async_session),
@@ -275,7 +282,14 @@ async def update_task_config(
 
 
 @router.delete("/configs/{config_id}", response_model=TaskConfigDeleteResponse)
+@cache_invalidate([
+    "task_configs",                 # 清理列表缓存（模式）
+    "task_config_detail:{config_id}", # 清理详情缓存（精确）
+    "system_status",                # 清理状态缓存（模式）
+    "system_dashboard"              # 清理仪表盘缓存（模式）
+])
 async def delete_task_config(
+    request: Request,
     config_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -313,7 +327,9 @@ async def delete_task_config(
 # =============================================================================
 
 @router.post("/schedules/{config_id}/start", response_model=ScheduleActionResponse)
+@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
 async def start_schedule(
+    request: Request,
     config_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -338,7 +354,9 @@ async def start_schedule(
 
 
 @router.post("/schedules/{config_id}/stop", response_model=ScheduleActionResponse)
+@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
 async def stop_schedule(
+    request: Request,
     config_id: int,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -356,7 +374,9 @@ async def stop_schedule(
 
 
 @router.post("/schedules/{config_id}/pause", response_model=ScheduleActionResponse)
+@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
 async def pause_schedule(
+    request: Request,
     config_id: int,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -374,7 +394,9 @@ async def pause_schedule(
 
 
 @router.post("/schedules/{config_id}/resume", response_model=ScheduleActionResponse)
+@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
 async def resume_schedule(
+    request: Request,
     config_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -399,7 +421,9 @@ async def resume_schedule(
 
 
 @router.get("/schedules", response_model=ScheduleListResponse)
+@cache_response("schedule_list")
 async def get_all_schedules(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取所有调度状态"""
@@ -565,6 +589,7 @@ async def get_failed_executions(
 @router.get("/executions/stats")
 @cache_stats_data("execution_stats")
 async def get_execution_stats(
+    request: Request,
     config_id: Optional[int] = Query(None, description="配置ID（可选）"),
     days: int = Query(30, ge=1, le=365, description="统计天数"),
     db: AsyncSession = Depends(get_async_session),
@@ -618,7 +643,9 @@ async def get_execution_by_task_id(
 
 
 @router.delete("/executions/cleanup", response_model=ExecutionCleanupResponse)
+@cache_invalidate(["execution_stats", "system_status", "system_dashboard"])
 async def cleanup_old_executions(
+    request: Request,
     days_to_keep: int = Query(90, ge=30, le=365, description="保留天数"),
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -644,6 +671,7 @@ async def cleanup_old_executions(
 @router.get("/system/status", response_model=SystemStatusResponse)
 @cache_stats_data("system_status") 
 async def get_system_status(
+    request: Request,
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
@@ -730,6 +758,7 @@ async def get_system_health(
 @router.get("/system/enums", response_model=SystemEnumsResponse)
 @cache_static("system_enums")
 async def get_system_enums(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取系统枚举值"""
@@ -748,6 +777,7 @@ async def get_system_enums(
 @router.get("/system/task-info", response_model=TaskInfoResponse)
 @cache_static("task_info")
 async def get_task_info(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取所有任务的详细参数信息"""
@@ -767,6 +797,7 @@ async def get_task_info(
 @router.get("/system/dashboard", response_model=SystemDashboardResponse)
 @cache_stats_data("system_dashboard")
 async def get_system_dashboard(
+    request: Request,
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:

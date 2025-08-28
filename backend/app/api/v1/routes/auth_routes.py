@@ -22,7 +22,7 @@ from app.schemas.token import Token, RefreshTokenRequest, TokenRevocationRequest
 from app.schemas.user import User
 from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InvalidCredentialsError, InvalidRefreshTokenError
-from app.utils.common import handle_error
+from app.utils import handle_error, cache_invalidate, cache_user_data
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -182,7 +182,9 @@ async def logout(
 
 
 @router.post("/register", response_model=User, status_code=201)
+@cache_invalidate("user_list")
 async def register(
+    request: Request,
     user_in: UserCreate,
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> User:
@@ -202,7 +204,9 @@ async def register(
 
 
 @router.get("/me", response_model=User)
+@cache_user_data("user_me")
 async def read_users_me(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_active_user)]
 ) -> User:
     """
@@ -326,20 +330,3 @@ async def verify_reset_token(
         
     except Exception as e:
         raise handle_error(e)
-
-
-# 测试端点 - 用于验证定时任务功能
-@router.get("/test/cleanup-tokens")
-async def test_cleanup_tokens():
-    """测试令牌清理任务"""
-    # Note: Token cleanup is now handled by worker tasks
-    pass
-    return {"message": "令牌清理任务执行完成"}
-
-
-@router.get("/test/auto-scraping")
-async def test_auto_scraping():
-    """测试自动爬取任务"""
-    # Note: Auto scraping is now handled by worker tasks
-    pass
-    return {"message": "自动爬取任务执行完成"} 

@@ -18,7 +18,6 @@ router = APIRouter(tags=["reddit-content"])
 
 
 @router.get("/posts", response_model=List[RedditPostResponse])
-@cache_list_data("reddit_posts")
 async def get_posts(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -40,7 +39,6 @@ async def get_posts(
 
 
 @router.get("/comments", response_model=List[RedditCommentResponse])
-@cache_list_data("reddit_comments")
 async def get_comments(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -111,7 +109,6 @@ async def search_comments(
 
 
 @router.get("/subreddits/{subreddit}/stats", response_model=SubredditStats)
-@cache_stats_data("subreddit_stats")
 async def get_subreddit_stats(
     subreddit: str,
     db: Annotated[AsyncSession, Depends(get_async_session)],

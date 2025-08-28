@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, desc, asc
@@ -18,13 +18,14 @@ from app.core.exceptions import (
     UserNotFoundError,
     InsufficientPermissionsError
 )
-from app.utils.common import handle_error
-from app.utils.cache_decorators import cache_invalidate, cache_user_data, cache_list_data
+from app.utils import handle_error, cache_list_data, cache_user_data, cache_invalidate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", response_model=UserResponse, status_code=201)
+@cache_invalidate("user_list")
 async def create_user(
+    request: Request,
     user_data: UserCreate, 
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_superuser)  # 只有超级用户可以创建用户
@@ -40,8 +41,9 @@ async def create_user(
         raise handle_error(e)
 
 @router.patch("/{user_id}", response_model=UserResponse)
-@cache_invalidate(["user_profile", "user_list"], user_specific=True)
+@cache_invalidate(["user_profile:{user_id}", "user_list"], user_specific=True)
 async def update_user(
+    request: Request,
     user_id: int,
     user_update: UserUpdate,
     db: AsyncSession = Depends(get_async_session),
@@ -56,7 +58,11 @@ async def update_user(
         # 检查权限：只能修改自己或者超级管理员可以修改任何人
         if current_user.id != user_id and not current_user.is_superuser:
             raise InsufficientPermissionsError("没有足够权限更新其他用户")
-            
+        
+        # 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
+        if user_update.is_superuser is not None and not current_user.is_superuser:
+            raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
+        
         db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
@@ -68,8 +74,9 @@ async def update_user(
         raise handle_error(e)
 
 @router.get("", response_model=List[UserResponse])
-@cache_list_data("user_list")
+@cache_list_data("user_list", user_specific=True)
 async def get_users(
+    request: Request,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),  # 只有已认证用户可以查看用户列表
     name: Annotated[str | None, Query(min_length=2, description="用户名或全名")] = None,
@@ -143,6 +150,7 @@ async def get_users(
 @router.get("/{user_id}", response_model=UserResponse)
 @cache_user_data("user_profile")
 async def get_user(
+    request: Request,
     user_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user)
@@ -170,8 +178,9 @@ async def get_user(
         raise handle_error(e)
 
 @router.delete("/{user_id}", response_model=UserResponse)
-@cache_invalidate(["user_profile", "user_list"], user_specific=True)
+@cache_invalidate(["user_profile:{user_id}", "user_list"], user_specific=True)
 async def delete_user(
+    request: Request,
     user_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_superuser)  # 只有超级用户可以删除用户

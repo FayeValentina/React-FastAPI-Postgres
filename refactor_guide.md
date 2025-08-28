@@ -1,3 +1,6 @@
+2025-08-28 修改建议:
+1.重构backend/app/utils/cache_decorators.py 装饰器:
+```python
 """
 基于Request对象的缓存装饰器 - 简化版
 提供精确的路径参数和查询参数识别
@@ -5,7 +8,6 @@
 
 import functools
 import hashlib
-import inspect
 import json
 import logging
 from datetime import datetime, date
@@ -296,9 +298,6 @@ def cache_response(
                     user_id=extracted_params['user_id']
                 )
                 
-                logger.debug(f"[CACHE_KEY_DEBUG] 函数: {func.__name__}, 构建缓存键: {cache_key}")
-                logger.debug(f"[CACHE_KEY_DEBUG] 提取参数: {extracted_params}")
-                
                 # 检查缓存条件
                 if condition and not condition(*args, **kwargs):
                     logger.debug(f"缓存条件不满足，跳过缓存: {cache_key}")
@@ -355,108 +354,66 @@ def cache_response(
         return wrapper
     return decorator
 
+
 def cache_invalidate(
-    key_templates: Union[str, List[str]],
+    key_patterns: Union[str, List[str]],
     user_specific: bool = False
 ):
-    """缓存失效装饰器 - 最终版 v3.0
-
-    简洁、健壮，并结合了精确删除和安全的模式删除。
-    使用 f-string 风格的占位符动态构建键。
-
+    """缓存失效装饰器
+    
+    用于在执行写操作后自动清理相关缓存
+    
     Args:
-        key_templates: 要清除的缓存键模板。
-            - "user_list": 静态模式，会清理 user_list:*
-            - "user_profile:{user_id}": 动态键，会从函数参数中寻找 `user_id` 的值，
-              并精确删除键，如 user_profile:123。
-        user_specific: 是否为用户特定缓存。仅对静态模式生效。
-
+        key_patterns: 要清除的缓存键模式
+        user_specific: 是否包含用户特定缓存
+    
     Usage:
-        @cache_invalidate(["user_profile:{user_id}", "user_list"])
-        async def update_user(request: Request, user_id: int, ...): ...
+        @cache_invalidate(["user_list", "user_detail"], user_specific=True)
+        async def update_user(request: Request, ...): ...
     """
-    if isinstance(key_templates, str):
-        key_templates = [key_templates]
-
+    if isinstance(key_patterns, str):
+        key_patterns = [key_patterns]
+    
     def decorator(func: Callable) -> Callable:
-        func_signature = inspect.signature(func)
-
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
+            # 执行原函数
             result = await func(*args, **kwargs)
             
-            logger.info(f"缓存失效装饰器开始执行: {func.__name__}, 模板: {key_templates}")
-
             try:
-                bound_args = func_signature.bind(*args, **kwargs).arguments
+                # 查找Request对象获取用户信息
+                user_id = None
+                if user_specific:
+                    request_obj = ParameterExtractor.find_request_object(args, kwargs)
+                    if request_obj:
+                        extracted_params = ParameterExtractor.extract_from_request(
+                            request_obj, user_specific=True
+                        )
+                        user_id = extracted_params['user_id']
                 
-                specific_keys_to_delete = set()
-                patterns_to_delete = set()
-
-                for template in key_templates:
-                    try:
-                        resolved_key = template.format(**bound_args)
-                        
-                        if '{' in template and '}' in template:
-                            # 动态键，检查是否需要加用户前缀
-                            if user_specific:
-                                request_obj = ParameterExtractor.find_request_object(args, kwargs)
-                                if request_obj:
-                                    params = ParameterExtractor.extract_from_request(request_obj, user_specific=True)
-                                    current_user_id = params.get('user_id')
-                                    if current_user_id:
-                                        # 在动态键中间插入用户ID（与缓存时的格式一致）
-                                        # 例如: user_profile:2 -> user_profile:u1:2
-                                        key_parts = resolved_key.split(':')
-                                        if len(key_parts) >= 2:
-                                            user_specific_key = f"{key_parts[0]}:u{current_user_id}:{':'.join(key_parts[1:])}"
-                                        else:
-                                            user_specific_key = f"{resolved_key}:u{current_user_id}"
-                                        specific_keys_to_delete.add(user_specific_key)
-                                    else:
-                                        logger.warning(f"user_specific=True 但无法为键 '{resolved_key}' 找到用户ID")
-                                else:
-                                    logger.warning(f"user_specific=True 但无法为键 '{resolved_key}' 找到Request对象")
-                            else:
-                                specific_keys_to_delete.add(resolved_key)
-                        else:
-                            # 静态模板，视为模式前缀
-                            if user_specific:
-                                # 尝试从请求中获取用户ID
-                                request_obj = ParameterExtractor.find_request_object(args, kwargs)
-                                if request_obj:
-                                    params = ParameterExtractor.extract_from_request(request_obj, user_specific=True)
-                                    current_user_id = params.get('user_id')
-                                    if current_user_id:
-                                        patterns_to_delete.add(f"{resolved_key}:u{current_user_id}*")
-                                    else: # user_specific=True 但没找到用户，为安全跳过
-                                        logger.warning(f"user_specific=True 但无法为模式 '{resolved_key}' 找到用户ID")
-                                else:
-                                    logger.warning(f"user_specific=True 但无法为模式 '{resolved_key}' 找到Request对象")
-                            else:
-                                patterns_to_delete.add(f"{resolved_key}*")
-                                
-                    except KeyError as e:
-                        logger.warning(f"缓存清理失败：在函数 '{func.__name__}' 的参数中未找到占位符 '{e}'")
-
-                if specific_keys_to_delete:
-                    logger.debug(f"[CACHE_INVALIDATE_DEBUG] 准备精确删除缓存键: {specific_keys_to_delete}")
-                    cleared_count = await redis_services.cache.invalidate_api_cache_keys(list(specific_keys_to_delete))
-                    if cleared_count > 0:
-                        logger.info(f"精确清理缓存 {cleared_count} 个: {specific_keys_to_delete}")
-
-                for pattern in patterns_to_delete:
-                    logger.debug(f"[CACHE_INVALIDATE_DEBUG] 准备模式删除缓存键: {pattern}")
+                # 构建失效模式
+                patterns_to_clear = []
+                
+                for pattern in key_patterns:
+                    patterns_to_clear.append(f"{pattern}*")
+                    
+                    # 如果是用户特定的，还要清理用户相关缓存
+                    if user_specific and user_id:
+                        patterns_to_clear.append(f"{pattern}:u{user_id}*")
+                
+                # 清理缓存
+                for pattern in patterns_to_clear:
                     cleared_count = await redis_services.cache.invalidate_api_cache_pattern(pattern)
                     if cleared_count > 0:
-                        logger.info(f"模糊清理缓存 {cleared_count} 个 (模式: {pattern})")
-
+                        logger.debug(f"清理缓存: {pattern}, 数量: {cleared_count}")
+                        
             except Exception as e:
-                logger.warning(f"缓存清理过程发生异常: {e}", exc_info=True)
-
+                logger.warning(f"缓存清理失败: {e}")
+            
             return result
         return wrapper
     return decorator
+
 
 # 预设装饰器，使用常见配置
 def cache_static(key_prefix: str):
@@ -473,13 +430,12 @@ def cache_user_data(key_prefix: str, ttl: int = None):
     )
 
 
-def cache_list_data(key_prefix: str, ttl: int = None, user_specific: bool = False):
+def cache_list_data(key_prefix: str, ttl: int = None):
     """列表数据缓存（包含查询参数，默认3分钟TTL）"""
     return cache_response(
         key_prefix,
         ttl=ttl or CacheConfig.API_LIST_TTL,
-        include_query_params=True,
-        user_specific=user_specific
+        include_query_params=True
     )
 
 
@@ -490,3 +446,92 @@ def cache_stats_data(key_prefix: str, ttl: int = None):
         ttl=ttl or CacheConfig.STATS_CACHE_TTL,
         include_query_params=True
     )
+```
+
+2.修正backend/app/services/redis/history.py
+问题点在于：
+
+方法内部在调用 self.get_history 时，将获取历史记录的数量硬编码（hardcoded）为 limit=5。
+
+这意味着，无论谁调用 get_task_full_info，它返回的 recent_history 字段将永远只包含最多5条记录。
+
+改进建议：
+
+一个更好的设计是允许调用者自己决定需要多少条历史记录。您可以给 get_task_full_info 方法增加一个带有默认值的可选参数，例如 history_limit：
+
+```python
+# 建议的修改
+async def get_task_full_info(self, config_id: int, history_limit: int = 5) -> Dict[str, Any]:
+    """获取任务完整信息（状态+元数据+最近历史）"""
+    try:
+        status = await self.get_task_status(config_id)
+        metadata = await self.get_task_metadata(config_id)
+        # 使用传入的参数
+        recent_history = await self.get_history(config_id, limit=history_limit)
+        
+        return {
+            "config_id": config_id,
+            "status": status.value,
+            "metadata": metadata,
+            "recent_history": recent_history,
+            "is_scheduled": status == ScheduleStatus.ACTIVE
+        }
+    # ...
+```
+
+3.修改 backend/app/api/v1/routes/user_routes.py
+修改建议
+您可以在 update_user 函数中，更新数据到数据库之前，添加一段逻辑来处理这个问题。
+这是修改后的 user_routes.py 中的端点代码：
+```python
+# 导入 InsufficientPermissionsError
+from app.core.exceptions import InsufficientPermissionsError
+
+# ... (其他导入)
+
+@router.patch("/{user_id}", response_model=UserResponse)
+@cache_invalidate(["user_profile", "user_list"], user_specific=True)
+async def update_user(
+    user_id: int,
+    user_update: UserUpdate,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user)
+) -> UserResponse:
+    """
+    更新用户信息（支持部分更新）
+
+    只能更新自己的信息或者超级管理员可以更新任何用户
+    """
+    try:
+        # 检查权限：只能修改自己或者超级管理员可以修改任何人
+        if current_user.id != user_id and not current_user.is_superuser:
+            raise InsufficientPermissionsError("没有足够权限更新其他用户")
+
+        # 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
+        if user_update.is_superuser is not None and not current_user.is_superuser:
+            raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
+
+        db_user = await crud_user.get(db, id=user_id)
+        if not db_user:
+            raise UserNotFoundError()
+
+        updated_user = await crud_user.update(db, db_obj=db_user, obj_in=user_update)
+
+        return updated_user
+    except Exception as e:
+        raise handle_error(e)
+```
+
+修改说明
+我们在代码中增加了以下关键检查：
+```python
+# 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
+if user_update.is_superuser is not None and not current_user.is_superuser:
+    raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
+```
+user_update.is_superuser is not None：这个条件判断客户端的请求中是否包含了 is_superuser 字段。因为 UserUpdate 模型中该字段是可选的 (Optional)，如果请求中没有这个字段，它的值就是 None。
+not current_user.is_superuser：这个条件判断当前执行操作的用户是否不是超级管理员。
+组合判断：如果一个非超级管理员试图修改 is_superuser 字段（无论想改成 true 还是 false），服务器都会拒绝该请求，并抛出 InsufficientPermissionsError 异常，从而保证了安全性。
+
+
+
