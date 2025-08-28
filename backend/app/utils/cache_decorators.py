@@ -296,19 +296,19 @@ def cache_response(
                     user_id=extracted_params['user_id']
                 )
                 
-                logger.debug(f"[CACHE_KEY_DEBUG] 函数: {func.__name__}, 构建缓存键: {cache_key}")
-                logger.debug(f"[CACHE_KEY_DEBUG] 提取参数: {extracted_params}")
+                logger.info(f"[CACHE_KEY_DEBUG] 函数: {func.__name__}, 构建缓存键: {cache_key}")
+                logger.info(f"[CACHE_KEY_DEBUG] 提取参数: {extracted_params}")
                 
                 # 检查缓存条件
                 if condition and not condition(*args, **kwargs):
-                    logger.debug(f"缓存条件不满足，跳过缓存: {cache_key}")
+                    logger.info(f"缓存条件不满足，跳过缓存: {cache_key}")
                     return await func(*args, **kwargs)
                 
                 # 尝试从缓存获取
                 try:
                     cached_result = await redis_services.cache.get_api_cache(cache_key)
                     if cached_result is not None:
-                        logger.debug(f"缓存命中: {cache_key}")
+                        logger.info(f"缓存命中: {cache_key}")
                         
                         # 反序列化缓存数据
                         deserialized_result = CacheSerializer.deserialize(cached_result)
@@ -320,7 +320,7 @@ def cache_response(
                     logger.warning(f"读取缓存失败: {e}")
                 
                 # 缓存未命中，执行原函数
-                logger.debug(f"缓存未命中: {cache_key}")
+                logger.info(f"缓存未命中: {cache_key}")
                 if on_cache_miss:
                     on_cache_miss(cache_key)
                 
@@ -337,7 +337,7 @@ def cache_response(
                                 ttl=cache_ttl
                             )
                             if success:
-                                logger.debug(f"结果已缓存: {cache_key}, TTL: {cache_ttl}s")
+                                logger.info(f"结果已缓存: {cache_key}, TTL: {cache_ttl}s")
                             else:
                                 logger.warning(f"缓存写入失败: {cache_key}")
                         else:
@@ -440,13 +440,13 @@ def cache_invalidate(
                         logger.warning(f"缓存清理失败：在函数 '{func.__name__}' 的参数中未找到占位符 '{e}'")
 
                 if specific_keys_to_delete:
-                    logger.debug(f"[CACHE_INVALIDATE_DEBUG] 准备精确删除缓存键: {specific_keys_to_delete}")
+                    logger.info(f"[CACHE_INVALIDATE_DEBUG] 准备精确删除缓存键: {specific_keys_to_delete}")
                     cleared_count = await redis_services.cache.invalidate_api_cache_keys(list(specific_keys_to_delete))
                     if cleared_count > 0:
                         logger.info(f"精确清理缓存 {cleared_count} 个: {specific_keys_to_delete}")
 
                 for pattern in patterns_to_delete:
-                    logger.debug(f"[CACHE_INVALIDATE_DEBUG] 准备模式删除缓存键: {pattern}")
+                    logger.info(f"[CACHE_INVALIDATE_DEBUG] 准备模式删除缓存键: {pattern}")
                     cleared_count = await redis_services.cache.invalidate_api_cache_pattern(pattern)
                     if cleared_count > 0:
                         logger.info(f"模糊清理缓存 {cleared_count} 个 (模式: {pattern})")
