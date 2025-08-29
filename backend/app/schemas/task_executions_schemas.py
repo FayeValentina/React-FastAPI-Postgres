@@ -4,6 +4,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from app.utils.cache_serializer import register_pydantic_model
 
 
 # =============================================================================
@@ -38,6 +39,7 @@ class TaskExecutionDetailInfo(TaskExecutionInfo):
 # 响应模型 - 对应执行管理端点
 # =============================================================================
 
+@register_pydantic_model
 class ConfigExecutionsResponse(BaseModel):
     """配置执行记录响应 - GET /executions/configs/{id}"""
     config_id: int = Field(..., description="配置ID")
@@ -45,6 +47,7 @@ class ConfigExecutionsResponse(BaseModel):
     count: int = Field(..., description="记录数量")
 
 
+@register_pydantic_model
 class RecentExecutionsResponse(BaseModel):
     """最近执行记录响应 - GET /executions/recent"""
     hours: int = Field(..., description="时间范围(小时)")
@@ -52,6 +55,7 @@ class RecentExecutionsResponse(BaseModel):
     count: int = Field(..., description="记录数量")
 
 
+@register_pydantic_model
 class FailedExecutionsResponse(BaseModel):
     """失败执行记录响应 - GET /executions/failed"""
     days: int = Field(..., description="时间范围(天)")
@@ -61,11 +65,13 @@ class FailedExecutionsResponse(BaseModel):
 
 # 注意：/executions/stats 端点不使用 response_model，因为它会根据参数返回不同格式的统计数据
 
+@register_pydantic_model
 class ExecutionDetailResponse(TaskExecutionDetailInfo):
     """执行详情响应 - GET /executions/{task_id}"""
     pass  # 继承TaskExecutionDetailInfo的所有字段
 
 
+@register_pydantic_model
 class ExecutionCleanupResponse(BaseModel):
     """执行记录清理响应 - DELETE /executions/cleanup"""
     success: bool = Field(..., description="清理是否成功")

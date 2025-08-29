@@ -18,12 +18,14 @@ from app.core.exceptions import (
     UserNotFoundError,
     InsufficientPermissionsError
 )
-from app.utils import handle_error, cache_list_data, cache_user_data, cache_invalidate
+from app.utils import handle_error
+from app.utils.cache_decorators import cache, invalidate
+from app.constant.cache_tags import CacheTags
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", response_model=UserResponse, status_code=201)
-@cache_invalidate("user_list")
+@invalidate([CacheTags.USER_LIST])
 async def create_user(
     request: Request,
     user_data: UserCreate, 
@@ -41,7 +43,7 @@ async def create_user(
         raise handle_error(e)
 
 @router.patch("/{user_id}", response_model=UserResponse)
-@cache_invalidate(["user_profile:{user_id}", "user_list"], user_specific=True)
+@invalidate([CacheTags.USER_PROFILE, CacheTags.USER_LIST])
 async def update_user(
     request: Request,
     user_id: int,
@@ -74,7 +76,7 @@ async def update_user(
         raise handle_error(e)
 
 @router.get("", response_model=List[UserResponse])
-@cache_list_data("user_list", user_specific=True)
+@cache([CacheTags.USER_LIST],exclude_params=["request","db","current_user"])
 async def get_users(
     request: Request,
     db: AsyncSession = Depends(get_async_session),
@@ -148,7 +150,7 @@ async def get_users(
     return users
 
 @router.get("/{user_id}", response_model=UserResponse)
-@cache_user_data("user_profile")
+@cache(tags=[CacheTags.USER_PROFILE],exclude_params=["request","db","current_user"])
 async def get_user(
     request: Request,
     user_id: int,
@@ -178,7 +180,7 @@ async def get_user(
         raise handle_error(e)
 
 @router.delete("/{user_id}", response_model=UserResponse)
-@cache_invalidate(["user_profile:{user_id}", "user_list"], user_specific=True)
+@invalidate([CacheTags.USER_PROFILE, CacheTags.USER_LIST])
 async def delete_user(
     request: Request,
     user_id: int,

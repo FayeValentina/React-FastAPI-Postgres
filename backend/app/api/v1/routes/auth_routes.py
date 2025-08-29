@@ -22,7 +22,9 @@ from app.schemas.token import Token, RefreshTokenRequest, TokenRevocationRequest
 from app.schemas.user import User
 from app.dependencies.current_user import get_current_active_user
 from app.core.exceptions import InvalidCredentialsError, InvalidRefreshTokenError
-from app.utils import handle_error, cache_invalidate, cache_user_data
+from app.utils import handle_error
+from app.utils.cache_decorators import cache, invalidate
+from app.constant.cache_tags import CacheTags
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -182,7 +184,7 @@ async def logout(
 
 
 @router.post("/register", response_model=User, status_code=201)
-@cache_invalidate("user_list")
+@invalidate([CacheTags.USER_LIST])
 async def register(
     request: Request,
     user_in: UserCreate,
@@ -204,7 +206,7 @@ async def register(
 
 
 @router.get("/me", response_model=User)
-@cache_user_data("user_me")
+@cache([CacheTags.USER_ME], exclude_params=["request", "current_user"])
 async def read_users_me(
     request: Request,
     current_user: Annotated[User, Depends(get_current_active_user)]

@@ -15,6 +15,7 @@ from .pool import redis_connection_manager
 logger = logging.getLogger(__name__)
 
 
+
 class RedisBase:
     """Redis服务基类，使用共享连接池和上下文管理器"""
 
@@ -51,8 +52,8 @@ class RedisBase:
             logger.error(f"Redis set error (key={key}): {e}")
             return False
 
-    async def get(self, key: str) -> Optional[str]:
-        """获取字符串值"""
+    async def get(self, key: str) -> Optional[Union[str, bytes]]:
+        """获取字符串或字节值"""
         try:
             async with self._connection_manager.get_connection() as client:
                 result = await client.get(self._make_key(key))
@@ -328,6 +329,38 @@ class RedisBase:
             logger.error(f"Redis keys error (pattern={pattern}): {e}")
             return []
 
+    # ========== Pipeline 支持 ==========
+    
+    async def pipeline_execute(self, operations: List[Dict[str, Any]]) -> List[Any]:
+        """批量执行操作"""
+        if not operations:
+            return []
+            
+        try:
+            async with self._connection_manager.get_connection() as client:
+                pipe = client.pipeline()
+                
+                for op in operations:
+                    method = op.get('method')
+                    args = op.get('args', [])
+                    kwargs = op.get('kwargs', {})
+                    
+                    if hasattr(pipe, method):
+                        # 对键名添加前缀
+                        if args and isinstance(args[0], str):
+                            args[0] = self._make_key(args[0])
+                        
+                        getattr(pipe, method)(*args, **kwargs)
+                    else:
+                        logger.warning(f"Unknown pipeline method: {method}")
+                
+                results = await pipe.execute()
+                return results
+                
+        except Exception as e:
+            logger.error(f"Redis pipeline error: {e}")
+            return []
+    
     # ========== 工具方法 ==========
     
     async def ping(self) -> bool:

@@ -52,7 +52,8 @@ from app.utils import registry_decorators as tr
 from app.crud.task_config import crud_task_config
 from app.crud.task_execution import crud_task_execution
 from app.core.redis_manager import redis_services
-from app.utils import cache_list_data, cache_response, cache_stats_data, cache_static, cache_invalidate
+from app.utils.cache_decorators import cache, invalidate
+from app.constant.cache_tags import CacheTags
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # =============================================================================
 
 @router.post("/configs", response_model=TaskConfigResponse, status_code=201)
-@cache_invalidate(["task_configs", "system_status", "system_dashboard"])
+@invalidate([CacheTags.TASK_CONFIGS, CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD])
 async def create_task_config(
     request: Request,
     config: TaskConfigCreate,
@@ -114,7 +115,7 @@ async def create_task_config(
 
 
 @router.get("/configs", response_model=TaskConfigListResponse)
-@cache_list_data("task_configs")
+@cache([CacheTags.TASK_CONFIGS], exclude_params=["request", "db", "current_user"])
 async def list_task_configs(
     request: Request,
     task_type: Optional[str] = Query(None, description="按任务类型过滤"),
@@ -180,7 +181,7 @@ async def list_task_configs(
 
 
 @router.get("/configs/{config_id}", response_model=TaskConfigDetailResponse)
-@cache_response("task_config_detail", include_query_params=True)
+@cache([CacheTags.TASK_CONFIG_DETAIL], exclude_params=["request", "db", "current_user"])
 async def get_task_config(
     request: Request,
     config_id: int = Path(..., description="配置ID"),
@@ -233,7 +234,7 @@ async def get_task_config(
 
 
 @router.patch("/configs/{config_id}", response_model=TaskConfigResponse)
-@cache_invalidate(["task_configs", "system_status", "system_dashboard"])
+@invalidate([CacheTags.TASK_CONFIGS, CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD])
 async def update_task_config(
     request: Request,
     config_id: int,
@@ -282,11 +283,11 @@ async def update_task_config(
 
 
 @router.delete("/configs/{config_id}", response_model=TaskConfigDeleteResponse)
-@cache_invalidate([
-    "task_configs",                 # 清理列表缓存（模式）
-    "task_config_detail:{config_id}", # 清理详情缓存（精确）
-    "system_status",                # 清理状态缓存（模式）
-    "system_dashboard"              # 清理仪表盘缓存（模式）
+@invalidate([
+    CacheTags.TASK_CONFIGS,                 # 清理列表缓存（模式）
+    CacheTags.TASK_CONFIG_DETAIL, # 清理详情缓存（精确）
+    CacheTags.SYSTEM_STATUS,                # 清理状态缓存（模式）
+    CacheTags.SYSTEM_DASHBOARD              # 清理仪表盘缓存（模式）
 ])
 async def delete_task_config(
     request: Request,
@@ -327,7 +328,7 @@ async def delete_task_config(
 # =============================================================================
 
 @router.post("/schedules/{config_id}/start", response_model=ScheduleActionResponse)
-@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
+@invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
 async def start_schedule(
     request: Request,
     config_id: int,
@@ -354,7 +355,7 @@ async def start_schedule(
 
 
 @router.post("/schedules/{config_id}/stop", response_model=ScheduleActionResponse)
-@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
+@invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
 async def stop_schedule(
     request: Request,
     config_id: int,
@@ -374,7 +375,7 @@ async def stop_schedule(
 
 
 @router.post("/schedules/{config_id}/pause", response_model=ScheduleActionResponse)
-@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
+@invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
 async def pause_schedule(
     request: Request,
     config_id: int,
@@ -394,7 +395,7 @@ async def pause_schedule(
 
 
 @router.post("/schedules/{config_id}/resume", response_model=ScheduleActionResponse)
-@cache_invalidate(["system_status", "system_dashboard", "schedule_list"])
+@invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
 async def resume_schedule(
     request: Request,
     config_id: int,
@@ -421,7 +422,7 @@ async def resume_schedule(
 
 
 @router.get("/schedules", response_model=ScheduleListResponse)
-@cache_response("schedule_list")
+@cache([CacheTags.SCHEDULE_LIST], exclude_params=["request", "current_user"])
 async def get_all_schedules(
     request: Request,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -587,7 +588,7 @@ async def get_failed_executions(
 
 
 @router.get("/executions/stats")
-@cache_stats_data("execution_stats")
+@cache([CacheTags.EXECUTION_STATS], exclude_params=["request", "db", "current_user"])
 async def get_execution_stats(
     request: Request,
     config_id: Optional[int] = Query(None, description="配置ID（可选）"),
@@ -643,7 +644,7 @@ async def get_execution_by_task_id(
 
 
 @router.delete("/executions/cleanup", response_model=ExecutionCleanupResponse)
-@cache_invalidate(["execution_stats", "system_status", "system_dashboard"])
+@invalidate([CacheTags.EXECUTION_STATS, CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD])
 async def cleanup_old_executions(
     request: Request,
     days_to_keep: int = Query(90, ge=30, le=365, description="保留天数"),
@@ -669,7 +670,7 @@ async def cleanup_old_executions(
 # =============================================================================
 
 @router.get("/system/status", response_model=SystemStatusResponse)
-@cache_stats_data("system_status") 
+@cache([CacheTags.SYSTEM_STATUS], exclude_params=["request", "db", "current_user"]) 
 async def get_system_status(
     request: Request,
     db: AsyncSession = Depends(get_async_session),
@@ -756,7 +757,7 @@ async def get_system_health(
 
 
 @router.get("/system/enums", response_model=SystemEnumsResponse)
-@cache_static("system_enums")
+@cache([CacheTags.SYSTEM_ENUMS], exclude_params=["request", "current_user"])
 async def get_system_enums(
     request: Request,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -766,7 +767,7 @@ async def get_system_enums(
         return {
             "scheduler_types": [t.value for t in SchedulerType],
             "schedule_actions": [a.value for a in ScheduleAction],
-            "task_types": tr.TASKS.keys(),
+            "task_types": list(tr.TASKS.keys()),
             "schedule_statuses": ["active", "inactive", "paused", "error"]
         }
     except Exception as e:
@@ -775,7 +776,7 @@ async def get_system_enums(
 
 
 @router.get("/system/task-info", response_model=TaskInfoResponse)
-@cache_static("task_info")
+@cache([CacheTags.TASK_INFO], exclude_params=["request", "current_user"])
 async def get_task_info(
     request: Request,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
@@ -795,7 +796,7 @@ async def get_task_info(
 
 
 @router.get("/system/dashboard", response_model=SystemDashboardResponse)
-@cache_stats_data("system_dashboard")
+@cache([CacheTags.SYSTEM_DASHBOARD], exclude_params=["request", "db", "current_user"])
 async def get_system_dashboard(
     request: Request,
     db: AsyncSession = Depends(get_async_session),
