@@ -1,11 +1,12 @@
 from .cache_decorators import (
     cache_static,
-    cache_user_data, 
-    cache_list_data, 
-    cache_response, 
-    cache_invalidate, 
+    cache_user_data,
+    cache_list_data,
+    cache_response,
+    cache_invalidate,
     cache_stats_data
     )
+from .cache_decorators_v2 import cache, invalidate
 from .record_decorators import execution_handler
 from .registry_decorators import (
     TASKS,
@@ -37,6 +38,8 @@ __all__ = [
     "cache_response",
     "cache_invalidate",
     "cache_stats_data",
+    "cache",
+    "invalidate",
     "execution_handler",
     "TASKS",
     "task",

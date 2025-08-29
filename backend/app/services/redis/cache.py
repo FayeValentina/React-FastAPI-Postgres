@@ -1,8 +1,9 @@
 # backend/app/services/redis/cache.py (适配 v4.0 装饰器的最终版)
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterable
 from app.core.redis import RedisBase
+from app.constant.cache_tags import CacheTags
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +76,62 @@ class CacheRedisService(RedisBase):
             return 0
         # self.scan_delete 会自动为 pattern 添加 "cache:" 前缀。
         return await self.scan_delete(pattern)
+
+    # ========== Tag-based caching for v2 decorators ==========
+
+    def _tag_key(self, tag_name: str) -> str:
+        return f"tag:{tag_name}"
+
+    async def get_cache(self, cache_key: str) -> Optional[bytes]:
+        """Retrieve raw cached bytes by key."""
+        try:
+            async with self._connection_manager.get_connection() as client:
+                return await client.get(self._make_key(cache_key))
+        except Exception as e:
+            logger.error(f"Redis get_cache error (key={cache_key}): {e}")
+            return None
+
+    async def set_cache(
+        self,
+        cache_key: str,
+        data: bytes,
+        tags: Iterable[str | CacheTags],
+        ttl: Optional[int] = None,
+    ) -> bool:
+        """Store cache entry and record its key under provided tags."""
+        ttl_value = ttl or self.default_ttl
+        try:
+            async with self._connection_manager.get_connection() as client:
+                await client.set(self._make_key(cache_key), data, ex=ttl_value)
+                for tag in tags:
+                    tag_name = tag.value if isinstance(tag, CacheTags) else str(tag)
+                    tag_key = self._make_key(self._tag_key(tag_name))
+                    await client.sadd(tag_key, cache_key)
+                    await client.expire(tag_key, ttl_value)
+            return True
+        except Exception as e:
+            logger.error(f"Redis set_cache error (key={cache_key}): {e}")
+            return False
+
+    async def invalidate_tags(self, tags: Iterable[str | CacheTags]) -> int:
+        """Invalidate all cache entries associated with the given tags."""
+        keys_to_delete = set()
+        try:
+            async with self._connection_manager.get_connection() as client:
+                for tag in tags:
+                    tag_name = tag.value if isinstance(tag, CacheTags) else str(tag)
+                    tag_key = self._make_key(f"tag:{tag_name}")
+                    members = await client.smembers(tag_key)
+                    if members:
+                        keys_to_delete.update(members)
+                    await client.delete(tag_key)
+                if keys_to_delete:
+                    delete_keys = [
+                        self._make_key(k.decode() if isinstance(k, bytes) else k)
+                        for k in keys_to_delete
+                    ]
+                    return await client.delete(*delete_keys)
+            return 0
+        except Exception as e:
+            logger.error(f"Redis invalidate_tags error (tags={tags}): {e}")
+            return 0
