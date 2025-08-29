@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# 统一的Key生成工厂 (核心重构)
+# 统一的Key生成工厂,确保缓存创建和失效时使用同一个key，避免不必要的复杂性
 # ==============================================================================
 
 class CacheKeyFactory:
@@ -70,8 +70,10 @@ class CacheKeyFactory:
 
         return cache_key
 
+# ==============================================================================
+# 参数提取器，从Request中精确提取路径参数和查询参数。注意！这要求API端点必须有Request参数
+# ==============================================================================
 
-# ParameterExtractor 和 CacheSerializer 保持不变...
 class ParameterExtractor:
     """基于Request对象的参数提取器"""
     
@@ -131,6 +133,10 @@ class ParameterExtractor:
                 return arg
         
         return None
+
+# ==============================================================================
+# 缓存序列化器,将对象序列化为缓存兼容格式,或反序列化数据，将特殊标记的数据转换回原始类型
+# ==============================================================================
 
 class CacheSerializer:
     """缓存序列化器，支持循环引用检测"""
@@ -244,7 +250,7 @@ class CacheSerializer:
             return data
 
 # ==============================================================================
-# 重构后的装饰器
+# API响应缓存构建装饰器
 # ==============================================================================
 
 def cache_response(
@@ -320,15 +326,19 @@ def cache_response(
         return wrapper
     return decorator
 
+# ==============================================================================
+# API响应缓存失效装饰器
+# ==============================================================================
 
 def cache_invalidate(
     key_templates: Union[str, List[str]],
-    user_specific: bool = False # 注意：此参数现在仅用于模式删除
+    user_specific: bool = False
 ):
     """
-    缓存失效装饰器 - v4.0 优雅版
-    - 对于动态键，直接从函数参数构造，不再做字符串拼接
-    - 保证与 cache_response 的对称性
+    缓存失效装饰器 - v4.1 显式版
+    - 废除了隐式约定，现在必须在模板中明确使用 `*` 来进行模式删除。
+    - 提供了精确删除不带参数的静态键的能力。
+    - 保证与 cache_response 的对称性。
     """
     if isinstance(key_templates, str):
         key_templates = [key_templates]
@@ -338,6 +348,7 @@ def cache_invalidate(
 
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
+            # 先执行被装饰的函数（例如，更新数据库的操作）
             result = await func(*args, **kwargs)
             
             try:
@@ -347,32 +358,41 @@ def cache_invalidate(
                 patterns_to_delete = set()
 
                 for template in key_templates:
-                    is_pattern = '{' not in template and '}' not in template
+                    # ===== 核心修改：明确判断模板类型 =====
 
-                    if is_pattern:
-                        # 对于静态模板，视为模式前缀
-                        # 例如 "user_list" -> "user_list*"
+                    # 1. 显式模式匹配：模板中包含 `*`
+                    if '*' in template:
+                        # 示例: "user_list:*"
+                        # 注意：如果需要用户特定的模式，模板应为 "user_list:u{user_id}:*"
+                        # 这里我们简化处理，直接使用模板
                         if user_specific:
-                            # 这种场景比较模糊，暂时保持原有逻辑
-                            request_obj = ParameterExtractor.find_request_object(args, kwargs)
-                            if request_obj:
-                                params = ParameterExtractor.extract_from_request(request_obj, user_specific=True)
-                                current_user_id = params.get('user_id')
-                                if current_user_id:
-                                    patterns_to_delete.add(f"{template}:u{current_user_id}*")
+                             request_obj = ParameterExtractor.find_request_object(args, kwargs)
+                             if request_obj:
+                                 params = ParameterExtractor.extract_from_request(request_obj, user_specific=True)
+                                 current_user_id = params.get('user_id')
+                                 if current_user_id:
+                                     # 动态替换模板中的用户ID部分
+                                     final_pattern = template.format(user_id=current_user_id)
+                                     patterns_to_delete.add(final_pattern)
+                                 else:
+                                      patterns_to_delete.add(template) # user_id不存在则按原模板匹配
+                             else:
+                                patterns_to_delete.add(template)
                         else:
-                            patterns_to_delete.add(f"{template}*")
-                    else:
-                        # 对于动态模板，我们精确地构建Key
-                        # ⭐ 使用统一的工厂创建Key，不再拼接！
-                        key_prefix = template.split(':')[0] # e.g., "user_profile:{user_id}" -> "user_profile"
+                            patterns_to_delete.add(template)
+
+                    # 2. 动态键构造：模板中包含 `{}` 但不包含 `*`
+                    elif '{' in template and '}' in template:
+                        # 示例: "user_profile:{user_id}"
+                        # 使用统一的工厂创建要精确删除的Key
+                        key_prefix = template.split(':')[0]
                         
-                        # 从函数参数中提取动态部分
                         path_params_values = [
                             bound_args.get(param.strip('{}'))
                             for param in template.split(':')[1:]
+                            if param # 过滤掉空字符串
                         ]
-
+                        
                         current_user_id = None
                         if user_specific:
                             request_obj = ParameterExtractor.find_request_object(args, kwargs)
@@ -384,8 +404,14 @@ def cache_invalidate(
                             prefix=key_prefix,
                             user_id=current_user_id,
                             path_params=path_params_values
-                            # 注意：失效时通常不依赖query_params，若需要可扩展
                         )
+                        specific_keys_to_delete.add(key_to_delete)
+                    
+                    # 3. 静态键：模板是纯字符串，不含 `*` 和 `{}`
+                    else:
+                        # 示例: "all_permissions"
+                        # 精确删除一个固定的键
+                        key_to_delete = CacheKeyFactory.create(prefix=template)
                         specific_keys_to_delete.add(key_to_delete)
 
                 # 执行删除操作
@@ -404,8 +430,11 @@ def cache_invalidate(
         return wrapper
     return decorator
 
+# ==============================================================================
+# 一部分预设的装饰器
+# ==============================================================================
 
-# 预设装饰器保持不变...
+
 def cache_static(key_prefix: str):
     """静态数据缓存（1小时TTL）"""
     return cache_response(key_prefix, ttl=CacheConfig.STATIC_TTL)
@@ -434,3 +463,4 @@ def cache_stats_data(key_prefix: str, ttl: int = None):
         ttl=ttl or CacheConfig.STATS_CACHE_TTL,
         include_query_params=True
     )
+
