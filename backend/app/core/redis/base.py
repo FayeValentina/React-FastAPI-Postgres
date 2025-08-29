@@ -248,14 +248,16 @@ class RedisBase:
             
     # ========== SCAN操作（非阻塞，推荐） ==========
 
+    # 修复 redis/base.py 中的 SCAN 操作
+    
     async def scan_keys(self, pattern: str = "*", scan_count: int = 1000) -> List[str]:
         """使用SCAN获取匹配的键列表（非阻塞）"""
         try:
             pattern_with_prefix = self._make_key(pattern)
             keys = []
-            cursor = '0'
+            cursor = 0  # 使用整数
             async with self._connection_manager.get_connection() as client:
-                while cursor != 0:
+                while True:
                     cursor, batch_keys = await client.scan(
                         cursor, match=pattern_with_prefix, count=scan_count
                     )
@@ -264,40 +266,46 @@ class RedisBase:
                         keys.extend([key[prefix_len:] for key in batch_keys if key.startswith(self.key_prefix)])
                     else:
                         keys.extend(batch_keys)
+                    if cursor == 0:  # cursor为0表示扫描完成
+                        break
             return keys
         except Exception as e:
             logger.error(f"Redis scan keys error (pattern={pattern}): {e}")
             return []
-
+    
     async def scan_count(self, pattern: str = "*", scan_count: int = 1000) -> int:
         """使用SCAN统计匹配键的数量（非阻塞）"""
         try:
             pattern_with_prefix = self._make_key(pattern)
             count = 0
-            cursor = '0'
+            cursor = 0
             async with self._connection_manager.get_connection() as client:
-                while cursor != 0:
+                while True:
                     cursor, batch_keys = await client.scan(
                         cursor, match=pattern_with_prefix, count=scan_count
                     )
                     count += len(batch_keys)
+                    if cursor == 0:
+                        break
             return count
         except Exception as e:
             logger.error(f"Redis scan count error (pattern={pattern}): {e}")
             return 0
-
+    
     async def scan_delete(self, pattern: str, scan_count: int = 500) -> int:
         """使用SCAN批量删除匹配的键（非阻塞）"""
         total_deleted = 0
         try:
             pattern_with_prefix = self._make_key(pattern)
-            cursor = '0'
+            cursor = 0
             async with self._connection_manager.get_connection() as client:
-                while cursor != 0:
+                while True:
                     cursor, keys = await client.scan(cursor, match=pattern_with_prefix, count=scan_count)
                     if keys:
                         deleted = await client.delete(*keys)
                         total_deleted += deleted
+                    if cursor == 0:
+                        break
             return total_deleted
         except Exception as e:
             logger.error(f"Redis scan delete error (pattern={pattern}): {e}")
@@ -341,3 +349,4 @@ class RedisBase:
         except Exception as e:
             logger.error(f"Redis flushdb error: {e}")
             return False
+
