@@ -1,537 +1,119 @@
-2025-08-28 修改建议:
-1.重构backend/app/utils/cache_decorators.py 装饰器:
-```python
-"""
-基于Request对象的缓存装饰器 - 简化版
-提供精确的路径参数和查询参数识别
-"""
+好的，非常乐意为您撰写这份《缓存系统重构指南》。
 
-import functools
-import hashlib
-import json
-import logging
-from datetime import datetime, date
-from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Union, Set
-from enum import Enum
+这份指南旨在将当前基于“智能模板”的复杂缓存系统，重构为一套更简洁、更健-壮、更易于维护的现代化缓存架构。
 
-from fastapi import Request
-from pydantic import BaseModel
+---
 
-from app.core.redis_manager import redis_services
-from app.services.redis.cache import CacheConfig
+### **缓存系统重构指南 (v2.0)**
 
-logger = logging.getLogger(__name__)
+#### **1. 引言：为何重构？**
 
+当前的缓存系统虽然功能强大，但其实现方式引入了两个核心的复杂性问题，导致系统脆弱且难以维护。本次重构的目标是解决这些根本性问题，使缓存系统变得**简洁、可靠且易于扩展**。
+相关文件:
+- backend\app\core\redis\base.py
+- backend\app\services\redis\cache.py
+- backend\app\utils\cache_decorators.py
+---
 
-class ParameterExtractor:
-    """基于Request对象的参数提取器"""
-    
-    @staticmethod
-    def extract_from_request(
-        request: Request,
-        user_specific: bool = False,
-        include_query_params: bool = False
-    ) -> Dict[str, Any]:
-        """从Request对象提取参数信息"""
-        result = {
-            'user_id': None,
-            'path_params': [],
-            'query_params': {}
-        }
-        
-        try:
-            # 提取路径参数（最准确的方式）
-            if hasattr(request, 'path_params') and request.path_params:
-                result['path_params'] = list(request.path_params.values())
-            
-            # 提取查询参数
-            if include_query_params and hasattr(request, 'query_params'):
-                result['query_params'] = dict(request.query_params)
-            
-            # 提取用户信息
-            if user_specific and hasattr(request, 'state'):
-                if hasattr(request.state, 'current_user'):
-                    user = request.state.current_user
-                    if user and hasattr(user, 'id'):
-                        result['user_id'] = user.id
-                elif hasattr(request.state, 'user_payload'):
-                    # 从JWT payload提取用户ID
-                    user_payload = request.state.user_payload
-                    if user_payload and 'sub' in user_payload:
-                        try:
-                            result['user_id'] = int(user_payload['sub'])
-                        except (ValueError, TypeError):
-                            pass
-        
-        except Exception as e:
-            logger.warning(f"从Request提取参数失败: {e}")
-        
-        return result
-    
-    @staticmethod
-    def find_request_object(args: tuple, kwargs: Dict[str, Any]) -> Optional[Request]:
-        """查找Request对象"""
-        # 从kwargs查找
-        for value in kwargs.values():
-            if isinstance(value, Request):
-                return value
-        
-        # 从args查找
-        for arg in args:
-            if isinstance(arg, Request):
-                return arg
-        
-        return None
+#### **2. 问题一：脆弱且复杂的缓存键（Key）管理**
 
+##### **2.1. 当前状况**
 
-class CacheKeyBuilder:
-    """缓存键构建器"""
-    
-    @staticmethod
-    def build_key(
-        prefix: str,
-        path_params: List[Union[str, int]] = None,
-        query_params: Dict[str, Any] = None,
-        user_id: Optional[int] = None,
-        hash_long_keys: bool = True
-    ) -> str:
-        """构建缓存键"""
-        key_parts = [prefix]
-        
-        # 添加用户ID
-        if user_id:
-            key_parts.append(f"u{user_id}")
-        
-        # 添加路径参数
-        if path_params:
-            key_parts.extend([str(p) for p in path_params if p is not None])
-        
-        # 添加查询参数
-        if query_params:
-            # 过滤空值并排序确保一致性
-            filtered_params = {
-                k: v for k, v in query_params.items() 
-                if v is not None and v != ""
-            }
-            
-            if filtered_params:
-                sorted_params = sorted(filtered_params.items())
-                param_str = "&".join(f"{k}={v}" for k, v in sorted_params)
-                key_parts.append(f"q({param_str})")
-        
-        cache_key = ":".join(key_parts)
-        
-        # 对过长的键进行哈希
-        if hash_long_keys and len(cache_key) > 200:
-            key_hash = hashlib.md5(cache_key.encode()).hexdigest()[:16]
-            return f"{prefix}:hash:{key_hash}"
-        
-        return cache_key
+缓存的构建 (`cache_response`) 与失效 (`cache_invalidate`) 严重依赖于“魔术字符串”和复杂的模板解析规则。
 
+* **硬编码字符串**: 在路由端点中，缓存键模板是硬编码的，如 `@cache_list_data("task_configs")`。
+* **复杂的约定**: `cache_invalidate` 装饰器必须通过解析字符串中是否包含 `{}` 或 `*` 来猜测开发者的意图（精确失效、动态参数失效、模式失效）。
 
-class CacheSerializer:
-    """缓存序列化器，支持循环引用检测"""
-    
-    @staticmethod
-    def serialize(obj: Any) -> Dict[str, Any]:
-        """将对象序列化为缓存兼容格式"""
-        try:
-            visited = set()
-            return CacheSerializer._serialize_recursive(obj, visited)
-        except Exception as e:
-            logger.warning(f"序列化对象失败: {e}")
-            return None
-    
-    @staticmethod  
-    def _serialize_recursive(obj: Any, visited: Set[int]) -> Any:
-        """递归序列化对象，支持循环引用检测"""
-        if obj is None:
-            return None
-        
-        # 基础类型
-        if isinstance(obj, (str, int, float, bool)):
-            return obj
-        
-        # 循环引用检测
-        if hasattr(obj, '__dict__') or isinstance(obj, (dict, list, tuple)):
-            obj_id = id(obj)
-            if obj_id in visited:
-                logger.warning(f"检测到循环引用，跳过对象: {type(obj)}")
-                return f"<circular_reference:{type(obj).__name__}>"
-            visited.add(obj_id)
-        
-        try:
-            # 日期时间类型
-            if isinstance(obj, (datetime, date)):
-                return {"__datetime__": obj.isoformat()}
-            
-            # Decimal类型
-            if isinstance(obj, Decimal):
-                return {"__decimal__": str(obj)}
-            
-            # 枚举类型
-            if isinstance(obj, Enum):
-                return obj.value
-            
-            # Pydantic模型
-            if isinstance(obj, BaseModel):
-                result = obj.dict()
-                result["__pydantic_model__"] = obj.__class__.__name__
-                return result
-            
-            # 字典
-            if isinstance(obj, dict):
-                return {k: CacheSerializer._serialize_recursive(v, visited.copy()) for k, v in obj.items()}
-            
-            # 列表/元组
-            if isinstance(obj, (list, tuple)):
-                return [CacheSerializer._serialize_recursive(item, visited.copy()) for item in obj]
-            
-            # SQLAlchemy模型或其他对象
-            if hasattr(obj, '__dict__'):
-                result = {}
-                for key, value in obj.__dict__.items():
-                    if not key.startswith('_'):  # 跳过私有属性
-                        try:
-                            result[key] = CacheSerializer._serialize_recursive(value, visited.copy())
-                        except Exception:
-                            continue
-                result["__class_name__"] = obj.__class__.__name__
-                return result
-            
-            # 其他类型转换为字符串
-            try:
-                return str(obj)
-            except Exception:
-                logger.warning(f"无法序列化类型: {type(obj)}")
-                return None
-                
-        finally:
-            # 清理访问记录
-            if hasattr(obj, '__dict__') or isinstance(obj, (dict, list, tuple)):
-                visited.discard(id(obj))
-    
-    @staticmethod
-    def deserialize(data: Any) -> Any:
-        """反序列化数据，将特殊标记的数据转换回原始类型"""
-        if isinstance(data, dict):
-            # 处理日期时间
-            if "__datetime__" in data:
-                try:
-                    return datetime.fromisoformat(data["__datetime__"])
-                except ValueError:
-                    return data["__datetime__"]
-            
-            # 处理Decimal
-            if "__decimal__" in data:
-                try:
-                    return Decimal(data["__decimal__"])
-                except (ValueError, TypeError):
-                    return data["__decimal__"]
-            
-            # 递归处理字典
-            return {k: CacheSerializer.deserialize(v) for k, v in data.items()}
-        
-        elif isinstance(data, list):
-            # 递归处理列表
-            return [CacheSerializer.deserialize(item) for item in data]
-        
-        else:
-            # 基础类型直接返回
-            return data
+##### **2.2. 存在的问题**
 
+* **易出错**: 一个微小的拼写错误（例如 `"user_list"` vs `"user_lists"`）就会导致缓存失效逻辑完全失效，且不会产生任何程序错误，极难排查。
+* **心智负担高**: 开发者必须时刻记住每个缓存键的精确格式和所有动态参数的名称，增加了不必要的复杂性。
+* **调试困难**: 当缓存未按预期工作时，需要深入跟踪装饰器内部复杂的字符串处理逻辑，才能定位问题。
 
-def cache_response(
-    key_prefix: str,
-    ttl: Optional[int] = None,
-    user_specific: bool = False,
-    include_query_params: bool = False,
-    condition: Callable = None,
-    on_cache_hit: Callable = None,
-    on_cache_miss: Callable = None
-):
-    """基于Request对象的API响应缓存装饰器
-    
-    Args:
-        key_prefix: 缓存键前缀
-        ttl: 缓存过期时间（秒），默认使用CacheConfig.DEFAULT_TTL
-        user_specific: 是否按用户缓存
-        include_query_params: 是否在缓存键中包含查询参数
-        condition: 缓存条件函数，返回True时才缓存
-        on_cache_hit: 缓存命中回调
-        on_cache_miss: 缓存未命中回调
-    
-    Usage:
-        @cache_response("user_list", ttl=300, include_query_params=True)
-        async def get_users(request: Request, ...): ...
-        
-        @cache_response("user_detail", user_specific=True)  
-        async def get_user_profile(request: Request, user_id: int, ...): ...
-    
-    注意：被装饰的函数必须包含 Request 参数
-    """
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            cache_ttl = ttl or CacheConfig.DEFAULT_TTL
-            
-            try:
-                # 查找Request对象
-                request_obj = ParameterExtractor.find_request_object(args, kwargs)
-                if not request_obj:
-                    logger.warning(f"函数 {func.__name__} 缺少Request参数，跳过缓存")
-                    return await func(*args, **kwargs)
-                
-                # 从Request提取参数
-                extracted_params = ParameterExtractor.extract_from_request(
-                    request_obj,
-                    user_specific=user_specific,
-                    include_query_params=include_query_params
-                )
-                
-                # 构建缓存键
-                cache_key = CacheKeyBuilder.build_key(
-                    prefix=key_prefix,
-                    path_params=extracted_params['path_params'],
-                    query_params=extracted_params['query_params'] if include_query_params else None,
-                    user_id=extracted_params['user_id']
-                )
-                
-                # 检查缓存条件
-                if condition and not condition(*args, **kwargs):
-                    logger.debug(f"缓存条件不满足，跳过缓存: {cache_key}")
-                    return await func(*args, **kwargs)
-                
-                # 尝试从缓存获取
-                try:
-                    cached_result = await redis_services.cache.get_api_cache(cache_key)
-                    if cached_result is not None:
-                        logger.debug(f"缓存命中: {cache_key}")
-                        
-                        # 反序列化缓存数据
-                        deserialized_result = CacheSerializer.deserialize(cached_result)
-                        
-                        if on_cache_hit:
-                            on_cache_hit(cache_key, deserialized_result)
-                        return deserialized_result
-                except Exception as e:
-                    logger.warning(f"读取缓存失败: {e}")
-                
-                # 缓存未命中，执行原函数
-                logger.debug(f"缓存未命中: {cache_key}")
-                if on_cache_miss:
-                    on_cache_miss(cache_key)
-                
-                result = await func(*args, **kwargs)
-                
-                # 序列化并缓存结果
-                if result is not None:
-                    try:
-                        serialized_result = CacheSerializer.serialize(result)
-                        if serialized_result is not None:
-                            success = await redis_services.cache.set_api_cache(
-                                cache_key, 
-                                serialized_result, 
-                                ttl=cache_ttl
-                            )
-                            if success:
-                                logger.debug(f"结果已缓存: {cache_key}, TTL: {cache_ttl}s")
-                            else:
-                                logger.warning(f"缓存写入失败: {cache_key}")
-                        else:
-                            logger.warning(f"序列化失败，跳过缓存: {cache_key}")
-                    except Exception as e:
-                        logger.warning(f"缓存写入异常: {cache_key}, 错误: {e}")
-                
-                return result
-                
-            except Exception as e:
-                logger.error(f"缓存装饰器执行异常: {e}")
-                # 缓存失败时仍然执行原函数
-                return await func(*args, **kwargs)
-        
-        return wrapper
-    return decorator
+---
 
+#### **3. 解决方案一：引入“标签化缓存 (Tag-Based Caching)”**
 
-def cache_invalidate(
-    key_patterns: Union[str, List[str]],
-    user_specific: bool = False
-):
-    """缓存失效装饰器
-    
-    用于在执行写操作后自动清理相关缓存
-    
-    Args:
-        key_patterns: 要清除的缓存键模式
-        user_specific: 是否包含用户特定缓存
-    
-    Usage:
-        @cache_invalidate(["user_list", "user_detail"], user_specific=True)
-        async def update_user(request: Request, ...): ...
-    """
-    if isinstance(key_patterns, str):
-        key_patterns = [key_patterns]
-    
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            # 执行原函数
-            result = await func(*args, **kwargs)
-            
-            try:
-                # 查找Request对象获取用户信息
-                user_id = None
-                if user_specific:
-                    request_obj = ParameterExtractor.find_request_object(args, kwargs)
-                    if request_obj:
-                        extracted_params = ParameterExtractor.extract_from_request(
-                            request_obj, user_specific=True
-                        )
-                        user_id = extracted_params['user_id']
-                
-                # 构建失效模式
-                patterns_to_clear = []
-                
-                for pattern in key_patterns:
-                    patterns_to_clear.append(f"{pattern}*")
-                    
-                    # 如果是用户特定的，还要清理用户相关缓存
-                    if user_specific and user_id:
-                        patterns_to_clear.append(f"{pattern}:u{user_id}*")
-                
-                # 清理缓存
-                for pattern in patterns_to_clear:
-                    cleared_count = await redis_services.cache.invalidate_api_cache_pattern(pattern)
-                    if cleared_count > 0:
-                        logger.debug(f"清理缓存: {pattern}, 数量: {cleared_count}")
-                        
-            except Exception as e:
-                logger.warning(f"缓存清理失败: {e}")
-            
-            return result
-        return wrapper
-    return decorator
+##### **3.1. 核心思想**
 
+我们不再关心缓存键的具体格式。而是为每一份缓存数据“贴上”一个或多个**标签（Tag）**。缓存的失效操作转变为“**清除所有带有特定标签的缓存**”，从而将缓存的创建与失效彻底解耦。
 
-# 预设装饰器，使用常见配置
-def cache_static(key_prefix: str):
-    """静态数据缓存（1小时TTL）"""
-    return cache_response(key_prefix, ttl=CacheConfig.STATIC_TTL)
+##### **3.2. 实施步骤**
 
+1.  **创建中央标签枚举 `CacheTags`**：
+    * **文件**: `backend/app/constant/cache_tags.py` (新建)
+    * **内容**: 创建一个继承自 `str` 和 `Enum` 的 `CacheTags` 枚举，用于统一定义所有缓存标签。一个标签代表一类数据。
+    * **示例**: `TASK_CONFIG = "task_config"`、`SYSTEM_STATUS = "system_status"`。
 
-def cache_user_data(key_prefix: str, ttl: int = None):
-    """用户数据缓存（用户特定，默认5分钟TTL）"""
-    return cache_response(
-        key_prefix, 
-        ttl=ttl or CacheConfig.USER_CACHE_TTL, 
-        user_specific=True
-    )
+2.  **更新 Redis 服务**：
+    * **文件**: `backend/app/services/redis/cache.py` (修改)
+    * **逻辑**: 需要实现两个核心功能：
+        * **设置带标签的缓存**: 在存入一个缓存项时，需要将该项的 `cache_key` 记录到其关联的每一个 `tag` 对应的 Redis Set 中。
+        * **通过标签失效缓存**: 提供一个方法，接收一个或多个 `tag`，然后从这些 `tag` 对应的 Set 中取出所有的 `cache_key`，并将它们全部删除。
 
+---
 
-def cache_list_data(key_prefix: str, ttl: int = None):
-    """列表数据缓存（包含查询参数，默认3分钟TTL）"""
-    return cache_response(
-        key_prefix,
-        ttl=ttl or CacheConfig.API_LIST_TTL,
-        include_query_params=True
-    )
+#### **4. 问题二：复杂且不对称的序列化机制**
 
+##### **4.1. 当前状况**
 
-def cache_stats_data(key_prefix: str, ttl: int = None):
-    """统计数据缓存（包含查询参数，默认10分钟TTL）"""
-    return cache_response(
-        key_prefix,
-        ttl=ttl or CacheConfig.STATS_CACHE_TTL,
-        include_query_params=True
-    )
-```
+`CacheSerializer` 类通过递归和特殊标记（如 `__datetime__`）来手动处理各种数据类型（`datetime`, `Decimal`, `Pydantic` 模型, `SQLAlchemy` 模型）。
 
-2.修正backend/app/services/redis/history.py
-问题点在于：
+##### **4.2. 存在的问题**
 
-方法内部在调用 self.get_history 时，将获取历史记录的数量硬编码（hardcoded）为 limit=5。
+* **极其复杂**: 需要为每一种特殊类型编写专门的序列化和反序列化逻辑。
+* **不对称风险**: 手动编写的 `serialize` 和 `deserialize` 逻辑很难保证完全对称，可能导致数据在存取前后不一致。
+* **扩展性差**: 每当项目中引入新的数据类型，都必须手动更新这个序列化器，否则就会在运行时出错。
 
-这意味着，无论谁调用 get_task_full_info，它返回的 recent_history 字段将永远只包含最多5条记录。
+---
 
-改进建议：
+#### **5. 解决方案二：委托 Pydantic 进行全自动序列化**
 
-一个更好的设计是允许调用者自己决定需要多少条历史记录。您可以给 get_task_full_info 方法增加一个带有默认值的可选参数，例如 history_limit：
+##### **5.1. 核心思想**
 
-```python
-# 建议的修改
-async def get_task_full_info(self, config_id: int, history_limit: int = 5) -> Dict[str, Any]:
-    """获取任务完整信息（状态+元数据+最近历史）"""
-    try:
-        status = await self.get_task_status(config_id)
-        metadata = await self.get_task_metadata(config_id)
-        # 使用传入的参数
-        recent_history = await self.get_history(config_id, limit=history_limit)
-        
-        return {
-            "config_id": config_id,
-            "status": status.value,
-            "metadata": metadata,
-            "recent_history": recent_history,
-            "is_scheduled": status == ScheduleStatus.ACTIVE
-        }
-    # ...
-```
+利用项目已深度使用的 Pydantic 框架来全权负责序列化和反序列化。所有需要缓存的数据都必须是 Pydantic 模型实例。我们只存储 Pydantic 模型转换后的数据，而无需关心其内部字段的具体类型。
 
-3.修改 backend/app/api/v1/routes/user_routes.py
-修改建议
-您可以在 update_user 函数中，更新数据到数据库之前，添加一段逻辑来处理这个问题。
-这是修改后的 user_routes.py 中的端点代码：
-```python
-# 导入 InsufficientPermissionsError
-from app.core.exceptions import InsufficientPermissionsError
+##### **5.2. 实施步骤**
 
-# ... (其他导入)
+1.  **创建新的 Pydantic 序列化器**：
+    * **文件**: `backend/app/utils/cache_serializer_v2.py` (新建)
+    * **依赖**: 引入 `cbor2` 库以获得比 `json` 更高效的二进制序列化能力。
+    * **序列化逻辑 (`serialize`)**:
+        1.  接收一个 Pydantic 模型实例。
+        2.  使用 `obj.model_dump(mode='json')` 将其转换为对 `datetime` 等类型友好的 Python 字典。
+        3.  将模型的类名和数据字典打包，使用 `cbor2.dumps()` 转换为字节流。
+    * **反序列化逻辑 (`deserialize`)**:
+        1.  接收字节流，使用 `cbor2.loads()` 将其转换回字典。
+        2.  根据字典中的模型类名，从一个预定义的**模型注册表（MODEL_REGISTRY）**中查找到对应的 Pydantic 模型类。
+        3.  使用 `ModelClass.model_validate(data)` 将字典数据恢复为 Pydantic 模型实例，Pydantic 会在此过程中自动完成所有类型转换和数据验证。
 
-@router.patch("/{user_id}", response_model=UserResponse)
-@cache_invalidate(["user_profile", "user_list"], user_specific=True)
-async def update_user(
-    user_id: int,
-    user_update: UserUpdate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user)
-) -> UserResponse:
-    """
-    更新用户信息（支持部分更新）
+---
 
-    只能更新自己的信息或者超级管理员可以更新任何用户
-    """
-    try:
-        # 检查权限：只能修改自己或者超级管理员可以修改任何人
-        if current_user.id != user_id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有足够权限更新其他用户")
+#### **6. 完整重构流程**
 
-        # 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
-        if user_update.is_superuser is not None and not current_user.is_superuser:
-            raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
+1.  **创建 `CacheTags` 枚举**:
+    * 在 `backend/app/constant/` 目录下新建 `cache_tags.py` 文件，并定义所有需要的缓存标签。
 
-        db_user = await crud_user.get(db, id=user_id)
-        if not db_user:
-            raise UserNotFoundError()
+2.  **创建新的序列化器**:
+    * 在 `backend/app/utils/` 目录下新建 `cache_serializer_v2.py`。
+    * 实现基于 Pydantic 和 `cbor2` 的新版 `CacheSerializer`，并创建一个 `MODEL_REGISTRY` 来注册所有需要缓存的 Pydantic 响应模型。
 
-        updated_user = await crud_user.update(db, db_obj=db_user, obj_in=user_update)
+3.  **创建新的缓存装饰器**:
+    * 在 `backend/app/utils/` 目录下新建 `cache_decorators_v2.py`。
+    * 创建新的 `cache(tags: List[CacheTags])` 和 `invalidate(tags: List[CacheTags])` 装饰器。
+    * `cache` 装饰器内部逻辑：自动生成唯一的 `cache_key`，调用新的序列化器处理结果，并通过 Redis 服务将数据和标签关联存储。
+    * `invalidate` 装饰器内部逻辑：在被装饰函数执行后，调用 Redis 服务的“通过标签失效缓存”方法。
 
-        return updated_user
-    except Exception as e:
-        raise handle_error(e)
-```
+4.  **升级 Redis 服务层**:
+    * 修改 `backend/app/services/redis/cache.py`，添加处理标签和字节流的新方法。
 
-修改说明
-我们在代码中增加了以下关键检查：
-```python
-# 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
-if user_update.is_superuser is not None and not current_user.is_superuser:
-    raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
-```
-user_update.is_superuser is not None：这个条件判断客户端的请求中是否包含了 is_superuser 字段。因为 UserUpdate 模型中该字段是可选的 (Optional)，如果请求中没有这个字段，它的值就是 None。
-not current_user.is_superuser：这个条件判断当前执行操作的用户是否不是超级管理员。
-组合判断：如果一个非超级管理员试图修改 is_superuser 字段（无论想改成 true 还是 false），服务器都会拒绝该请求，并抛出 InsufficientPermissionsError 异常，从而保证了安全性。
+5.  **迁移路由端点**:
+    * 逐个修改路由文件（如 `backend/app/api/v1/routes/task_routes.py`）。
+    * 将旧的装饰器（`@cache_response`, `@cache_invalidate`, `@cache_list_data` 等）替换为新的 `@cache(tags=[...])` 和 `@invalidate(tags=[...])`。
+    * 确保所有返回缓存数据的端点，其返回值都是一个已在 `MODEL_REGISTRY` 中注册的 Pydantic 模型实例。
 
+6.  **清理工作**:
+    * 在所有路由都完成迁移后，安全地删除旧的 `backend/app/utils/cache_decorators.py` 文件。
+    * 在 `__init__.py` 或其他引用处，更新导入路径，指向新的装饰器。
 
-
+通过以上步骤，您的缓存系统将完成一次彻底的现代化升级，其简洁性和可靠性将得到质的飞跃。
