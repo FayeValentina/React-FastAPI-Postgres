@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 import redis.asyncio as redis
-from redis.exceptions import ConnectionError, TimeoutError
+from redis import ConnectionError, TimeoutError
 
 from app.core.config import settings
 from .config import RedisPoolConfig, default_pool_config

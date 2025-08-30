@@ -34,49 +34,6 @@ class CacheRedisService(RedisBase):
     def __init__(self):
         # 这个服务只负责为所有缓存键添加 "cache:" 命名空间。
         super().__init__(key_prefix="cache:")
-        self.default_ttl = CacheConfig.DEFAULT_TTL
-    
-    # ========== 核心API缓存方法（供装饰器使用） ==========
-    
-    async def get_api_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
-        """
-        获取API缓存。
-        cache_key 是由 CacheKeyFactory 生成的完整键。
-        """
-        # 直接使用 cache_key，self.get_json 会自动添加 "cache:" 前缀。
-        return await self.get_json(cache_key)
-    
-    async def set_api_cache(self, cache_key: str, data: Dict[str, Any], ttl: Optional[int] = None) -> bool:
-        """
-        设置API缓存。
-        cache_key 是由 CacheKeyFactory 生成的完整键。
-        """
-        # 直接使用 cache_key，self.set_json 会自动添加 "cache:" 前缀。
-        return await self.set_json(
-            cache_key,
-            data,
-            ttl=ttl or self.default_ttl
-        )
-    
-    async def invalidate_api_cache_keys(self, cache_keys: List[str]) -> int:
-        """
-        根据精确的键列表批量清除API缓存 (使用 DEL)。
-        cache_keys 是由 CacheKeyFactory 生成的完整键列表。
-        """
-        if not cache_keys:
-            return 0
-        # self.delete 会自动为列表中的每个key添加 "cache:" 前缀。
-        return await self.delete(*cache_keys)
-
-    async def invalidate_api_cache_pattern(self, pattern: str) -> int:
-        """
-        根据模式清除API缓存 (使用 SCAN 和 DEL，非阻塞)。
-        pattern 是由装饰器生成的模式，例如 "user_list*"。
-        """
-        if not pattern:
-            return 0
-        # self.scan_delete 会自动为 pattern 添加 "cache:" 前缀。
-        return await self.scan_delete(pattern)
     
     # ========== 标签化缓存新方法 ==========
     
@@ -113,11 +70,15 @@ class CacheRedisService(RedisBase):
         """将缓存键关联到标签，并为标签集合续期"""
         try:
             tag_set_key = f"tag:{tag}"
-            # 简单的连续操作，Redis处理极快，风险很低
-            result = await self.sadd(tag_set_key, cache_key)
-            # 为标签集合设置过期时间，防止内存泄漏
-            await self.expire(tag_set_key, CacheConfig.TAG_TTL)
-            return result > 0
+            # 直接使用新的上下文管理器
+            async with self.pipeline() as pipe:
+            # ！！！注意：在 pipeline 中，命令不会立即执行，而是被添加到队列中
+            # ！！！所以这里不需要 await
+                pipe.sadd(self._make_key(tag_set_key), cache_key)
+                pipe.expire(self._make_key(tag_set_key), CacheConfig.TAG_TTL)
+
+                result = await pipe.execute()
+            return result[0] > 0
         except Exception as e:
             logger.error(f"添加键到标签失败 (tag={tag}, key={cache_key}): {e}")
             return False

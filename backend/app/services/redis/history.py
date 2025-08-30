@@ -78,7 +78,7 @@ class ScheduleHistoryRedisService(RedisBase):
     async def get_all_task_statuses(self) -> Dict[int, str]:
         """获取所有任务状态"""
         try:
-            status_keys = await self.keys(f"{self.status_prefix}*")
+            status_keys = await self.scan_keys(f"{self.status_prefix}*")
             statuses = {}
             
             for key in status_keys:
@@ -127,27 +127,23 @@ class ScheduleHistoryRedisService(RedisBase):
     # ========== 历史事件管理（保留原有功能）==========
     
     async def add_history_event(self, config_id: int, event_data: Dict[str, Any]) -> bool:
-        """添加调度历史事件"""
+        """添加调度历史事件 (使用新的 pipeline 上下文管理器)"""
         try:
             event_data.setdefault("timestamp", datetime.utcnow().isoformat())
+            history_key = f"{self.history_prefix}{config_id}"
             
-            operations = [
-                {
-                    "method": "lpush",
-                    "args": [f"{self.history_prefix}{config_id}", json.dumps(event_data, ensure_ascii=False)]
-                },
-                {
-                    "method": "ltrim", 
-                    "args": [f"{self.history_prefix}{config_id}", 0, self.max_history - 1]
-                },
-                {
-                    "method": "expire",
-                    "args": [f"{self.history_prefix}{config_id}", self.default_ttl]
-                }
-            ]
+            async with self.pipeline() as pipe:
+                # 1. 将新事件推入列表左侧
+                pipe.lpush(self._make_key(history_key), json.dumps(event_data, ensure_ascii=False))
+                # 2.修建列表，只保留最新的 max_history 条记录
+                pipe.ltrim(self._make_key(history_key), 0, self.max_history - 1)
+                # 3. 为列表续期
+                pipe.expire(self._make_key(history_key), self.default_ttl)
+                
+                results = await pipe.execute()
             
-            results = await self.pipeline_execute(operations)
-            return len(results) == 3 and results[0] > 0
+            # 检查 LPUSH 操作是否成功（返回列表的新长度 > 0）
+            return results[0] > 0
             
         except Exception as e:
             logger.error(f"添加历史事件失败: {e}")

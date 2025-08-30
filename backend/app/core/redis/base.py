@@ -8,6 +8,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 from datetime import timedelta
+from contextlib import asynccontextmanager
 
 # 假设连接管理器在同级目录的 pool.py 文件中
 from .pool import redis_connection_manager
@@ -312,54 +313,31 @@ class RedisBase:
             logger.error(f"Redis scan delete error (pattern={pattern}): {e}")
             return 0
 
-    # ========== 传统KEYS操作（阻塞，生产环境慎用） ==========
+    # ========== Pipeline / Transaction Support ========== #
 
-    async def keys(self, pattern: str = "*") -> List[str]:
-        """获取匹配的键列表（阻塞操作，生产环境慎用，建议使用scan_keys）"""
-        logger.warning(f"正在使用阻塞的 keys() 方法，建议在生产环境中使用 scan_keys() 替代")
-        try:
-            async with self._connection_manager.get_connection() as client:
-                pattern_with_prefix = self._make_key(pattern)
-                keys = await client.keys(pattern_with_prefix)
-                if self.key_prefix:
-                    prefix_len = len(self.key_prefix)
-                    return [key[prefix_len:] for key in keys if key.startswith(self.key_prefix)]
-                return keys
-        except Exception as e:
-            logger.error(f"Redis keys error (pattern={pattern}): {e}")
-            return []
+    @asynccontextmanager
+    async def pipeline(self, transaction: bool = True):
+        """
+        提供一个 Pipeline 上下文管理器，支持事务。
 
-    # ========== Pipeline 支持 ==========
-    
-    async def pipeline_execute(self, operations: List[Dict[str, Any]]) -> List[Any]:
-        """批量执行操作"""
-        if not operations:
-            return []
-            
-        try:
-            async with self._connection_manager.get_connection() as client:
-                pipe = client.pipeline()
-                
-                for op in operations:
-                    method = op.get('method')
-                    args = op.get('args', [])
-                    kwargs = op.get('kwargs', {})
-                    
-                    if hasattr(pipe, method):
-                        # 对键名添加前缀
-                        if args and isinstance(args[0], str):
-                            args[0] = self._make_key(args[0])
-                        
-                        getattr(pipe, method)(*args, **kwargs)
-                    else:
-                        logger.warning(f"Unknown pipeline method: {method}")
-                
+        Args:
+            transaction: 是否作为事务执行 (使用 MULTI/EXEC)。默认为 True。
+
+        Usage:
+            async with self.pipeline() as pipe:
+                await pipe.set("key1", "value1")
+                await pipe.sadd("set_key", "member1")
                 results = await pipe.execute()
-                return results
-                
+        """
+        try:
+            async with self._connection_manager.get_connection() as client:
+                async with client.pipeline(transaction=transaction) as pipe:
+                    yield pipe
         except Exception as e:
-            logger.error(f"Redis pipeline error: {e}")
-            return []
+            logger.error(f"Redis pipeline context error: {e}")
+            # 重新抛出异常，以便调用方可以处理它
+            raise
+
     
     # ========== 工具方法 ==========
     
