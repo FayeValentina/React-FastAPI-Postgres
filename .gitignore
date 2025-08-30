@@ -76,6 +76,8 @@ nginx/ssl/
 *.cert
 *.certificate
 
+# ssh key file
+ssh-key/
 # Alembic
 alembic/versions/__pycache__/
 alembic/__pycache__/
