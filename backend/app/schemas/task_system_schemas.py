@@ -4,6 +4,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from app.utils.cache_serializer import register_pydantic_model
 
 
 # =============================================================================
@@ -49,6 +50,7 @@ class ExecutionStatsInfo(BaseModel):
 # 响应模型 - 对应系统监控端点
 # =============================================================================
 
+@register_pydantic_model
 class SystemStatusResponse(BaseModel):
     """系统状态响应 - GET /system/status"""
     system_time: str = Field(..., description="系统时间")
@@ -61,6 +63,7 @@ class SystemStatusResponse(BaseModel):
     execution_stats: ExecutionStatsInfo = Field(..., description="执行统计")
 
 
+@register_pydantic_model
 class SystemHealthResponse(BaseModel):
     """系统健康检查响应 - GET /system/health"""
     status: str = Field(..., description="整体健康状态 (healthy/degraded/unhealthy)")
@@ -69,6 +72,7 @@ class SystemHealthResponse(BaseModel):
     error: Optional[str] = Field(None, description="错误信息")
 
 
+@register_pydantic_model
 class SystemEnumsResponse(BaseModel):
     """系统枚举值响应 - GET /system/enums"""
     scheduler_types: List[str] = Field(..., description="调度器类型列表")
@@ -107,6 +111,7 @@ class TaskInfo(BaseModel):
     has_parameters: bool = Field(..., description="是否有参数")
 
 
+@register_pydantic_model
 class TaskInfoResponse(BaseModel):
     """任务信息响应 - GET /system/task-info"""
     tasks: List[TaskInfo] = Field(..., description="任务信息列表")
@@ -128,6 +133,7 @@ class DashboardInfo(BaseModel):
     generated_at: str = Field(..., description="生成时间")
 
 
+@register_pydantic_model
 class SystemDashboardResponse(BaseModel):
     """系统仪表板响应 - GET /system/dashboard"""
     dashboard: DashboardInfo = Field(..., description="仪表板数据")

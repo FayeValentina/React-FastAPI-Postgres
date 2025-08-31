@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
 from app.utils.registry_decorators import SchedulerType
+from app.utils.cache_serializer import register_pydantic_model
 
 
 class TaskConfigBase(BaseModel):
@@ -86,6 +87,7 @@ class TaskConfigUpdate(BaseModel):
 # 响应模型 - 对应配置管理端点
 # =============================================================================
 
+@register_pydantic_model
 class TaskConfigResponse(TaskConfigBase):
     """任务配置基础响应模型"""
     id: int = Field(..., description="配置ID")
@@ -98,12 +100,14 @@ class TaskConfigResponse(TaskConfigBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+@register_pydantic_model
 class TaskConfigDetailResponse(TaskConfigResponse):
     """任务配置详情响应 - GET /configs/{id}"""
     recent_history: Optional[list] = Field(None, description="最近历史事件")
     stats: Optional[Dict[str, Any]] = Field(None, description="统计信息")
 
 
+@register_pydantic_model
 class TaskConfigListResponse(BaseModel):
     """任务配置列表响应 - GET /configs"""
     items: list[TaskConfigResponse] = Field(..., description="配置列表")
@@ -113,6 +117,7 @@ class TaskConfigListResponse(BaseModel):
     pages: int = Field(..., description="总页数")
 
 
+@register_pydantic_model
 class TaskConfigDeleteResponse(BaseModel):
     """任务配置删除响应 - DELETE /configs/{id}"""
     success: bool = Field(..., description="删除是否成功")

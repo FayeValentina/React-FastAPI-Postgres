@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
+from app.utils.cache_serializer import register_pydantic_model
 
 
 class PasswordResetRequest(BaseModel):
@@ -12,6 +13,7 @@ class PasswordResetConfirm(BaseModel):
     new_password: str = Field(..., min_length=8, description="新密码")
 
 
+@register_pydantic_model
 class PasswordResetResponse(BaseModel):
     """密码重置响应模型"""
     message: str

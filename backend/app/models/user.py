@@ -4,10 +4,12 @@ from sqlalchemy import String, DateTime, func, Boolean, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
+from app.utils.cache_serializer import register_sqlalchemy_model
 
 if TYPE_CHECKING:
     from .password_reset import PasswordReset
 
+@register_sqlalchemy_model
 class User(Base):
     __tablename__ = "users"
 

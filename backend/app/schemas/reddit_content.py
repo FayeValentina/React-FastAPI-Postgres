@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.utils.cache_serializer import register_pydantic_model
 
 
 class RedditPostBase(BaseModel):
@@ -21,6 +22,7 @@ class RedditPostBase(BaseModel):
     reddit_created_at: datetime
 
 
+@register_pydantic_model
 class RedditPostResponse(RedditPostBase):
     id: str
     scraped_at: datetime
@@ -41,6 +43,7 @@ class RedditCommentBase(BaseModel):
     reddit_created_at: datetime
 
 
+@register_pydantic_model
 class RedditCommentResponse(RedditCommentBase):
     id: str
     post_id: str

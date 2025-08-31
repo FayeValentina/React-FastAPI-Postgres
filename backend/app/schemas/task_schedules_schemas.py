@@ -4,12 +4,14 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from app.utils.cache_serializer import register_pydantic_model
 
 
 # =============================================================================
 # 基础模型
 # =============================================================================
 
+@register_pydantic_model
 class ScheduleActionResponse(BaseModel):
     """调度操作响应 - POST /schedules/{id}/{action}"""
     success: bool = Field(..., description="操作是否成功")
@@ -50,12 +52,14 @@ class ScheduleHistoryEvent(BaseModel):
 # 响应模型 - 对应调度管理端点
 # =============================================================================
 
+@register_pydantic_model
 class ScheduleListResponse(BaseModel):
     """调度列表响应 - GET /schedules"""
     schedules: List[ScheduledJobInfo] = Field(..., description="调度任务列表")
     total: int = Field(..., description="总数")
 
 
+@register_pydantic_model
 class ScheduleHistoryResponse(BaseModel):
     """调度历史响应 - GET /schedules/{id}/history"""
     config_id: int = Field(..., description="配置ID")
@@ -63,6 +67,7 @@ class ScheduleHistoryResponse(BaseModel):
     count: int = Field(..., description="事件数量")
 
 
+@register_pydantic_model
 class ScheduleSummaryResponse(BaseModel):
     """调度摘要响应 - GET /schedules/summary"""
     total_tasks: int = Field(..., description="总任务数")

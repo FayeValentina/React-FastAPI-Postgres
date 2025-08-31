@@ -4,11 +4,12 @@ from sqlalchemy import String, DateTime, func, Integer, Text, Enum, Numeric, For
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
+from app.utils.cache_serializer import register_sqlalchemy_model
 from app.db.base_class import Base
 if TYPE_CHECKING:
     from .task_config import TaskConfig
 
-
+@register_sqlalchemy_model
 class TaskExecution(Base):
     """任务执行历史表"""
     __tablename__ = "task_executions"

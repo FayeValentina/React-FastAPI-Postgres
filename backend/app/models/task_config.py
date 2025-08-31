@@ -6,11 +6,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.base_class import Base
 from app.utils.registry_decorators import SchedulerType
-
+from app.utils.cache_serializer import register_sqlalchemy_model
 if TYPE_CHECKING:
     from .task_execution import TaskExecution
 
-
+@register_sqlalchemy_model
 class TaskConfig(Base):
     """任务配置表 - 存储所有类型任务的配置信息"""
     __tablename__ = "task_configs"
