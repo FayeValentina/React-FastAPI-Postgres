@@ -96,7 +96,7 @@ class AuthRedisService(RedisBase):
         if not tokens_bytes:
             return True
             
-        tokens = [t.decode('utf-8') for t in tokens_bytes]
+        tokens = [t.decode('utf-8') if isinstance(t, bytes) else t for t in tokens_bytes]
 
         try:
             async with self.pipeline() as pipe:
