@@ -2,6 +2,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
+from app.utils.cache_serializer import register_pydantic_model
 
 
 # 用户基础模型
@@ -37,6 +38,7 @@ class UserUpdate(BaseModel):
 
 
 # 用户响应模型
+@register_pydantic_model
 class UserResponse(UserBase):
     """用户信息响应模型"""
     id: int                # 用户ID
@@ -48,6 +50,7 @@ class UserResponse(UserBase):
 
 
 # 简化的用户模型（用于认证返回）
+@register_pydantic_model
 class User(BaseModel):
     """简化的用户模型"""
     id: int

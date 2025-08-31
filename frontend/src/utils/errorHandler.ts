@@ -1,4 +1,4 @@
-interface ApiError {
+export interface ApiError {
   response?: {
     data?: {
       detail?: string | Array<{ msg: string; type: string; loc: string[] }>;
@@ -15,7 +15,7 @@ export const extractErrorMessage = (error: ApiError): string => {
     if (Array.isArray(error.response.data.detail)) {
       // FastAPI 验证错误数组格式
       return error.response.data.detail
-        .map((err: any) => err.msg || err.message)
+        .map((err: { msg?: string; message?: string }) => err.msg || err.message)
         .join(', ');
     } else {
       // 单个错误字符串格式

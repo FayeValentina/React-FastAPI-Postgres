@@ -16,9 +16,6 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  SmartToy as BotIcon,
-  PlayArrow as SessionIcon,
-  Article as ContentIcon,
   ArrowBack as ArrowBackIcon,
   Schedule as TaskIcon,
   Dashboard as DashboardIcon,
@@ -33,33 +30,10 @@ const DRAWER_WIDTH = 240;
 
 const menuSections = [
   {
-    title: '爬虫管理',
+    title: '任务管理',
     items: [
       {
-        text: 'Bot配置',
-        icon: <BotIcon />,
-        path: '/management/scraper/bots',
-        implemented: true,
-      },
-      {
-        text: '会话管理',
-        icon: <SessionIcon />,
-        path: '/management/scraper/sessions',
-        implemented: true,
-      },
-      {
-        text: '内容管理',
-        icon: <ContentIcon />,
-        path: '/management/scraper/content',
-        implemented: false,
-      },
-    ],
-  },
-  {
-    title: '系统管理',
-    items: [
-      {
-        text: '任务调度',
+        text: '任务配置',
         icon: <TaskIcon />,
         path: '/management/tasks',
         implemented: true,
@@ -68,8 +42,13 @@ const menuSections = [
         text: '系统监控',
         icon: <DashboardIcon />,
         path: '/management/monitoring',
-        implemented: false,
+        implemented: true,
       },
+    ],
+  },
+  {
+    title: '系统管理',
+    items: [
       {
         text: '系统设置',
         icon: <SettingsIcon />,

@@ -1,6 +1,19 @@
+import os
 from typing import Any, List, Optional, Union
-from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator
+from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def get_env_file() -> str:
+    """动态选择环境文件"""
+    environment = os.getenv("ENVIRONMENT", "dev")
+    if environment == "prod":
+        return ".env.prod"
+    else:
+        return ".env.dev"
+
+
+ENV_FILE = get_env_file()
 
 
 class PostgresSettings(BaseSettings):
@@ -20,7 +33,7 @@ class PostgresSettings(BaseSettings):
         
         fields = info.data
         if not all(fields.get(key) for key in ["USER", "PASSWORD", "HOST", "DB"]):
-            raise ValueError("Database configuration is incomplete. Please check your environment variables.")
+            raise ValueError("Database configuration is incomplete.")
             
         return PostgresDsn.build(
             scheme="postgresql+asyncpg",
@@ -37,10 +50,16 @@ class PostgresSettings(BaseSettings):
         if not self.DATABASE_URL:
             raise ValueError("Database URI is not set")
         return str(self.DATABASE_URL)
+    
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
+        """获取同步数据库 URI（用于 Alembic）"""
+        return self.SQLALCHEMY_DATABASE_URL.replace("+asyncpg", "+psycopg2")
+    
 
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_",
-        env_file=[".env.local", ".env"],  # .env.local 优先级更高
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -59,7 +78,7 @@ class PgAdminSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGADMIN_",
         env_nested_delimiter="__",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -74,7 +93,7 @@ class SecuritySettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -95,7 +114,7 @@ class CORSSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="BACKEND_CORS_",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -109,7 +128,7 @@ class LoggingSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LOG_",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -125,7 +144,7 @@ class RedditSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="REDDIT_",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -141,7 +160,7 @@ class TwitterSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="TWITTER_",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -153,7 +172,7 @@ class AISettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="AI_",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
@@ -170,18 +189,87 @@ class EmailSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="EMAIL_",
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
 
+
+class RabbitMQSettings(BaseSettings):
+    """RabbitMQ 配置"""
+    HOST: str = "rabbitmq"
+    PORT: int = 5672
+    USER: str = "guest"
+    PASSWORD: str = "guest"
+    VHOST: str = "/"
+    
+    @property
+    def URL(self) -> str:
+        """获取 RabbitMQ 连接 URL"""
+        return f"amqp://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.VHOST}"
+    
+    model_config = SettingsConfigDict(
+        env_prefix="RABBITMQ_",
+        env_file=[ENV_FILE],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class RedisSettings(BaseSettings):
+    """Redis 配置"""
+    HOST: str = "redis"
+    PORT: int = 6379
+    PASSWORD: Optional[str] = None
+    DB: int = 0
+    URL: Optional[str] = None
+    
+    @property
+    def CONNECTION_URL(self) -> str:
+        """获取 Redis 连接 URL"""
+        if self.URL:
+            return self.URL
+        
+        if self.PASSWORD:
+            return f"redis://:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DB}"
+        else:
+            return f"redis://{self.HOST}:{self.PORT}/{self.DB}"
+    
+    model_config = SettingsConfigDict(
+        env_prefix="REDIS_",
+        env_file=[ENV_FILE],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
+
+
+class TaskIQSettings(BaseSettings):
+    """TaskIQ 配置"""
+    # TaskIQ 基本配置
+    TIMEZONE: str = "UTC"
+    TASK_DEFAULT_RETRY_DELAY: int = 60
+    TASK_MAX_RETRIES: int = 3
+    TASK_TIME_LIMIT: int = 30 * 60  # 30分钟
+    
+    # Worker设置
+    WORKER_CONCURRENCY: int = 2
+    
+    # 结果存储设置
+    RESULT_EX_TIME: int = 3600  # 结果过期时间（秒）
+    
+    model_config = SettingsConfigDict(
+        env_prefix="TASKIQ_",
+        env_file=[ENV_FILE],
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
 
 class Settings(BaseSettings):
     """主配置类"""
     # 基本配置
     PROJECT_NAME: str = "FastAPI Backend"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/api/v1"
+    API_V1_STR: str = "/v1"
     ENVIRONMENT: str = "development"
     
     # 服务配置
@@ -198,16 +286,23 @@ class Settings(BaseSettings):
     twitter: TwitterSettings = TwitterSettings()
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
+    rabbitmq: RabbitMQSettings = RabbitMQSettings()
+    redis: RedisSettings = RedisSettings()
+    taskiq: TaskIQSettings = TaskIQSettings()
 
     # 数据库日志
     DB_ECHO_LOG: bool = True
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[".env.local", ".env"],
+        env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
     )
-
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 settings = Settings() 
+
+

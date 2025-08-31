@@ -13,15 +13,19 @@ RUN pip install poetry
 # Copy poetry files first for better caching
 COPY pyproject.toml poetry.lock* ./
 
-# Configure poetry to not create a virtual environment
-RUN poetry config virtualenvs.create false
+# Configure poetry to not create a virtual environment and install to system
+RUN poetry config virtualenvs.create false && \
+    poetry config virtualenvs.in-project false
 
-# Generate lock file if it doesn't exist or is outdated, then install dependencies
+# Generate lock file if it doesn't exist or is outdated, then install ALL dependencies
 RUN if [ ! -f poetry.lock ] || ! poetry check; then \
         echo "Generating/updating poetry.lock file..." && \
         poetry lock; \
     fi && \
     poetry install --no-interaction --no-ansi
+
+# Verify installation by attempting to import key modules
+RUN python -c "import taskiq; import fastapi; import sqlalchemy; print('Dependencies installed successfully')"
 
 # Copy application code
 COPY . .

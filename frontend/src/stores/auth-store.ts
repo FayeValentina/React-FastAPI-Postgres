@@ -8,7 +8,7 @@ import {
   User, 
   AuthState 
 } from '../types/auth';
-import { extractAuthErrorMessage } from '../utils/errorHandler';
+import { extractAuthErrorMessage, type ApiError } from '../utils/errorHandler';
 
 // ==================== JWT TOKEN UTILITIES ====================
 
@@ -171,8 +171,8 @@ export const useAuthStore = create<AuthStore>()(
             });
 
             return tokenData;
-          } catch (error: any) {
-            const errorMessage = extractAuthErrorMessage(error);
+          } catch (error: unknown) {
+            const errorMessage = extractAuthErrorMessage(error as ApiError);
             
             // Fix: Ensure complete state cleanup on authentication failure
             // Issue: Partial state cleanup could leave the app in an inconsistent state
@@ -206,8 +206,8 @@ export const useAuthStore = create<AuthStore>()(
             const user = await api.post('/v1/auth/register', cleanedData) as User;
             
             return user;
-          } catch (error: any) {
-            const errorMessage = extractAuthErrorMessage(error);
+          } catch (error: unknown) {
+            const errorMessage = extractAuthErrorMessage(error as ApiError);
             
             set({ error: errorMessage });
             throw error;
@@ -228,11 +228,11 @@ export const useAuthStore = create<AuthStore>()(
             try {
               // The request interceptor will automatically add Authorization header
               await api.post('/v1/auth/logout');
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error('Logout request failed:', error);
               // Continue with logout even if server request fails
               // This ensures user can always log out locally
-              if (error.response?.status === 401) {
+              if ((error as ApiError).response?.status === 401) {
                 console.log('Token already expired, proceeding with local logout');
               }
             }
@@ -267,7 +267,7 @@ export const useAuthStore = create<AuthStore>()(
             return user;
           } catch (error) {
             // Only clear state on confirmed authentication errors
-            if ((error as any)?.response?.status === 401) {
+            if ((error as { response?: { status?: number } })?.response?.status === 401) {
               get().clearAuthState();
             }
             throw error;

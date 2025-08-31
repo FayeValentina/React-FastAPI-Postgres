@@ -7,18 +7,19 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
-fastapi = "^0.109.0"
-uvicorn = "^0.27.0"
-sqlalchemy = "^2.0.25"
-pydantic = {extras = ["email"], version = "^2.5.3"}
-pydantic-settings = "^2.1.0"
+redis = "^5.0.7"
+fastapi = "^0.112.0"
+uvicorn = "^0.35.0"
+sqlalchemy = "^2.0.42"
+pydantic = {extras = ["email"], version = "^2.11.0"}
+pydantic-settings = "^2.10.0"
 pydantic-extra-types = "^2.5.0"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 bcrypt = "4.0.1"
 python-multipart = "^0.0.6"
-starlette = "^0.36.3"
 alembic = "^1.13.1"
+alembic-autogenerate-enums = "^0.1.2"
 psycopg2-binary = "^2.9.9"
 loguru = "^0.7.2"
 python-dotenv = "^1.0.0"
@@ -31,7 +32,15 @@ aiohttp = "^3.8.0"
 pillow = "^10.0.0"
 google-genai = "^0.3.0"
 twitter-text-parser = "^3.0.0"
-apscheduler = "^3.10.4"
+taskiq = "^0.11.8"
+
+taskiq-aio-pika = "^0.4.3"
+taskiq-redis = "^1.0.0"
+croniter = "^1.4.1"
+gunicorn = "^21.2.0"
+
+[tool.poetry.group.dev.dependencies]
+taskiq = {extras = ["reload"], version = "^0.11.18"}
 
 [build-system]
 requires = ["poetry-core"]

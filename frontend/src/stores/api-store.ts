@@ -105,7 +105,7 @@ export const useApiStore = create<ApiStore>()(
         setLoading(url, true);
         
         try {
-          const response = await api.get<T>(url);
+          const response = await api.get<T>(url) as T;
           setData(url, response);
           
           // Periodically clean old states to prevent memory leaks
@@ -127,7 +127,7 @@ export const useApiStore = create<ApiStore>()(
         setLoading(url, true);
         
         try {
-          const response = await api.post<T>(url, data);
+          const response = await api.post<T>(url, data) as T;
           setData(url, response);
           return response;
         } catch (error) {
@@ -143,7 +143,7 @@ export const useApiStore = create<ApiStore>()(
         setLoading(url, true);
         
         try {
-          const response = await api.patch<T>(url, data);
+          const response = await api.patch<T>(url, data) as T;
           setData(url, response);
           return response;
         } catch (error) {
@@ -159,7 +159,7 @@ export const useApiStore = create<ApiStore>()(
         setLoading(url, true);
         
         try {
-          const response = await api.delete<T>(url);
+          const response = await api.delete<T>(url) as T;
           setData(url, response);
           return response;
         } catch (error) {

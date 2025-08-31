@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, desc, asc
@@ -6,9 +6,10 @@ from sqlalchemy import select, or_, and_, desc, asc
 from app.schemas.user import (
     UserCreate, UserResponse, UserUpdate
 )
-from app.crud.user import user
+from app.crud.user import crud_user
 from app.db.base import get_async_session
 from app.models.user import User
+from app.core.redis_manager import redis_services
 from app.dependencies.current_user import (
     get_current_active_user,
     get_current_superuser
@@ -17,12 +18,16 @@ from app.core.exceptions import (
     UserNotFoundError,
     InsufficientPermissionsError
 )
-from app.utils.common import handle_error
+from app.utils import handle_error
+from app.utils.cache_decorators import cache, invalidate
+from app.constant.cache_tags import CacheTags
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", response_model=UserResponse, status_code=201)
+@invalidate([CacheTags.USER_LIST])
 async def create_user(
+    request: Request,
     user_data: UserCreate, 
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_superuser)  # 只有超级用户可以创建用户
@@ -33,12 +38,14 @@ async def create_user(
     需要超级管理员权限
     """
     try:
-        return await user.create_with_validation(db, obj_in=user_data)
+        return await crud_user.create_with_validation(db, obj_in=user_data)
     except Exception as e:
         raise handle_error(e)
 
 @router.patch("/{user_id}", response_model=UserResponse)
+@invalidate([CacheTags.USER_PROFILE, CacheTags.USER_LIST])
 async def update_user(
+    request: Request,
     user_id: int,
     user_update: UserUpdate,
     db: AsyncSession = Depends(get_async_session),
@@ -53,17 +60,25 @@ async def update_user(
         # 检查权限：只能修改自己或者超级管理员可以修改任何人
         if current_user.id != user_id and not current_user.is_superuser:
             raise InsufficientPermissionsError("没有足够权限更新其他用户")
-            
-        db_user = await user.get(db, id=user_id)
+        
+        # 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
+        if user_update.is_superuser is not None and not current_user.is_superuser:
+            raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
+        
+        db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
         
-        return await user.update(db, db_obj=db_user, obj_in=user_update)
+        updated_user = await crud_user.update(db, db_obj=db_user, obj_in=user_update)
+        
+        return updated_user
     except Exception as e:
         raise handle_error(e)
 
 @router.get("", response_model=List[UserResponse])
+@cache([CacheTags.USER_LIST],exclude_params=["request","db","current_user"])
 async def get_users(
+    request: Request,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),  # 只有已认证用户可以查看用户列表
     name: Annotated[str | None, Query(min_length=2, description="用户名或全名")] = None,
@@ -135,7 +150,9 @@ async def get_users(
     return users
 
 @router.get("/{user_id}", response_model=UserResponse)
+@cache(tags=[CacheTags.USER_PROFILE],exclude_params=["request","db","current_user"])
 async def get_user(
+    request: Request,
     user_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user)
@@ -154,7 +171,7 @@ async def get_user(
         if not current_user.is_superuser:
             raise InsufficientPermissionsError("没有足够权限查看其他用户详情")
             
-        db_user = await user.get(db, id=user_id)
+        db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
             
@@ -163,7 +180,9 @@ async def get_user(
         raise handle_error(e)
 
 @router.delete("/{user_id}", response_model=UserResponse)
+@invalidate([CacheTags.USER_PROFILE, CacheTags.USER_LIST])
 async def delete_user(
+    request: Request,
     user_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_superuser)  # 只有超级用户可以删除用户
@@ -174,7 +193,7 @@ async def delete_user(
     需要超级管理员权限
     """
     try:
-        db_user = await user.get(db, id=user_id)
+        db_user = await crud_user.get(db, id=user_id)
         if not db_user:
             raise UserNotFoundError()
             
@@ -182,6 +201,8 @@ async def delete_user(
         if current_user.id == user_id:
             raise ValueError("不能删除自己的账户")
             
-        return await user.delete(db, id=user_id)
+        deleted_user = await crud_user.delete(db, id=user_id)
+        
+        return deleted_user
     except Exception as e:
         raise handle_error(e) 

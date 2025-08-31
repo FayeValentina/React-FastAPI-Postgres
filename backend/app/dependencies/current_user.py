@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 from app.db.base import get_async_session
-from app.crud.user import user as crud_user
+from app.crud.user import crud_user
 from app.models.user import User
 from app.core.exceptions import (
     AuthenticationError, 
@@ -43,16 +43,13 @@ async def get_current_user_from_request(
     except (ValueError, TypeError):
         raise AuthenticationError("无效的用户ID格式")
     
-    # 获取用户信息
+    # 从数据库查询用户信息
     user = await crud_user.get(db, id=user_id)
     if not user:
-        # 记录这种情况，因为这意味着有效的令牌但用户不存在
         logger.warning(f"有效令牌但找不到用户ID: {user_id}")
         raise UserNotFoundError()
     
-    # 将完整用户对象设置到请求状态中，以便后续使用
     request.state.current_user = user
-    
     return user
 
 async def get_current_active_user(

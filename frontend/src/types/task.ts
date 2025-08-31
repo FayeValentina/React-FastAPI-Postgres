@@ -1,102 +1,136 @@
-// 任务状态枚举
-export type TaskStatus = 
-  | 'running'
-  | 'scheduled'
-  | 'paused'
-  | 'stopped'
-  | 'failed'
-  | 'idle'
-  | 'timeout'
-  | 'misfired';
-
-// 执行状态枚举
-export type ExecutionStatus = 'success' | 'failed' | 'timeout' | 'running';
-
-// 任务信息
-export interface JobInfo {
-  id: string;
+// ============== 任务配置相关类型 ==============
+export interface TaskConfig {
+  id: number;
   name: string;
-  trigger: string;
-  next_run_time: string | null;
-  pending: boolean;
-  status: TaskStatus;
-  
-  // 详细信息（可选）
-  func?: string;
-  args?: any[];
-  kwargs?: Record<string, any>;
-  executor?: string;
-  max_instances?: number;
-  misfire_grace_time?: number;
-  coalesce?: boolean;
+  description?: string;
+  task_type: string;
+  scheduler_type: 'manual' | 'interval' | 'cron' | 'date';
+  parameters: Record<string, unknown>;
+  schedule_config: Record<string, unknown>;
+  max_retries: number;
+  timeout_seconds?: number;
+  priority: number;
+  created_at: string;
+  updated_at?: string;
+  // 来自Redis的调度状态
+  schedule_status?: string;
+  is_scheduled?: boolean;
+  status_consistent?: boolean;
+  recent_history?: ScheduleHistoryEvent[];
 }
 
-// 任务执行历史
-export interface TaskExecutionResponse {
+export interface TaskConfigCreate {
+  name: string;
+  description?: string;
+  task_type: string;
+  scheduler_type: 'manual' | 'interval' | 'cron' | 'date';
+  parameters: Record<string, unknown>;
+  schedule_config: Record<string, unknown>;
+  max_retries?: number;
+  timeout_seconds?: number;
+  priority?: number;
+}
+
+export type TaskConfigUpdate = Partial<Omit<TaskConfigCreate, 'task_type' | 'scheduler_type'>>;
+
+// ============== 调度相关类型 ==============
+export interface ScheduleInfo {
+  task_id: string;
+  task_name: string;
+  config_id?: number;
+  schedule: string;
+  labels: Record<string, string>;
+  next_run?: string;
+}
+
+export interface ScheduleHistoryEvent {
+  event: string;
+  timestamp: string;
+  success?: boolean;
+  task_name?: string;
+  error?: string;
+}
+
+export interface ScheduleSummary {
+  total_tasks: number;
+  active_tasks: number;
+  paused_tasks: number;
+  inactive_tasks: number;
+  error_tasks: number;
+  last_updated: string;
+}
+
+// ============== 执行相关类型 ==============
+export interface TaskExecution {
   id: number;
-  job_id: string;
-  job_name: string;
-  status: ExecutionStatus;
+  task_id: string;
+  config_id: number;
+  config_name?: string;
+  task_type?: string;
+  is_success: boolean;
   started_at: string;
-  completed_at: string | null;
-  duration_seconds: number | null;
-  result: Record<string, any> | null;
-  error_message: string | null;
+  completed_at?: string;
+  duration_seconds?: number;
+  result?: Record<string, unknown>;
+  error_message?: string;
+  error_traceback?: string;
   created_at: string;
 }
 
-// 任务统计
-export interface JobStatsResponse {
-  total_runs: number;
-  successful_runs: number;
-  failed_runs: number;
+export interface ExecutionStats {
+  period_days: number;
+  total_executions: number;
+  success_count: number;
+  failed_count: number;
   success_rate: number;
+  failure_rate: number;
   avg_duration_seconds: number;
+  type_breakdown: Record<string, number>;
+  timestamp: string;
 }
 
-// 创建任务请求
-export interface JobCreateRequest {
-  func: string;
-  name: string;
-  trigger: string;
-  trigger_args: Record<string, any>;
-  args?: any[];
-  kwargs?: Record<string, any>;
-  max_retries?: number;
-  timeout?: number;
-}
-
-// 更新任务调度
-export interface JobScheduleUpdate {
-  trigger?: string;
-  trigger_args?: Record<string, any>;
-}
-
-// 系统信息
-export interface SystemInfo {
-  stats?: {
-    total_jobs: number;
-    active_jobs: number;
-    paused_jobs: number;
-    task_types: Record<string, number>;
-    scheduler_running: boolean;
+// ============== 系统监控相关类型 ==============
+export interface SystemStatus {
+  system_time: string;
+  scheduler_status: string;
+  database_status: string;
+  redis_status: string;
+  config_stats: {
+    total_configs: number;
+    by_type: Record<string, number>;
   };
-  health?: {
-    total_jobs: number;
-    healthy_jobs: number;
-    unhealthy_jobs: Array<{
-      job_id: string;
-      name: string;
-      status: TaskStatus;
-      next_run_time: string | null;
-    }>;
-    scheduler_running: boolean;
-    health_score: number;
-  };
+  schedule_summary: ScheduleSummary;
+  execution_stats: ExecutionStats;
 }
 
-// 任务过滤条件
-export interface TaskFilters {
-  status?: TaskStatus;
-  search?: string;
+export interface SystemHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  components: Record<string, {
+    status: string;
+    message: string;
+  }>;
+  error?: string;
+}
+
+export interface SystemEnums {
+  scheduler_types: string[];
+  schedule_actions: string[];
+  task_types: string[];
+  schedule_statuses: string[];
+}
+
+export interface SystemDashboard {
+  dashboard: {
+    config_stats: {
+      total_configs: number;
+      by_type: Record<string, number>;
+    };
+    schedule_summary: ScheduleSummary;
+    execution_stats: {
+      last_7_days: ExecutionStats;
+      last_30_days: ExecutionStats;
+    };
+    generated_at: string;
+  };
 }

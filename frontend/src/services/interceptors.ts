@@ -7,14 +7,14 @@ import { uiManager } from './uiManager';
  */
 let isRefreshing = false;
 let failedQueue: Array<{
-  resolve: (value?: any) => void;
-  reject: (error?: any) => void;
+  resolve: (value?: unknown) => void;
+  reject: (error?: unknown) => void;
 }> = [];
 
 /**
  * 处理等待队列中的请求
  */
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
       reject(error);

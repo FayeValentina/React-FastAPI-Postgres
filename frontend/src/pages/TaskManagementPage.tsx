@@ -3,135 +3,116 @@ import {
   Box,
   Typography,
   Button,
-  Grid,
   Alert,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Snackbar,
+  Tabs,
+  Tab,
+  Paper,
 } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Refresh as RefreshIcon,
+  Dashboard as DashboardIcon,
+} from '@mui/icons-material';
 import { useApiStore } from '../stores/api-store';
 import { useAuthStore } from '../stores/auth-store';
 import ManagementLayout from '../components/Layout/ManagementLayout';
-import TaskCard from '../components/Tasks/TaskCard';
-import TaskHistoryDialog from '../components/Tasks/TaskHistoryDialog';
-import SystemHealthPanel from '../components/Tasks/SystemHealthPanel';
-import { JobInfo, TaskFilters } from '../types/task';
+import TaskConfigList from '../components/Tasks/TaskConfigList';
+import TaskConfigDialog from '../components/Tasks/TaskConfigDialog';
+import TaskSchedulePanel from '../components/Tasks/TaskSchedulePanel';
+import TaskExecutionPanel from '../components/Tasks/TaskExecutionPanel';
+import { TaskConfig, TaskConfigCreate, TaskConfigUpdate } from '../types/task';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 const TaskManagementPage: React.FC = () => {
-  const { fetchData, postData, deleteData, getApiState } = useApiStore();
+  const { fetchData, postData, patchData, deleteData, getApiState } = useApiStore();
   const { user } = useAuthStore();
-  const [tasks, setTasks] = useState<JobInfo[]>([]);
-  const [selectedTask, setSelectedTask] = useState<JobInfo | null>(null);
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [taskToDelete, setTaskToDelete] = useState<JobInfo | null>(null);
-  const [filters, setFilters] = useState<TaskFilters>({});
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  
+  const [tabValue, setTabValue] = useState(0);
+  const [configs, setConfigs] = useState<TaskConfig[]>([]);
+  const [selectedConfig, setSelectedConfig] = useState<TaskConfig | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  const tasksApiUrl = '/v1/tasks';
-  const { loading: tasksLoading, error: tasksError } = getApiState(tasksApiUrl);
+  const configsUrl = '/v1/tasks/configs';
+  const { loading, error } = getApiState(configsUrl);
 
-  // Check if user is superuser
   const isSuperuser = user?.is_superuser || false;
 
-  const loadTasks = useCallback(async () => {
+  const loadConfigs = useCallback(async () => {
     if (!isSuperuser) return;
     
     try {
-      const data = await fetchData<JobInfo[]>(tasksApiUrl);
-      setTasks(data || []);
+      const response = await fetchData<{ items: TaskConfig[], total: number }>(configsUrl);
+      setConfigs(response.items || []);
     } catch (error) {
-      console.error('Failed to load tasks:', error);
+      console.error('Failed to load configs:', error);
     }
-  }, [fetchData, tasksApiUrl, isSuperuser]);
-
-  const handleRefresh = useCallback(async () => {
-    await loadTasks();
-    setRefreshTrigger(prev => prev + 1); // 触发 SystemHealthPanel 刷新
-  }, [loadTasks]);
+  }, [fetchData, configsUrl, isSuperuser]);
 
   useEffect(() => {
-    if (isSuperuser) {
-      loadTasks();
-      const interval = setInterval(loadTasks, 60000); // 每60秒刷新
-      return () => clearInterval(interval);
-    }
-  }, [loadTasks, isSuperuser]);
+    loadConfigs();
+  }, [loadConfigs]);
 
-  const handleTaskAction = async (taskId: string, action: string) => {
+  const handleCreateConfig = () => {
+    setSelectedConfig(null);
+    setDialogOpen(true);
+  };
+
+  const handleEditConfig = (config: TaskConfig) => {
+    setSelectedConfig(config);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteConfig = async (config: TaskConfig) => {
+    if (window.confirm(`确定要删除任务配置 "${config.name}" 吗？`)) {
+      try {
+        await deleteData(`/v1/tasks/configs/${config.id}`);
+        await loadConfigs();
+      } catch (error) {
+        console.error('Failed to delete config:', error);
+      }
+    }
+  };
+
+  const handleSaveConfig = async (data: TaskConfigCreate | TaskConfigUpdate) => {
     try {
-      await postData(`/v1/tasks/${taskId}/action?action=${action}`, {});
-      setSnackbarMessage(`任务操作成功: ${action}`);
-      setSnackbarOpen(true);
-      await loadTasks();
+      if (selectedConfig) {
+        await patchData(`/v1/tasks/configs/${selectedConfig.id}`, data);
+      } else {
+        await postData('/v1/tasks/configs', data);
+      }
+      setDialogOpen(false);
+      await loadConfigs();
     } catch (error) {
-      console.error(`Failed to ${action} task:`, error);
-      setSnackbarMessage(`任务操作失败: ${action}`);
-      setSnackbarOpen(true);
+      console.error('Failed to save config:', error);
     }
   };
 
-  const handleRunTask = (task: JobInfo) => {
-    handleTaskAction(task.id, 'run');
-  };
-
-  const handlePauseTask = (task: JobInfo) => {
-    handleTaskAction(task.id, 'pause');
-  };
-
-  const handleResumeTask = (task: JobInfo) => {
-    handleTaskAction(task.id, 'resume');
-  };
-
-  const handleDeleteTask = (task: JobInfo) => {
-    setTaskToDelete(task);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!taskToDelete) return;
-
+  const handleScheduleAction = async (configId: number, action: string) => {
     try {
-      await deleteData(`/v1/tasks/${taskToDelete.id}`);
-      setSnackbarMessage('任务删除成功');
-      setSnackbarOpen(true);
-      await loadTasks();
-      setDeleteDialogOpen(false);
-      setTaskToDelete(null);
+      await postData(`/v1/tasks/schedules/${configId}/${action}`, {});
+      await loadConfigs();
     } catch (error) {
-      console.error('Failed to delete task:', error);
-      setSnackbarMessage('任务删除失败');
-      setSnackbarOpen(true);
+      console.error(`Failed to ${action} schedule:`, error);
     }
   };
-
-  const handleViewHistory = (task: JobInfo) => {
-    setSelectedTask(task);
-    setHistoryDialogOpen(true);
-  };
-
-  const filteredTasks = tasks.filter(task => {
-    if (filters.status && task.status !== filters.status) {
-      return false;
-    }
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      return task.name.toLowerCase().includes(searchLower) || 
-             task.id.toLowerCase().includes(searchLower);
-    }
-    return true;
-  });
 
   if (!isSuperuser) {
     return (
@@ -148,116 +129,72 @@ const TaskManagementPage: React.FC = () => {
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" gutterBottom>
-            任务调度管理
+            任务管理中心
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               variant="outlined"
+              startIcon={<DashboardIcon />}
+              onClick={() => window.location.href = '/management/monitoring'}
+            >
+              系统监控
+            </Button>
+            <Button
+              variant="outlined"
               startIcon={<RefreshIcon />}
-              onClick={handleRefresh}
-              disabled={tasksLoading}
+              onClick={loadConfigs}
+              disabled={loading}
             >
               刷新
             </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateConfig}
+              disabled={loading}
+            >
+              创建任务
+            </Button>
           </Box>
         </Box>
 
-        {/* System Health Panel */}
-        <SystemHealthPanel refreshTrigger={refreshTrigger} />
-
-        {/* Filter Bar */}
-        <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            label="搜索任务"
-            variant="outlined"
-            size="small"
-            value={filters.search || ''}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            sx={{ minWidth: 200 }}
-          />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>状态筛选</InputLabel>
-            <Select
-              value={filters.status || ''}
-              label="状态筛选"
-              onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
-            >
-              <MenuItem value="">全部</MenuItem>
-              <MenuItem value="running">运行中</MenuItem>
-              <MenuItem value="scheduled">已调度</MenuItem>
-              <MenuItem value="paused">已暂停</MenuItem>
-              <MenuItem value="failed">失败</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-
-        {tasksError && (
+        {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {tasksError.message || '加载失败，请稍后重试'}
+            {error.message || '加载失败，请稍后重试'}
           </Alert>
         )}
 
-        {tasksLoading && tasks.length === 0 ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : filteredTasks.length === 0 ? (
-          <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              没有找到任务
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {filters.search || filters.status ? '尝试调整筛选条件' : '系统中还没有配置任何定时任务'}
-            </Typography>
-          </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {filteredTasks.map((task) => (
-              <Grid item xs={12} sm={6} lg={4} key={task.id}>
-                <TaskCard
-                  task={task}
-                  onRun={handleRunTask}
-                  onPause={handlePauseTask}
-                  onResume={handleResumeTask}
-                  onDelete={handleDeleteTask}
-                  onViewHistory={handleViewHistory}
-                  disabled={tasksLoading}
-                />
-              </Grid>
-            ))}
-          </Grid>
-        )}
+        <Paper sx={{ mb: 3 }}>
+          <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)}>
+            <Tab label="任务配置" />
+            <Tab label="调度管理" />
+            <Tab label="执行记录" />
+          </Tabs>
+        </Paper>
 
-        {/* Task History Dialog */}
-        <TaskHistoryDialog
-          open={historyDialogOpen}
-          jobId={selectedTask?.id || null}
-          jobName={selectedTask?.name || ''}
-          onClose={() => setHistoryDialogOpen(false)}
-        />
+        <TabPanel value={tabValue} index={0}>
+          <TaskConfigList
+            configs={configs}
+            loading={loading}
+            onEdit={handleEditConfig}
+            onDelete={handleDeleteConfig}
+            onScheduleAction={handleScheduleAction}
+          />
+        </TabPanel>
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-          <DialogTitle>确认删除</DialogTitle>
-          <DialogContent>
-            <Typography>
-              确定要删除任务 "{taskToDelete?.name}" 吗？此操作无法撤销。
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)}>取消</Button>
-            <Button onClick={confirmDelete} color="error" variant="contained">
-              删除
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <TabPanel value={tabValue} index={1}>
+          <TaskSchedulePanel configs={configs} />
+        </TabPanel>
 
-        {/* Snackbar for feedback */}
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={6000}
-          onClose={() => setSnackbarOpen(false)}
-          message={snackbarMessage}
+        <TabPanel value={tabValue} index={2}>
+          <TaskExecutionPanel configs={configs} />
+        </TabPanel>
+
+        <TaskConfigDialog
+          open={dialogOpen}
+          config={selectedConfig}
+          onClose={() => setDialogOpen(false)}
+          onSave={handleSaveConfig}
         />
       </Box>
     </ManagementLayout>
