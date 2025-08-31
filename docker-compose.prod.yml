@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # nginx 反向代理服务
   nginx:
@@ -25,12 +23,8 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-        reservations:
-          memory: 64M
+    mem_limit: 128M
+    mem_reservation: 64M
 
   # 前端构建服务 - 只用于构建静态文件
   frontend_builder:
@@ -93,12 +87,8 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
+    mem_limit: 1G
+    mem_reservation: 512M
 
   postgres:
     image: postgres:17
@@ -120,12 +110,8 @@ services:
     networks:
       - prodNetWork
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
+    mem_limit: 1G
+    mem_reservation: 512M
 
   rabbitmq:
     image: rabbitmq:4-management
@@ -149,12 +135,8 @@ services:
     networks:
       - prodNetWork
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+    mem_limit: 512M
+    mem_reservation: 256M
 
   redis:
     image: redis:7-alpine
@@ -166,7 +148,7 @@ services:
       - prod_redis_data:/data
     command: >
       sh -c "
-        redis-server --requirepass '${REDIS_PASSWORD}' --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+        redis-server --requirepass '${REDIS_PASSWORD}' --appendonly yes --maxmemory 320mb --maxmemory-policy allkeys-lru
       "
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
@@ -176,12 +158,8 @@ services:
     networks:
       - prodNetWork
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 384M
-        reservations:
-          memory: 256M
+    mem_limit: 384M
+    mem_reservation: 256M
 
   taskiq_worker:
     build:
@@ -223,13 +201,10 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
-    deploy:
-      replicas: ${TASKIQ_WORKER_CONCURRENCY:-2}
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+    mem_limit: 512M
+    mem_reservation: 256M
+    # Note: Docker Compose doesn't support replicas. Use 'docker service create' for scaling.
+    # scale: ${TASKIQ_WORKER_CONCURRENCY:-2}  # Use with 'docker-compose up --scale taskiq_worker=2'
 
   taskiq_scheduler:
     build:
@@ -273,12 +248,8 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
+    mem_limit: 256M
+    mem_reservation: 128M
 
   pgadmin:
     image: dpage/pgadmin4:9
@@ -298,12 +269,8 @@ services:
     networks:
       - prodNetWork
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
+    mem_limit: 256M
+    mem_reservation: 128M
 
   redisinsight:
     image: redislabs/redisinsight:${REDISINSIGHT_VERSION:-2.70}
@@ -315,19 +282,15 @@ services:
     volumes:
       - prod_redisinsight_data:/db
     environment:
-      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-8001}
+      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-5540}
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
     networks:
       - prodNetWork
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
+    mem_limit: 256M
+    mem_reservation: 128M
 
 volumes:
   prod_postgres_data:

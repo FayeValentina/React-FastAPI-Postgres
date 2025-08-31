@@ -94,6 +94,10 @@ jobs:
           echo "📝 Creating production environment file..."
           echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
           
+          # ★★★ Load environment variables into current shell session ★★★
+          # This ensures the shell knows the value of ${TASKIQ_WORKER_CONCURRENCY} for the --scale flag
+          export $(cat .env.prod | xargs)
+          
           # Build new images, utilizing Docker cache
           echo "🏗️ Building production images..."
           docker compose -f docker-compose.prod.yml --env-file .env.prod build
@@ -102,9 +106,10 @@ jobs:
           echo "🛑 Stopping existing services..."
           docker compose -f docker-compose.prod.yml --env-file .env.prod down
           
-          # Start new services, pulling latest base images
+          # Start new services with scaling, pulling latest base images
           echo "🚀 Starting new services..."
-          docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always
+          # Now this line will work correctly with proper scaling
+          docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always --scale taskiq_worker=${TASKIQ_WORKER_CONCURRENCY:-2}
           
           # Wait for services to be healthy
           echo "⏳ Waiting for services to be ready..."
