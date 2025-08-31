@@ -2,9 +2,9 @@ name: Deploy to Oracle Cloud
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   # CI Job - Code Quality & Testing
@@ -61,12 +61,12 @@ jobs:
       run: |
         docker compose -f docker-compose.prod.yml build --no-cache
     
-  # CD Job - Deploy to Oracle Cloud (only on main branch push)
+  # CD Job - Deploy to Oracle Cloud (only on master branch push)
   deploy:
     needs: ci
     runs-on: ubuntu-latest
-    # This job only runs on push events to the main branch, not on pull requests
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # This job only runs on push events to the master branch, not on pull requests
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     
     steps:
     - name: Deploy to Oracle Cloud
@@ -81,7 +81,7 @@ jobs:
           
           # Pull latest code
           echo "🔄 Pulling latest code..."
-          git pull origin main
+          git pull origin master
           
           # Create production environment file
           echo "📝 Creating production environment file..."
