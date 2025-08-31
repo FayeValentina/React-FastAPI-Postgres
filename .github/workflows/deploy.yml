@@ -80,8 +80,11 @@ jobs:
         username: ${{ secrets.OCI_SSH_USER }}
         key: ${{ secrets.OCI_SSH_KEY }}
         script: |
+          # set -euo pipefail is a bash script that will exit the script if any command fails
+          set -euo pipefail
+
           # Navigate to project directory
-          cd ~/my-web-app
+          cd ~/web-app
           
           # Pull latest code
           echo "🔄 Pulling latest code..."
