@@ -18,6 +18,7 @@ DEFAULT_EXCLUDE_PATHS = [
     "/docs",
     "/redoc", 
     "/openapi.json",
+    "/health",
 ]
 
 class AuthMiddleware(BaseHTTPMiddleware):
