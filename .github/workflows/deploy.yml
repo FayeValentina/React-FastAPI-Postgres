@@ -67,6 +67,10 @@ jobs:
     runs-on: ubuntu-latest
     # This job only runs on push events to the master branch, not on pull requests
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    # deploy to production environment
+    environment:
+      name: production
+      url: https://warabi.dpdns.org
     
     steps:
     - name: Deploy to Oracle Cloud
