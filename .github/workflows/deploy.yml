@@ -1,0 +1,114 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # CI Job - Code Quality & Testing
+  ci:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    # Frontend CI
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Run frontend linting
+      working-directory: ./frontend
+      run: npm run lint
+    
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+    
+    # Backend CI
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: backend/.venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install backend dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      working-directory: ./backend
+      run: poetry install --no-interaction --no-root
+      
+    # Docker Build Test
+    - name: Test Docker builds
+      run: |
+        docker compose -f docker-compose.prod.yml build --no-cache
+    
+  # CD Job - Deploy to Oracle Cloud (only on main branch push)
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    # This job only runs on push events to the main branch, not on pull requests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Deploy to Oracle Cloud
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.OCI_SSH_HOST }}
+        username: ${{ secrets.OCI_SSH_USER }}
+        key: ${{ secrets.OCI_SSH_KEY }}
+        script: |
+          # Navigate to project directory
+          cd ~/my-web-app
+          
+          # Pull latest code
+          echo "🔄 Pulling latest code..."
+          git pull origin main
+          
+          # Create production environment file
+          echo "📝 Creating production environment file..."
+          echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
+          
+          # Build new images, utilizing Docker cache
+          echo "🏗️ Building production images..."
+          docker compose -f docker-compose.prod.yml --env-file .env.prod build
+          
+          # Stop existing services
+          echo "🛑 Stopping existing services..."
+          docker compose -f docker-compose.prod.yml --env-file .env.prod down
+          
+          # Start new services, pulling latest base images
+          echo "🚀 Starting new services..."
+          docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always
+          
+          # Wait for services to be healthy
+          echo "⏳ Waiting for services to be ready..."
+          sleep 30
+          
+          # Check service status
+          echo "✅ Checking service status..."
+          docker compose -f docker-compose.prod.yml ps
+          
+          # Clean up unused Docker images and build cache (safely)
+          echo "🧹 Cleaning up unused Docker resources..."
+          docker system prune -f
+          
+          echo "🎉 Deployment completed successfully!"
