@@ -201,11 +201,11 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    deploy:
+      replicas: ${TASKIQ_WORKER_CONCURRENCY:-2}
     mem_limit: 512M
     mem_reservation: 256M
-    # Note: Docker Compose doesn't support replicas. Use 'docker service create' for scaling.
-    # scale: ${TASKIQ_WORKER_CONCURRENCY:-2}  # Use with 'docker-compose up --scale taskiq_worker=2'
-
+    
   taskiq_scheduler:
     build:
       context: ./backend
