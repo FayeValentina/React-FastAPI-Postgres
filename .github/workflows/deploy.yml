@@ -93,7 +93,7 @@ jobs:
           # Create production environment file
           echo "📝 Creating production environment file..."
           echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
-                    
+          
           # Build new images, utilizing Docker cache
           echo "🏗️ Building production images..."
           docker compose -f docker-compose.prod.yml --env-file .env.prod build
@@ -105,8 +105,9 @@ jobs:
           # Start new services with scaling, pulling latest base images
           echo "🚀 Starting new services..."
           # Now this line will work correctly with proper scaling
+
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always
-          
+
           # Wait for services to be healthy
           echo "⏳ Waiting for services to be ready..."
           sleep 30
