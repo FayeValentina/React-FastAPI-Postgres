@@ -78,11 +78,13 @@ nginx/ssl/
 
 # ssh key file
 ssh-key/
+
+# script
+scripts/
+
 # Alembic
 alembic/versions/__pycache__/
 alembic/__pycache__/
-# Keep auto-generated migration files but ignore if needed
-backend/alembic/versions/*_auto_migration.py
 
 # OS generated files
 .DS_Store
