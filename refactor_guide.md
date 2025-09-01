@@ -175,7 +175,7 @@ nginx/
     expose:
       - "9000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro # 只读挂载更安全
+      - /var/run/docker.sock:/var/run/docker.sock #如果需要完整的管理功能，需要移除 :ro 标记。
       - prod_portainer_data:/data
     networks:
       - prodNetWork
