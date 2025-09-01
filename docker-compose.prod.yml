@@ -3,20 +3,37 @@ services:
   nginx:
     image: nginx:alpine
     container_name: nginx_proxy_prod
+    env_file:
+      - .env.prod
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL证书目录
-      - frontend_build:/usr/share/nginx/html:ro  # 挂载构建后的静态文件
+      # 主配置模板与服务模板目录
+      - ./nginx/nginx.prod.conf.template:/etc/nginx/nginx.conf.template:ro
+      # 服务模板目录
+      - ./nginx/conf/prod:/etc/nginx/templates:ro
+      # 启动脚本（渲染模板）
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      # SSL证书与静态文件
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      # Nginx Basic Authentication
+      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+      # 前端构建服务
+      - frontend_build:/usr/share/nginx/html:ro
+      # 日志目录
       - prod_nginx_logs:/var/log/nginx
     depends_on:
       - frontend_builder
       - backend
+      - portainer
+      - pgadmin
+      - redisinsight
     networks:
       - prodNetWork
+    # 使用动态入口脚本渲染配置
+    entrypoint: ["/entrypoint.sh"]
+    command: ["nginx", "-g", "daemon off;"]
     healthcheck:
       test: ["CMD", "nginx", "-t"]
       interval: 30s
@@ -251,11 +268,12 @@ services:
     mem_reservation: 128M
 
   pgadmin:
-    image: dpage/pgadmin4:9
+    image: dpage/pgadmin4:8.8
+    container_name: pgadmin_prod
     env_file:
       - .env.prod
-    ports:
-      - "127.0.0.1:${PGADMIN_PORT}:80"
+    expose:
+      - "80"
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
@@ -270,24 +288,57 @@ services:
     restart: unless-stopped
     mem_limit: 256M
     mem_reservation: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost/misc/ping').getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   redisinsight:
-    image: redislabs/redisinsight:${REDISINSIGHT_VERSION:-2.70}
-    container_name: ${REDISINSIGHT_CONTAINER_NAME:-redisinsight_prod}
+    image: redislabs/redisinsight:2.70.0
+    container_name: redisinsight_prod
     env_file:
       - .env.prod
-    ports:
-      - "127.0.0.1:${REDISINSIGHT_PORT:-5540}:5540"
+    expose:
+      - "5540"
     volumes:
       - prod_redisinsight_data:/db
     environment:
-      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-5540}
+      - RITRUSTEDORIGINS=https://${SUBDOMAIN_REDIS}.${DOMAIN_MAIN}
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
     networks:
       - prodNetWork
+    mem_limit: 256M
+    mem_reservation: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5540/healthcheck/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Portainer 容器管理
+  portainer:
+    image: portainer/portainer-ce:2.27.9-alpine
+    container_name: portainer_prod
+    env_file:
+      - .env.prod
+    expose:
+      - "9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - prod_portainer_data:/data
+    networks:
+      - prodNetWork
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     mem_limit: 256M
     mem_reservation: 128M
 
@@ -300,6 +351,8 @@ volumes:
     driver: local
   prod_redisinsight_data:
     driver: local
+  prod_portainer_data:
+    driver: local
   prod_nginx_logs:
     driver: local
   frontend_build:
@@ -308,3 +361,5 @@ volumes:
 networks:
   prodNetWork:
     driver: bridge
+
+  

@@ -91,9 +91,15 @@ jobs:
           git pull origin master
           
           # Create production environment file
+
           echo "📝 Creating production environment file..."
           echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
-          
+
+          # Ensure nginx entrypoint is executable and normalized (avoid CRLF issues)
+          echo "🔧 Ensuring nginx entrypoint permissions..."
+          chmod +x nginx/entrypoint.sh || true
+          sed -i 's/\r$//' nginx/entrypoint.sh || true
+                    
           # Build new images, utilizing Docker cache
           echo "🏗️ Building production images..."
           docker compose -f docker-compose.prod.yml --env-file .env.prod build
