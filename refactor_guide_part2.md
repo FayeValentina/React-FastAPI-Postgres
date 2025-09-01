@@ -64,7 +64,7 @@ fi
 export IP_RESTRICTION_BLOCK
 
 # 定义要替换的变量（防止误替换nginx内置变量）
-VARS_TO_SUBSTITUTE='$ALLOWED_IP_HOME $ALLOWED_IP_OFFICE $DOMAIN_MAIN $SUBDOMAIN_PORTAINER $SUBDOMAIN_PGADMIN $SUBDOMAIN_REDIS $IP_RESTRICTION_BLOCK'
+VARS_TO_SUBSTITUTE='$DOMAIN_MAIN $SUBDOMAIN_PORTAINER $SUBDOMAIN_PGADMIN $SUBDOMAIN_REDIS $IP_RESTRICTION_BLOCK'
 
 # 处理主配置文件
 MAIN_TEMPLATE="/etc/nginx/nginx.conf.template"
@@ -804,5 +804,3 @@ curl -I https://redis.yourdomain.com
 - ✅ 通过PgAdmin管理数据库
 - ✅ 通过RedisInsight监控缓存
 - ✅ 统一的访问日志记录
-
-这个最终版本结合了Gemini方案的简洁性和我的方案的健壮性，是一个生产就绪的解决方案！
