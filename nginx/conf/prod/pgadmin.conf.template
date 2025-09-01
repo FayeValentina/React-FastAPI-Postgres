@@ -29,6 +29,9 @@ server {
     location / {
         ${IP_RESTRICTION_BLOCK}
         
+        auth_basic "Admin Access Required";
+        auth_basic_user_file /etc/nginx/htpasswd/.htpasswd;
+        
         proxy_pass http://pgadmin;
         
         proxy_set_header Host $host;

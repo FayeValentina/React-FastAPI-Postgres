@@ -31,6 +31,9 @@ server {
         # IP访问控制（基于环境变量动态生成）
         ${IP_RESTRICTION_BLOCK}
         
+        auth_basic "Admin Access Required";
+        auth_basic_user_file /etc/nginx/htpasswd/.htpasswd;
+        
         proxy_pass http://portainer;
         
         proxy_set_header Host $host;
