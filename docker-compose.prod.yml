@@ -11,11 +11,15 @@ services:
     volumes:
       # 主配置模板与服务模板目录
       - ./nginx/nginx.prod.conf.template:/etc/nginx/nginx.conf.template:ro
+      # 服务模板目录
       - ./nginx/conf/prod:/etc/nginx/templates:ro
       # 启动脚本（渲染模板）
       - ./nginx/entrypoint.sh:/entrypoint.sh:ro
       # SSL证书与静态文件
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      # Nginx Basic Authentication
+      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+      # 前端构建服务
       - frontend_build:/usr/share/nginx/html:ro
       # 日志目录
       - prod_nginx_logs:/var/log/nginx
