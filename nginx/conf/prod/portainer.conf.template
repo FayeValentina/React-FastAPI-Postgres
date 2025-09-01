@@ -25,7 +25,8 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     
-    limit_req zone=portainer burst=20 nodelay;
+    # 放宽速率限制以避免首次加载大量静态资源被 503 拦截
+    limit_req zone=portainer burst=200 nodelay;
     
     location / {
         # IP访问控制（基于环境变量动态生成）
@@ -42,6 +43,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
+        # Portainer API 需要此请求头以通过 CSRF 校验
+        proxy_set_header X-Requested-By Portainer;
         
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -60,6 +63,7 @@ server {
     location /api/system/status {
         proxy_pass http://portainer;
         proxy_set_header Host $host;
+        proxy_set_header X-Requested-By Portainer;
         access_log off;
     }
 }
