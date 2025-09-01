@@ -241,7 +241,7 @@ server {
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     
     # 访问限流（可选，如果nginx.prod.conf中已定义limit_req_zone）
-    # limit_req zone=portainer burst=20 nodelay;
+    limit_req zone=portainer burst=20 nodelay;
     
     # 主要代理配置
     location / {
@@ -324,7 +324,7 @@ server {
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;" always;
     
     # 访问限流（严格限制）
-    # limit_req zone=admin burst=10 nodelay;
+    limit_req zone=admin burst=10 nodelay;
     
     # 主要代理配置
     location / {
@@ -410,7 +410,7 @@ server {
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' wss:;" always;
     
     # 访问限流（严格限制）
-    # limit_req zone=admin burst=10 nodelay;
+    limit_req zone=admin burst=10 nodelay;
     
     # 主要代理配置
     location / {
