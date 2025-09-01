@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # nginx 反向代理服务
   nginx:
@@ -10,7 +8,7 @@ services:
       - "443:443"  # 为将来的 SSL 配置预留
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/conf/dev:/etc/nginx/conf.d:ro
       - dev_nginx_logs:/var/log/nginx
     depends_on:
       - frontend
@@ -86,6 +84,12 @@ services:
       "
     networks:
       - dbNetWork
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   postgres:
     image: postgres:17
@@ -101,7 +105,7 @@ services:
       - dev_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
     networks:
@@ -124,6 +128,11 @@ services:
         condition: service_healthy
     networks:
       - dbNetWork
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost/misc/ping').getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   rabbitmq:
     image: rabbitmq:4-management
@@ -141,8 +150,8 @@ services:
       - dev_rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 5
     networks:
       - dbNetWork
@@ -172,7 +181,7 @@ services:
             redis-cli ping
           fi
         "
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
     networks:
@@ -210,10 +219,14 @@ services:
         sleep 10 &&
         poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --reload --log-level ${LOG_LEVEL:-INFO}
       "
+    scale: ${TASKIQ_WORKER_CONCURRENCY:-2}
     networks:
       - dbNetWork
-    deploy:
-      replicas: ${TASKIQ_WORKER_CONCURRENCY}
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "taskiq worker"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
 
   taskiq_scheduler:
     build: ./backend
@@ -251,10 +264,15 @@ services:
       "
     networks:
       - dbNetWork
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "taskiq scheduler"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
 
   redisinsight:
-    image: redislabs/redisinsight:${REDISINSIGHT_VERSION:-2.70}
-    container_name: ${REDISINSIGHT_CONTAINER_NAME:-redisinsight}
+    image: redislabs/redisinsight:2.70.0
+    container_name: redisinsight_dev
     env_file:
       - .env.dev
     ports:
@@ -269,12 +287,39 @@ services:
     restart: unless-stopped
     networks:
       - dbNetWork
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5540/healthcheck/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Portainer 容器管理（仅本机访问）
+  portainer:
+    image: portainer/portainer-ce:2.27.9-alpine
+    container_name: portainer_dev
+    env_file:
+      - .env.dev
+    ports:
+      - "127.0.0.1:${PORTAINER_PORT:-9000}:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dev_portainer_data:/data
+    networks:
+      - dbNetWork
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   dev_postgres_data:
   dev_rabbitmq_data:
   dev_redis_data:
   dev_redisinsight_data:
+  dev_portainer_data:
   dev_nginx_logs:
 
 networks:

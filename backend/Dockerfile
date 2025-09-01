@@ -5,6 +5,8 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
