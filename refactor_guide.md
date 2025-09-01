@@ -467,6 +467,10 @@ http {
 
     # 速率限制
     limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+    # 新增
+    limit_req_zone $binary_remote_addr zone=admin:10m rate=2r/m;
+    limit_req_zone $binary_remote_addr zone=portainer:10m rate=5r/m;
     # ...
 
     upstream backend {
