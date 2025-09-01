@@ -494,7 +494,69 @@ services:
     mem_limit: 128M
     mem_reservation: 64M
 
-  # ... frontend_builder 和 backend 保持不变 ...
+  # 前端构建服务 - 只用于构建静态文件
+  frontend_builder:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        - NODE_ENV=production
+        - VITE_API_URL=${FRONTEND_URL}/api
+    env_file:
+      - .env.prod
+    volumes:
+      - frontend_build:/app/dist
+    networks:
+      - prodNetWork
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    env_file:
+      - .env.prod
+    expose:
+      - "8000"
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - SECRET_KEY=${SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      bash -c "
+        echo '等待数据库准备...' &&
+        echo '应用数据库迁移...' &&
+        poetry run alembic upgrade head &&
+        echo '启动生产服务器...' &&
+        poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile - --error-logfile -
+      "
+    networks:
+      - prodNetWork
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    mem_limit: 1G
+    mem_reservation: 512M
 
   postgres:
     image: postgres:17
@@ -820,16 +882,11 @@ TASKIQ_WORKER_CONCURRENCY=2
 LOG_LEVEL=WARNING
 
 # === 管理工具配置 ===
-PGADMIN_PORT=5050
 PGADMIN_DEFAULT_EMAIL=admin@yourdomain.com
 PGADMIN_DEFAULT_PASSWORD=your_pgadmin_password
 PGADMIN_CONFIG_SERVER_MODE=True
 PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=True
 PGADMIN_CONFIG_WTF_CSRF_ENABLED=True
-
-REDISINSIGHT_PORT=5540
-REDISINSIGHT_VERSION=2.70.0
-REDISINSIGHT_CONTAINER_NAME=redisinsight_prod
 
 # =================================
 # 🔥 动态配置核心变量 🔥
