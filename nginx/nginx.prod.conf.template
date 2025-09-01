@@ -10,6 +10,11 @@ events {
 }
 
 http {
+    # 识别 Cloudflare 真实客户端 IP
+    include /etc/nginx/conf.d/cloudflare_ips.conf;
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
