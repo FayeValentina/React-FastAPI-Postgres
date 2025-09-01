@@ -45,9 +45,9 @@ nginx/
 │   │   └── common-locations-dev.conf
 │   └── prod/
 │       ├── common-locations-prod.conf
-│		├──	portainer.conf
-│		├── pgadmin.conf
-│		└── redisinsight.conf
+│	   ├── portainer.conf
+│	   ├── pgadmin.conf
+│	   └── redisinsight.conf
 ├── ssl/
 │   └── ...
 ├── nginx.dev.conf
@@ -61,7 +61,7 @@ nginx/
 ##### **2.1 - 更新 Nginx 服务的 Volume 挂载**
 
 请在 `docker-compose.prod.yml` 文件中找到 `nginx` 服务，并修改其 `volumes` 部分，以指向我们新创建的 `prod` 配置目录。
-
+同时在depends_on的依赖关系部分，新增三个管理容器。
 ```yaml
 # ... services ...
 
@@ -78,6 +78,13 @@ nginx/
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - frontend_build:/usr/share/nginx/html:ro
       - prod_nginx_logs:/var/log/nginx
+    # ... 中间配置保持不变 ...
+    depends_on:
+      - frontend_builder
+      - backend
+      - portainer     # 新增
+      - pgadmin       # 新增  
+      - redisinsight  # 新增
     # ... 其余配置保持不变 ...
 ```
 
@@ -169,7 +176,7 @@ nginx/
     expose:
       - "9000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro # 只读挂载更安全
       - prod_portainer_data:/data
     networks:
       - prodNetWork
