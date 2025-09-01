@@ -94,7 +94,7 @@ nginx/
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       # - ./nginx/conf.d:/etc/nginx/conf.d:ro 这里需要修正，改为:
-	  - ./nginx/conf/dev:/etc/nginx/conf.d:ro 
+      - ./nginx/conf/dev:/etc/nginx/conf.d:ro 
       - dev_nginx_logs:/var/log/nginx
     depends_on:
       - frontend
