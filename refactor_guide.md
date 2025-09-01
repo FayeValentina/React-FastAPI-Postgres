@@ -45,11 +45,10 @@ nginx/
 │   │   └── common-locations-dev.conf
 │   └── prod/
 │       ├── common-locations-prod.conf
-│	   ├── portainer.conf
-│	   ├── pgadmin.conf
-│	   └── redisinsight.conf
+│       ├── portainer.conf
+│       ├── pgadmin.conf
+│       └── redisinsight.conf
 ├── ssl/
-│   └── ...
 ├── nginx.dev.conf
 └── nginx.prod.conf
 ```
