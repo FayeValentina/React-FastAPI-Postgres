@@ -1,6 +1,7 @@
 # Environment variables
 .env
 .env.*
+!.env.prod.example
 !.env.example
 
 # Python
