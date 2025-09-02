@@ -145,7 +145,7 @@ Perform the following:
 4. At the end of the `server {}` block, add:
    ```nginx
    location /oauth2/ {
-       proxy_pass oauth2_proxy;
+       proxy_pass http://oauth2_proxy;
        proxy_set_header Host $host;
        proxy_set_header X-Real-IP $remote_addr;
        proxy_set_header X-Scheme $scheme;
@@ -154,7 +154,7 @@ Perform the following:
 
    # Allow sign-out
    location /oauth2/sign_out {
-       proxy_pass oauth2_proxy;
+       proxy_pass http://oauth2_proxy;
        proxy_set_header Host $host;
    }
 
