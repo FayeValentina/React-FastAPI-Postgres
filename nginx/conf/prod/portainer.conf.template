@@ -1,11 +1,13 @@
 # Portainer 反向代理配置
 upstream portainer {
+    zone portainer 64k;
     server portainer:9000 resolve max_fails=3 fail_timeout=30s;
     keepalive 8;
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${SUBDOMAIN_PORTAINER}.${DOMAIN_MAIN};
     
     ssl_certificate /etc/nginx/ssl/server.pem;
