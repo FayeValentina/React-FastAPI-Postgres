@@ -15,6 +15,10 @@ for var in $required_vars; do
   fi
 done
 
+# Restrict envsubst to only domain-related variables to avoid clobbering
+# Nginx runtime variables like $host, $remote_addr, $binary_remote_addr, etc.
+ENV_VARS='${DOMAIN_MAIN} ${SUBDOMAIN_PORTAINER} ${SUBDOMAIN_PGADMIN} ${SUBDOMAIN_REDIS}'
+
 mkdir -p -- "$CONFIG_DIR"
 
 if [ ! -d "$TEMPLATE_DIR" ]; then
@@ -27,11 +31,11 @@ echo "Rendering Nginx config files from environment variables..."
 find "$TEMPLATE_DIR" -maxdepth 1 -type f -name '*.template' -print0 |
 while IFS= read -r -d '' template; do
   output_file="$CONFIG_DIR/$(basename "$template" .template)"
-  envsubst < "$template" > "$output_file"
+  envsubst "$ENV_VARS" < "$template" > "$output_file"
   echo "Generated: $output_file"
 done
 
-envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+envsubst "$ENV_VARS" < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 echo "Configuration rendering complete."
 exec "$@"
