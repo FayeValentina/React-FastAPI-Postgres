@@ -90,13 +90,10 @@ jobs:
           echo "🔄 Pulling latest code..."
           git pull origin master
           
-          # Create production environment file (preserve content exactly)
+          # Create production environment file
+
           echo "📝 Creating production environment file..."
-          cat > .env.prod << 'ENV_EOF'
-${{ secrets.ENV_PROD_VARS }}
-ENV_EOF
-          # Normalize to LF to avoid hidden CR in values (e.g., cookie secret)
-          sed -i 's/\r$//' .env.prod
+          echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
 
           # Ensure nginx entrypoint is executable and normalized (avoid CRLF issues)
           echo "🔧 Ensuring nginx entrypoint permissions..."
