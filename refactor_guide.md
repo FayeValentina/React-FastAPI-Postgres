@@ -27,9 +27,9 @@ OAUTH2_PROXY_PROVIDER="github"
 # Generate with: openssl rand -base64 32
 OAUTH2_PROXY_COOKIE_SECRET="PASTE_RANDOM_STRING"
 OAUTH2_PROXY_EMAIL_DOMAINS="*"                   # prefer restricting access further
-#OAUTH2_PROXY_GITHUB_USER="user1,user2"         # optional: explicit GitHub usernames
-#OAUTH2_PROXY_GITHUB_ORG="your-github-org"      # optional
-#OAUTH2_PROXY_GITHUB_TEAMS="org/team"           # optional
+#OAUTH2_PROXY_GITHUB_USERS="user1,user2" # optional: restrict to specific GitHub usernames (plural)
+#OAUTH2_PROXY_GITHUB_ORG="your-github-org"  # optional: restrict to a specific GitHub organization
+#OAUTH2_PROXY_GITHUB_TEAM="org/team-slug"   # optional: restrict to a specific team within an org (singular)
 
 OAUTH2_PROXY_SET_XAUTHREQUEST="true"
 OAUTH2_PROXY_PASS_ACCESS_TOKEN="true"
@@ -72,40 +72,66 @@ Remove any variables related to the old IP restriction logic, such as `ENABLE_IP
        restart: unless-stopped
        mem_limit: 128M
        mem_reservation: 64M
-      healthcheck:
-        test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4180/ping"]
-        interval: 30s
-        timeout: 10s
-        retries: 3
-        start_period: 20s
+      # OAuth2 is sufficiently complete and does not require health checks.
+      # healthcheck:
+        # test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4180/ping"]
+        # interval: 30s
+        # timeout: 10s
+        # retries: 3
+        # start_period: 20s
    ```
 2. Remove the htpasswd volume from `nginx`:
    ```diff
      volumes:
-       - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+      # SSL证书与静态文件
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      # remove this line
+      # - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+      # 前端构建服务
+      - frontend_build:/usr/share/nginx/html:ro
    ```
 3. Ensure `nginx` waits for the proxy:
    ```yaml
    nginx:
      depends_on:
-       - oauth2_proxy
+       - oauth2_proxy  # new
+       - frontend_builder
+       - backend
+       - portainer
+       - pgadmin
+       - redisinsight
    ```
 
 ## 4. Refactor Nginx Configuration
+For `nginx/nginx.prod.conf.template`:
+0. In `nginx/nginx.prod.conf.template`, define an upstream for the proxy:
+   ```nginx
+   upstream oauth2_proxy {
+       server oauth2_proxy:4180;
+       keepalive 2;
+   }
+   ```
+1. If `nginx/nginx.prod.conf.template` includes `cloudflare_ips.conf`, remove that line.
+```nginx
+# fully remove
+# include /etc/nginx/conf.d/cloudflare_ips.conf;
+```
 For each file:
 - `nginx/conf/prod/portainer.conf.template`
 - `nginx/conf/prod/pgadmin.conf.template`
 - `nginx/conf/prod/redisinsight.conf.template`
 
 Perform the following:
-1. In the `location /` block, remove old auth and IP directives:
+2. In the `location /` block, remove old auth and IP directives:
    ```nginx
-   ${IP_RESTRICTION_BLOCK}
-
-   auth_basic "Admin Access Required";
-   auth_basic_user_file /etc/nginx/htpasswd/.htpasswd;
+   # remove this
+   # ${IP_RESTRICTION_BLOCK}
+   # remove this
+   # auth_basic "Admin Access Required";
+   # remove this
+   # auth_basic_user_file /etc/nginx/htpasswd/.htpasswd;
    ```
-2. Insert OAuth2-Proxy auth handling:
+3. Insert OAuth2-Proxy auth handling:
    ```nginx
    auth_request /oauth2/auth;
    error_page 401 = @oauth_error;
@@ -116,10 +142,10 @@ Perform the following:
    proxy_set_header X-Forwarded-User $user;
    proxy_set_header X-Forwarded-Email $email;
    ```
-3. At the end of the `server {}` block, add:
+4. At the end of the `server {}` block, add:
    ```nginx
    location /oauth2/ {
-       proxy_pass http://oauth2_proxy:4180;
+       proxy_pass oauth2_proxy;
        proxy_set_header Host $host;
        proxy_set_header X-Real-IP $remote_addr;
        proxy_set_header X-Scheme $scheme;
@@ -128,21 +154,13 @@ Perform the following:
 
    # Allow sign-out
    location /oauth2/sign_out {
-       proxy_pass http://oauth2_proxy:4180;
+       proxy_pass oauth2_proxy;
        proxy_set_header Host $host;
    }
 
    # Unified error redirect
    location @oauth_error {
        return 302 /oauth2/start?rd=$scheme://$host$request_uri;
-   }
-   ```
-4. If `nginx/nginx.prod.conf.template` includes `cloudflare_ips.conf`, remove that line or supply a static file to avoid startup failures.
-5. In `nginx/nginx.prod.conf.template`, define an upstream for the proxy:
-   ```nginx
-   upstream oauth2_proxy {
-       server oauth2_proxy:4180;
-       keepalive 2;
    }
    ```
 
@@ -179,7 +197,7 @@ exec "$@"
 ## 6. Remove Legacy Files
 Clean up assets no longer required:
 - Delete the `nginx/htpasswd` directory.
-- Remove any references to `cloudflare_ips.conf` unless a static file is provided.
+- Remove any references to `cloudflare_ips.conf`.
 
 ## 7. Apply Changes and Restart Services
 1. Shut down running services:
