@@ -1,7 +1,6 @@
 services:
   oauth2_proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
-    container_name: oauth2_proxy_prod
     env_file:
       - .env.prod
     expose:
@@ -11,18 +10,16 @@ services:
     restart: unless-stopped
     mem_limit: 128M
     mem_reservation: 64M
-    # OAuth2 is sufficiently complete and does not require health checks.
-    # healthcheck:
-    #   test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4180/ping"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 20s
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4180/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # nginx 反向代理服务
   nginx:
     image: nginx:alpine
-    container_name: nginx_proxy_prod
     env_file:
       - .env.prod
     ports:
@@ -42,12 +39,18 @@ services:
       # 日志目录
       - prod_nginx_logs:/var/log/nginx
     depends_on:
-      - oauth2_proxy
-      - frontend_builder
-      - backend
-      - portainer
-      - pgadmin
-      - redisinsight
+      oauth2_proxy:
+        condition: service_healthy
+      frontend_builder:
+        condition: service_started
+      backend:
+        condition: service_started
+      portainer:
+        condition: service_started
+      pgadmin:
+        condition: service_started
+      redisinsight:
+        condition: service_started
     networks:
       - prodNetWork
     # 使用动态入口脚本渲染配置
@@ -288,7 +291,6 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:8.8
-    container_name: pgadmin_prod
     env_file:
       - .env.prod
     expose:
@@ -315,7 +317,6 @@ services:
 
   redisinsight:
     image: redislabs/redisinsight:2.70.0
-    container_name: redisinsight_prod
     env_file:
       - .env.prod
     expose:
@@ -341,7 +342,6 @@ services:
   # Portainer 容器管理
   portainer:
     image: portainer/portainer-ce:2.27.9-alpine
-    container_name: portainer_prod
     env_file:
       - .env.prod
     expose:
