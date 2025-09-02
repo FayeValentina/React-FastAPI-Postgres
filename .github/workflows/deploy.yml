@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  # Domain is provided via GitHub Repository Variables (Settings → Variables → Actions)
+  DOMAIN_MAIN: ${{ vars.DOMAIN_MAIN }}
+  FRONTEND_URL: https://${{ vars.DOMAIN_MAIN }}
+
 jobs:
   # CI Job - Code Quality & Testing
   ci:
@@ -70,7 +75,7 @@ jobs:
     # deploy to production environment
     environment:
       name: production
-      url: https://warabi.dpdns.org
+      url: ${{ env.FRONTEND_URL }}
     
     steps:
     - name: Deploy to Oracle Cloud
