@@ -7,6 +7,7 @@ CONFIG_DIR="/etc/nginx/conf.d"
 # ensure essential environment variables are present
 required_vars="DOMAIN_MAIN SUBDOMAIN_PGADMIN SUBDOMAIN_REDIS SUBDOMAIN_PORTAINER"
 for var in $required_vars; do
+  eval "value=\$$var"
   if [ -z "${!var}" ]; then
     echo "Error: $var is not set." >&2
     exit 1
