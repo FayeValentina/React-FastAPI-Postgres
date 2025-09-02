@@ -73,7 +73,8 @@ server {
     }
 
     location /oauth2/ {
-        proxy_pass https://auth.${DOMAIN_MAIN}/oauth2/;
+        # 内部直连 oauth2_proxy，避免走公网/Cloudflare
+        proxy_pass http://oauth2_proxy/oauth2/;
         proxy_set_header Host auth.${DOMAIN_MAIN};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Scheme $scheme;
@@ -81,7 +82,8 @@ server {
 
     # Allow sign-out
     location /oauth2/sign_out {
-        proxy_pass https://auth.${DOMAIN_MAIN}/oauth2/sign_out;
+        # 内部直连 oauth2_proxy，避免走公网/Cloudflare
+        proxy_pass http://oauth2_proxy/oauth2/sign_out;
         proxy_set_header Host auth.${DOMAIN_MAIN};
     }
 
