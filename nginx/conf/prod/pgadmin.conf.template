@@ -1,6 +1,6 @@
 # PgAdmin 反向代理配置
 upstream pgadmin {
-    server pgadmin:80 max_fails=3 fail_timeout=30s;
+    server pgadmin:80 resolve max_fails=3 fail_timeout=30s;
     keepalive 8;
 }
 

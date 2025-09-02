@@ -59,7 +59,7 @@ jobs:
     # Docker Build Test
     - name: Test Docker builds
       run: |
-        docker compose -f docker-compose.prod.yml build --no-cache
+        docker compose -f docker-compose.prod.yml build
     
   # CD Job - Deploy to Oracle Cloud (only on master branch push)
   deploy:
