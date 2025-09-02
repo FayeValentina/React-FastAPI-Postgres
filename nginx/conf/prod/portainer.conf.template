@@ -24,17 +24,20 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    
+
     # 放宽速率限制以避免首次加载大量静态资源被 503 拦截
     limit_req zone=portainer burst=200 nodelay;
-    
+
+    auth_request /oauth2/auth;
+    error_page 401 = @oauth_error;
+    error_page 403 = @oauth_error;
+
+    auth_request_set $user $upstream_http_x_auth_request_user;
+    auth_request_set $email $upstream_http_x_auth_request_email;
+    proxy_set_header X-Forwarded-User $user;
+    proxy_set_header X-Forwarded-Email $email;
+
     location / {
-        # IP访问控制（基于环境变量动态生成）
-        ${IP_RESTRICTION_BLOCK}
-        
-        auth_basic "Admin Access Required";
-        auth_basic_user_file /etc/nginx/htpasswd/.htpasswd;
-        
         proxy_pass http://portainer;
         
         proxy_set_header Host $host;
@@ -65,5 +68,24 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Requested-By Portainer;
         access_log off;
+    }
+
+    location /oauth2/ {
+        proxy_pass http://oauth2_proxy;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Scheme $scheme;
+        proxy_set_header X-Auth-Request-Redirect $request_uri;
+    }
+
+    # Allow sign-out
+    location /oauth2/sign_out {
+        proxy_pass http://oauth2_proxy;
+        proxy_set_header Host $host;
+    }
+
+    # Unified error redirect
+    location @oauth_error {
+        return 302 /oauth2/start?rd=$scheme://$host$request_uri;
     }
 }
