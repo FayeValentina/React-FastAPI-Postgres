@@ -26,7 +26,8 @@ OAUTH2_PROXY_PROVIDER="github"
 
 # Generate with: openssl rand -base64 32
 OAUTH2_PROXY_COOKIE_SECRET="PASTE_RANDOM_STRING"
-OAUTH2_PROXY_EMAIL_DOMAINS="*"
+OAUTH2_PROXY_EMAIL_DOMAINS="*"                   # prefer restricting access further
+#OAUTH2_PROXY_GITHUB_USER="user1,user2"         # optional: explicit GitHub usernames
 #OAUTH2_PROXY_GITHUB_ORG="your-github-org"      # optional
 #OAUTH2_PROXY_GITHUB_TEAMS="org/team"           # optional
 
@@ -35,10 +36,22 @@ OAUTH2_PROXY_PASS_ACCESS_TOKEN="true"
 OAUTH2_PROXY_HTTP_ADDRESS="http://0.0.0.0:4180"
 OAUTH2_PROXY_UPSTREAMS="file:///dev/null"
 
+# Session and cookie settings
+OAUTH2_PROXY_COOKIE_EXPIRE="12h0m0s"
+OAUTH2_PROXY_COOKIE_REFRESH="1h0m0s"
+OAUTH2_PROXY_COOKIE_HTTPONLY="true"
+OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST="true"
+OAUTH2_PROXY_COOKIE_CSRF_EXPIRE="15m"
+
 # Share a single login across all subdomains
 OAUTH2_PROXY_COOKIE_DOMAINS=".your-domain.com"
 OAUTH2_PROXY_COOKIE_SAMESITE="lax"
 OAUTH2_PROXY_COOKIE_SECURE="true"
+
+# Logging and health
+OAUTH2_PROXY_LOGGING_FORMAT="json"
+OAUTH2_PROXY_LOG_LEVEL="info"
+OAUTH2_PROXY_SKIP_AUTH_REGEX="^/(health|nginx-health|ping)$"
 ```
 
 Remove any variables related to the old IP restriction logic, such as `ENABLE_IP_RESTRICTION`, `ALLOWED_IP_HOME`, or similar entries.
@@ -59,6 +72,12 @@ Remove any variables related to the old IP restriction logic, such as `ENABLE_IP
        restart: unless-stopped
        mem_limit: 128M
        mem_reservation: 64M
+      healthcheck:
+        test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4180/ping"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 20s
    ```
 2. Remove the htpasswd volume from `nginx`:
    ```diff
@@ -89,8 +108,8 @@ Perform the following:
 2. Insert OAuth2-Proxy auth handling:
    ```nginx
    auth_request /oauth2/auth;
-   error_page 401 = /oauth2/start;
-   error_page 403 = /oauth2/start;
+   error_page 401 = @oauth_error;
+   error_page 403 = @oauth_error;
 
    auth_request_set $user $upstream_http_x_auth_request_user;
    auth_request_set $email $upstream_http_x_auth_request_email;
@@ -106,8 +125,26 @@ Perform the following:
        proxy_set_header X-Scheme $scheme;
        proxy_set_header X-Auth-Request-Redirect $request_uri;
    }
+
+   # Allow sign-out
+   location /oauth2/sign_out {
+       proxy_pass http://oauth2_proxy:4180;
+       proxy_set_header Host $host;
+   }
+
+   # Unified error redirect
+   location @oauth_error {
+       return 302 /oauth2/start?rd=$scheme://$host$request_uri;
+   }
    ```
 4. If `nginx/nginx.prod.conf.template` includes `cloudflare_ips.conf`, remove that line or supply a static file to avoid startup failures.
+5. In `nginx/nginx.prod.conf.template`, define an upstream for the proxy:
+   ```nginx
+   upstream oauth2_proxy {
+       server oauth2_proxy:4180;
+       keepalive 2;
+   }
+   ```
 
 ## 5. Simplify `nginx/entrypoint.sh`
 Replace the script with a minimal template renderer:
@@ -154,7 +191,31 @@ Clean up assets no longer required:
    docker-compose -f docker-compose.prod.yml up --build -d
    ```
 
-## 8. Enable Multi-Factor Authentication
+## 8. Verify Migration
+Ensure the new authentication flow works and services are healthy:
+```bash
+# Check oauth2_proxy logs
+docker-compose -f docker-compose.prod.yml logs oauth2_proxy
+
+# Test redirect behavior
+curl -I https://pgadmin.your-domain.com/
+
+# Hit auth endpoint directly
+curl -I https://pgadmin.your-domain.com/oauth2/auth
+
+# Inspect container states
+docker-compose -f docker-compose.prod.yml ps
+```
+
+## 9. Rollback Plan
+If issues arise, revert to the previous setup:
+```bash
+cp .env.prod.backup .env.prod
+git checkout HEAD~1 -- docker-compose.prod.yml nginx/
+docker-compose -f docker-compose.prod.yml up -d --force-recreate
+```
+
+## 10. Enable Multi-Factor Authentication
 Since access now relies on GitHub credentials, enable MFA on your GitHub account for improved security.
 
 ---
