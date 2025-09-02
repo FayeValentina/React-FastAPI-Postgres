@@ -23,16 +23,20 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' wss:;" always;
-    
+
     # 放宽速率限制以避免静态资源并发加载被 503 拦截
     limit_req zone=admin burst=200 nodelay;
-    
-    location / {
-        ${IP_RESTRICTION_BLOCK}
-        
-        auth_basic "Admin Access Required";
-        auth_basic_user_file /etc/nginx/htpasswd/.htpasswd;
 
+    auth_request /oauth2/auth;
+    error_page 401 = @oauth_error;
+    error_page 403 = @oauth_error;
+
+    auth_request_set $user $upstream_http_x_auth_request_user;
+    auth_request_set $email $upstream_http_x_auth_request_email;
+    proxy_set_header X-Forwarded-User $user;
+    proxy_set_header X-Forwarded-Email $email;
+
+    location / {
         proxy_pass http://redisinsight;
         
         proxy_set_header Host $host;
@@ -60,5 +64,23 @@ server {
         proxy_pass http://redisinsight;
         proxy_set_header Host $host;
         access_log off;
+    }
+
+    location /oauth2/ {
+        proxy_pass https://auth.${DOMAIN_MAIN}/oauth2/;
+        proxy_set_header Host auth.${DOMAIN_MAIN};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Scheme $scheme;
+    }
+
+    # Allow sign-out
+    location /oauth2/sign_out {
+        proxy_pass https://auth.${DOMAIN_MAIN}/oauth2/sign_out;
+        proxy_set_header Host auth.${DOMAIN_MAIN};
+    }
+
+    # Unified error redirect
+    location @oauth_error {
+        return 302 https://auth.${DOMAIN_MAIN}/oauth2/start?rd=$scheme://$host$request_uri;
     }
 }
