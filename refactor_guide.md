@@ -82,7 +82,7 @@ Remove any variables related to the old IP restriction logic, such as `ENABLE_IP
 2. Remove the htpasswd volume from `nginx`:
    ```diff
      volumes:
--      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+       - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
    ```
 3. Ensure `nginx` waits for the proxy:
    ```yaml
