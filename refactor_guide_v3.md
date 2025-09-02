@@ -104,7 +104,7 @@ curl -I https://portainer.your-domain.com/
 curl -I https://auth.your-domain.com/oauth2/auth
 
 # Inspect container logs
-docker-compose -f docker-compose.prod.yml logs oauth2_proxy
+docker compose -f docker-compose.prod.yml logs oauth2_proxy
 ```
 
 With these changes, all admin subdomains share a single OAuth2 login hosted at `auth.your-domain.com`, reducing the number of callback URLs required by the provider.
