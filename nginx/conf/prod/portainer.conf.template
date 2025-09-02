@@ -71,21 +71,20 @@ server {
     }
 
     location /oauth2/ {
-        proxy_pass http://oauth2_proxy;
-        proxy_set_header Host $host;
+        proxy_pass https://auth.${DOMAIN_MAIN}/oauth2/;
+        proxy_set_header Host auth.${DOMAIN_MAIN};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Scheme $scheme;
-        proxy_set_header X-Auth-Request-Redirect $request_uri;
     }
 
     # Allow sign-out
     location /oauth2/sign_out {
-        proxy_pass http://oauth2_proxy;
-        proxy_set_header Host $host;
+        proxy_pass https://auth.${DOMAIN_MAIN}/oauth2/sign_out;
+        proxy_set_header Host auth.${DOMAIN_MAIN};
     }
 
     # Unified error redirect
     location @oauth_error {
-        return 302 /oauth2/start?rd=$scheme://$host$request_uri;
+        return 302 https://auth.${DOMAIN_MAIN}/oauth2/start?rd=$scheme://$host$request_uri;
     }
 }
