@@ -1,41 +1,61 @@
 #!/bin/sh
+# Nginx 配置动态生成脚本（根据环境变量渲染模板）
 set -eu
+
+echo "开始生成 Nginx 配置文件..."
 
 TEMPLATE_DIR="/etc/nginx/templates"
 CONFIG_DIR="/etc/nginx/conf.d"
 
-# ensure essential environment variables are present
-required_vars="DOMAIN_MAIN SUBDOMAIN_PGADMIN SUBDOMAIN_REDIS SUBDOMAIN_PORTAINER"
+# 检查关键环境变量（仅域名相关，避免污染 Nginx 内置变量）
+required_vars="DOMAIN_MAIN SUBDOMAIN_PORTAINER SUBDOMAIN_PGADMIN SUBDOMAIN_REDIS"
 for var in $required_vars; do
-  # 取出名为 $var 的变量值到临时变量 value（若未设置则为空）
   eval "value=\${$var:-}"
   if [ -z "$value" ]; then
-    echo "Error: $var is not set." >&2
+    echo "错误: 环境变量 $var 未设置" >&2
     exit 1
   fi
+  echo "- $var=$value"
 done
 
-# Restrict envsubst to only domain-related variables to avoid clobbering
-# Nginx runtime variables like $host, $remote_addr, $binary_remote_addr, etc.
-ENV_VARS='${DOMAIN_MAIN} ${SUBDOMAIN_PORTAINER} ${SUBDOMAIN_PGADMIN} ${SUBDOMAIN_REDIS}'
+# 需要替换的变量列表（限制 envsubst 范围，保留 $host/$remote_addr 等）
+VARS_TO_SUBSTITUTE='${DOMAIN_MAIN} ${SUBDOMAIN_PORTAINER} ${SUBDOMAIN_PGADMIN} ${SUBDOMAIN_REDIS}'
 
 mkdir -p -- "$CONFIG_DIR"
 
 if [ ! -d "$TEMPLATE_DIR" ]; then
-  echo "Template directory $TEMPLATE_DIR not found."
+  echo "错误: 模板目录 $TEMPLATE_DIR 不存在" >&2
   exit 1
 fi
 
-echo "Rendering Nginx config files from environment variables..."
-# 更稳健地遍历文件名（避免空格问题）
+echo "渲染服务配置模板..."
 find "$TEMPLATE_DIR" -maxdepth 1 -type f -name '*.template' -print0 |
 while IFS= read -r -d '' template; do
   output_file="$CONFIG_DIR/$(basename "$template" .template)"
-  envsubst "$ENV_VARS" < "$template" > "$output_file"
-  echo "Generated: $output_file"
+  envsubst "$VARS_TO_SUBSTITUTE" < "$template" > "$output_file"
+  echo "生成: $output_file"
 done
 
-envsubst "$ENV_VARS" < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+echo "渲染主配置模板..."
+envsubst "$VARS_TO_SUBSTITUTE" < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-echo "Configuration rendering complete."
+# 因 docker-compose 使用了 container_name，服务名可能不可解析。
+# 将上游主机名替换为 container_name，避免启动时解析失败。
+# 若之后取消 container_name，可移除此替换。
+echo "调整上游主机名以匹配 container_name..."
+sed -i 's/oauth2_proxy:4180/oauth2_proxy_prod:4180/g' /etc/nginx/nginx.conf || true
+sed -i 's/pgadmin:80/pgadmin_prod:80/g' "$CONFIG_DIR/pgadmin.conf" || true
+sed -i 's/portainer:9000/portainer_prod:9000/g' "$CONFIG_DIR/portainer.conf" || true
+sed -i 's/redisinsight:5540/redisinsight_prod:5540/g' "$CONFIG_DIR/redisinsight.conf" || true
+
+echo "验证 Nginx 配置..."
+if nginx -t; then
+  echo "配置验证成功"
+else
+  echo "配置验证失败，请检查模板与生成文件" >&2
+  nginx -t || true
+  exit 1
+fi
+
+echo "配置渲染完成，启动 Nginx..."
 exec "$@"
