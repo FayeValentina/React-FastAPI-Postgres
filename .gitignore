@@ -135,3 +135,8 @@ pgdata/
 
 # ESLint cache
 .eslintcache
+
+# Documentations
+CLAUDE.md 
+AGENTS.md
+GEMINI.md
