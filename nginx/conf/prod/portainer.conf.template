@@ -1,6 +1,6 @@
 # Portainer 反向代理配置
 upstream portainer {
-    zone portainer 64k;
+    zone portainer_upstream 64k;
     server portainer:9000 resolve max_fails=3 fail_timeout=30s;
     keepalive 8;
 }
