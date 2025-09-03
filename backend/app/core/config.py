@@ -1,5 +1,6 @@
 import os
 from typing import Any, List, Optional, Union
+from dataclasses import dataclass
 from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -243,6 +244,57 @@ class RedisSettings(BaseSettings):
     )
 
 
+# Redis 连接池配置（从 app.core.redis.config 合并）
+@dataclass
+class RedisPoolConfig:
+    """Redis连接池配置"""
+
+    # 连接池基础配置
+    max_connections: int = 50
+    min_connections: int = 5
+
+    # 连接超时配置
+    socket_connect_timeout: int = 5
+    socket_timeout: int = 5
+    socket_keepalive: bool = True
+    socket_keepalive_options: Optional[dict] = None
+
+    # 重试配置
+    retry_on_timeout: bool = True
+    retry_on_error: List[type] = None
+    max_retries: int = 3
+
+    # 健康检查配置
+    health_check_interval: int = 30
+    health_check_timeout: int = 3
+
+    # 编码配置
+    decode_responses: bool = True
+    encoding: str = "utf-8"
+
+    def __post_init__(self):
+        """初始化后处理"""
+        if self.retry_on_error is None:
+            # 默认重试的错误类型
+            import redis
+            self.retry_on_error = [
+                redis.ConnectionError,
+                redis.TimeoutError,
+                ConnectionRefusedError,
+                OSError,
+            ]
+
+        if self.socket_keepalive_options is None:
+            # TCP keepalive配置
+            self.socket_keepalive_options = {
+                'TCP_KEEPIDLE': 600,     # 开始发送keepalive探测前的空闲时间
+                'TCP_KEEPINTVL': 60,     # keepalive探测间隔
+                'TCP_KEEPCNT': 3         # 失败探测次数
+            }
+
+
+
+
 class TaskIQSettings(BaseSettings):
     """TaskIQ 配置"""
     # TaskIQ 基本配置
@@ -288,6 +340,8 @@ class Settings(BaseSettings):
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
     redis: RedisSettings = RedisSettings()
+    # Redis 连接池子配置（新增）
+    redis_pool: RedisPoolConfig = RedisPoolConfig()
     taskiq: TaskIQSettings = TaskIQSettings()
 
     # 数据库日志
@@ -303,6 +357,4 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-settings = Settings() 
-
-
+settings = Settings()

@@ -6,12 +6,12 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse
 from app.api import router
 from app.core.config import settings
-from app.dependencies.request_context import request_context_dependency
-from app.middleware.logging import RequestResponseLoggingMiddleware
-from app.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
+from app.api.dependencies import request_context_dependency
+from app.api.middleware.logging import RequestResponseLoggingMiddleware
+from app.api.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
-from app.utils.common import create_exception_handlers
+from app.infrastructure.utils.common import create_exception_handlers
 # from app.core.task_manager import task_manager  # 已删除，使用新架构
 from app.broker import broker
 from app.core.redis_manager import redis_services
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     
     try:
         # 自动发现并注册所有任务
-        from app.utils.registry_decorators import auto_discover_tasks
+        from app.infrastructure.tasks.task_registry_decorators import auto_discover_tasks
         auto_discover_tasks()
         logger.info("任务自动注册完成")
         
@@ -43,9 +43,9 @@ async def lifespan(app: FastAPI):
         logger.info("调度器服务已通过Redis服务管理器初始化")
         
         # 从数据库加载调度任务到Redis
-        from app.db.base import AsyncSessionLocal
-        from app.crud.task_config import crud_task_config
-        from app.utils.registry_decorators import SchedulerType
+        from app.infrastructure.database.postgres_base import AsyncSessionLocal
+        from app.modules.tasks.repository import crud_task_config
+        from app.infrastructure.tasks.task_registry_decorators import SchedulerType
         
         async with AsyncSessionLocal() as db:
             # 获取所有任务配置（不再筛选status）

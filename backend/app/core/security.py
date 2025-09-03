@@ -5,7 +5,7 @@ from uuid import uuid4
 from jose import jwt, JWTError # type: ignore
 from passlib.context import CryptContext # type: ignore
 from app.core.config import settings
-from app.utils.common import get_current_time   
+from app.infrastructure.utils.common import get_current_time   
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

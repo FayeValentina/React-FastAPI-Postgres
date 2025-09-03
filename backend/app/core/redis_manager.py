@@ -4,13 +4,11 @@ Redis服务管理器 - 使用新的连接池架构
 """
 import logging
 from typing import Dict, Any
-from app.services.redis import (
-    AuthRedisService,
-    CacheRedisService, 
-    ScheduleHistoryRedisService,  # 使用增强的历史服务（包含状态管理）
-    scheduler_service
-)
-from app.core.redis import redis_connection_manager
+from app.infrastructure.cache.cache_service import CacheRedisService
+from app.infrastructure.auth.auth_service import AuthRedisService
+from app.infrastructure.scheduler.scheduler import scheduler_service
+from app.infrastructure.scheduler.status import ScheduleHistoryRedisService
+from app.infrastructure.database.redis_pool import redis_connection_manager
 
 logger = logging.getLogger(__name__)
 
