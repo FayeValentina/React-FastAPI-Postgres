@@ -171,7 +171,3 @@ class SchedulerService:
 # 全局实例
 scheduler_service = SchedulerService()
 
-
-def get_scheduler_service() -> SchedulerService:
-    """FastAPI 依赖项：获取调度器服务"""
-    return scheduler_service
