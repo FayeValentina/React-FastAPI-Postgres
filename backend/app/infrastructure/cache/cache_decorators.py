@@ -8,10 +8,12 @@ import inspect
 import logging
 from typing import Callable, List, Any
 
-from app.infrastructure.cache.cache_serializer import CacheSerializer 
+from app.infrastructure.cache.cache_serializer import CacheSerializer
 from app.constant.cache_tags import CacheTags
-from app.core.redis_manager import redis_services
-from app.infrastructure.cache.cache_service import CacheConfig
+from app.infrastructure.cache.cache_service import (
+    CacheConfig,
+    cache_redis_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ def cache(tags: List[CacheTags], ttl: int = None, exclude_params: List[str] = No
                 
                 # 1. 尝试从缓存获取
                 try:
-                    cached_data = await redis_services.cache.get_binary_data(cache_key)
+                    cached_data = await cache_redis_service.get_binary_data(cache_key)
                     if cached_data:
                         # 使用新的序列化器进行反序列化
                         result = CacheSerializer.deserialize(cached_data)
@@ -107,11 +109,11 @@ def cache(tags: List[CacheTags], ttl: int = None, exclude_params: List[str] = No
                         cache_ttl = ttl or CacheConfig.DEFAULT_TTL
                         
                         # 存储缓存数据
-                        await redis_services.cache.set_binary_data(cache_key, serialized_data, ttl=cache_ttl)
-                        
+                        await cache_redis_service.set_binary_data(cache_key, serialized_data, ttl=cache_ttl)
+
                         # 将缓存键关联到标签
                         for tag in tags:
-                            await redis_services.cache.add_key_to_tag(tag.value, cache_key)
+                            await cache_redis_service.add_key_to_tag(tag.value, cache_key)
                             
                     except TypeError as e:
                         # 如果序列化器抛出 TypeError，说明是不支持的缓存类型，记录并跳过
@@ -141,7 +143,7 @@ def invalidate(tags: List[CacheTags]):
             result = await func(*args, **kwargs)
             try:
                 for tag in tags:
-                    deleted_count = await redis_services.cache.invalidate_by_tag(tag.value)
+                    deleted_count = await cache_redis_service.invalidate_by_tag(tag.value)
                     logger.info(f"[CACHE_INVALIDATE] 标签: {tag.value}, 清理缓存项: {deleted_count}")
             except Exception as e:
                 logger.warning(f"缓存清理失败: {e}")

@@ -1,26 +1,20 @@
 from fastapi import APIRouter, Depends, Query, Request
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_, desc, asc
 
 from app.modules.auth.schemas import (
     UserCreate, UserResponse, UserUpdate
 )
-from app.modules.auth.repository import crud_user
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.auth.models import User
-from app.core.redis_manager import redis_services
 from app.api.dependencies import (
     get_current_active_user,
     get_current_superuser
 )
-from app.core.exceptions import (
-    UserNotFoundError,
-    InsufficientPermissionsError
-)
 from app.infrastructure.utils.common import handle_error
 from app.infrastructure.cache.cache_decorators import cache, invalidate
 from app.constant.cache_tags import CacheTags
+from app.modules.auth.service import auth_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -28,7 +22,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 @invalidate([CacheTags.USER_LIST])
 async def create_user(
     request: Request,
-    user_data: UserCreate, 
+    user_data: UserCreate,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_superuser)  # 只有超级用户可以创建用户
 ):
@@ -38,7 +32,7 @@ async def create_user(
     需要超级管理员权限
     """
     try:
-        return await crud_user.create_with_validation(db, obj_in=user_data)
+        return await auth_service.create_user(db=db, user_data=user_data)
     except Exception as e:
         raise handle_error(e)
 
@@ -57,21 +51,7 @@ async def update_user(
     只能更新自己的信息或者超级管理员可以更新任何用户
     """
     try:
-        # 检查权限：只能修改自己或者超级管理员可以修改任何人
-        if current_user.id != user_id and not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有足够权限更新其他用户")
-        
-        # 新增逻辑：防止非超级管理员用户将自己提升为超级管理员
-        if user_update.is_superuser is not None and not current_user.is_superuser:
-            raise InsufficientPermissionsError("只有超级管理员才能修改 is_superuser 字段")
-        
-        db_user = await crud_user.get(db, id=user_id)
-        if not db_user:
-            raise UserNotFoundError()
-        
-        updated_user = await crud_user.update(db, db_obj=db_user, obj_in=user_update)
-        
-        return updated_user
+        return await auth_service.update_user(db=db, user_id=user_id, user_update=user_update, current_user=current_user)
     except Exception as e:
         raise handle_error(e)
 
@@ -103,51 +83,18 @@ async def get_users(
     - 在字段名前加'-'表示降序排序，例如：-created_at
     - 支持多字段排序
     """
-    # 构建查询
-    query = select(User)
-    
-    # 应用过滤条件
-    filters = []
-    if name:
-        filters.append(or_(
-            User.username.ilike(f"%{name}%"),
-            User.full_name.ilike(f"%{name}%")
-        ))
-    
-    if email:
-        filters.append(User.email.ilike(f"%{email}%"))
-    
-    if age is not None:
-        filters.append(User.age == age)
-    
-    if is_active is not None:
-        filters.append(User.is_active == is_active)
-    else:
-        # 非超级用户默认只能看到已激活用户
-        if not current_user.is_superuser:
-            filters.append(User.is_active == True)
-    
-    if filters:
-        query = query.where(and_(*filters))
-    
-    # 应用排序
-    for sort_field in sort_by:
-        # 检查是否是降序排序（字段名前有'-'符号）
-        if sort_field.startswith('-'):
-            field_name = sort_field[1:]
-            # 确保字段存在于User模型中
-            if hasattr(User, field_name):
-                query = query.order_by(desc(getattr(User, field_name)))
-        else:
-            # 确保字段存在于User模型中
-            if hasattr(User, sort_field):
-                query = query.order_by(asc(getattr(User, sort_field)))
-    
-    # 执行查询
-    result = await db.execute(query)
-    users = result.scalars().all()
-    
-    return users
+    try:
+        return await auth_service.get_users(
+            db=db,
+            current_user=current_user,
+            name=name,
+            email=email,
+            age=age,
+            is_active=is_active,
+            sort_by=sort_by,
+        )
+    except Exception as e:
+        raise handle_error(e)
 
 @router.get("/{user_id}", response_model=UserResponse)
 @cache(tags=[CacheTags.USER_PROFILE],exclude_params=["request","db","current_user"])
@@ -163,19 +110,7 @@ async def get_user(
     需要认证权限
     """
     try:
-        # 如果查看自己的信息，直接返回当前用户
-        if current_user.id == user_id:
-            return current_user
-            
-        # 非超级用户不能查看其他用户详情
-        if not current_user.is_superuser:
-            raise InsufficientPermissionsError("没有足够权限查看其他用户详情")
-            
-        db_user = await crud_user.get(db, id=user_id)
-        if not db_user:
-            raise UserNotFoundError()
-            
-        return db_user
+        return await auth_service.get_user(db=db, user_id=user_id, current_user=current_user)
     except Exception as e:
         raise handle_error(e)
 
@@ -193,16 +128,6 @@ async def delete_user(
     需要超级管理员权限
     """
     try:
-        db_user = await crud_user.get(db, id=user_id)
-        if not db_user:
-            raise UserNotFoundError()
-            
-        # 不能删除自己
-        if current_user.id == user_id:
-            raise ValueError("不能删除自己的账户")
-            
-        deleted_user = await crud_user.delete(db, id=user_id)
-        
-        return deleted_user
+        return await auth_service.delete_user(db=db, user_id=user_id, current_user=current_user)
     except Exception as e:
-        raise handle_error(e) 
+        raise handle_error(e)
