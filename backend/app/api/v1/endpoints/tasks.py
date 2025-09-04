@@ -1,19 +1,8 @@
-"""
-任务系统API路由 - 重构版 v2.0
-使用新的CRUD + Redis架构，消除过度封装，实现职责分离
+"""任务系统API路由 - 使用服务层处理业务逻辑"""
 
-架构特点：
-- PostgreSQL: 存储静态配置
-- Redis: 管理调度状态和历史
-- 数据组合: API层组合两部分数据返回
-- 简化状态: 使用is_success二元状态
-"""
-
-import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
+from fastapi import APIRouter, Depends, Query, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Any, Dict, List, Optional
-from datetime import datetime
 
 from app.modules.auth.models import User
 from app.api.dependencies import get_current_superuser
@@ -41,14 +30,9 @@ from app.modules.tasks.schemas import (
     TaskInfoResponse,
     SystemDashboardResponse
 )
-from app.infrastructure.tasks.task_registry_decorators import SchedulerType, ScheduleAction
-from app.infrastructure.tasks import task_registry_decorators as tr
-from app.modules.tasks.repository import crud_task_config, crud_task_execution
 from app.infrastructure.cache.cache_decorators import cache, invalidate
 from app.constant.cache_tags import CacheTags
-from app.infrastructure.scheduler.scheduler import scheduler_service
-
-logger = logging.getLogger(__name__)
+from app.modules.tasks.service import task_service
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -68,43 +52,7 @@ async def create_task_config(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """创建任务配置（可选自动调度）"""
-    try:
-        # 1. 创建数据库配置（无status字段）
-        db_config = await crud_task_config.create(db, config)
-        
-        # 2. 如果需要自动启动调度（使用统一的调度服务）
-        if auto_schedule and config.scheduler_type != SchedulerType.MANUAL:
-            success, message = await scheduler_service.register_task(db_config)
-            if not success:
-                logger.warning(f"自动启动调度失败: {message}")
-        
-        # 3. 组合返回数据（配置 + 调度状态）
-        schedule_info = await scheduler_service.get_task_full_info(db_config.id)
-        
-        return {
-            # 数据库配置
-            'id': db_config.id,
-            'name': db_config.name,
-            'description': db_config.description,
-            'task_type': db_config.task_type,
-            'scheduler_type': db_config.scheduler_type.value,
-            'parameters': db_config.parameters,
-            'schedule_config': db_config.schedule_config,
-            'max_retries': db_config.max_retries,
-            'timeout_seconds': db_config.timeout_seconds,
-            'priority': db_config.priority,
-            'created_at': db_config.created_at,
-            'updated_at': db_config.updated_at,
-            
-            # Redis调度状态（来自增强的history服务）
-            'schedule_status': schedule_info.get('status'),
-            'is_scheduled': schedule_info.get('is_scheduled', False),
-            'status_consistent': schedule_info.get('status_consistent', True),
-            'recent_history': schedule_info.get('recent_history', [])
-        }
-    except Exception as e:
-        logger.error(f"创建任务配置失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.create_task_config(db=db, config=config, auto_schedule=auto_schedule)
 
 
 @router.get("/configs", response_model=TaskConfigListResponse)
@@ -121,56 +69,15 @@ async def list_task_configs(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取任务配置列表（带状态）"""
-    try:
-        query = TaskConfigQuery(
-            task_type=task_type,
-            name_search=name_search,
-            page=page,
-            page_size=page_size,
-            order_by=order_by,
-            order_desc=order_desc
-        )
-        
-        # 1. 从数据库获取配置列表
-        configs, total = await crud_task_config.get_by_query(db, query)
-        
-        # 2. 为每个配置获取调度状态
-        results = []
-        for config in configs:
-            schedule_info = await scheduler_service.get_task_full_info(config.id)
-            
-            config_data = {
-                # 数据库配置
-                'id': config.id,
-                'name': config.name,
-                'description': config.description,
-                'task_type': config.task_type,
-                'scheduler_type': config.scheduler_type.value,
-                'parameters': config.parameters,
-                'schedule_config': config.schedule_config,
-                'max_retries': config.max_retries,
-                'timeout_seconds': config.timeout_seconds,
-                'priority': config.priority,
-                'created_at': config.created_at,
-                'updated_at': config.updated_at,
-                
-                # Redis调度状态
-                'schedule_status': schedule_info.get('status'),
-                'is_scheduled': schedule_info.get('is_scheduled', False),
-                'status_consistent': schedule_info.get('status_consistent', True)
-            }
-            results.append(config_data)
-        
-        return {
-            'items': results,
-            'total': total,
-            'page': page,
-            'page_size': page_size,
-            'pages': (total + page_size - 1) // page_size
-        }
-    except Exception as e:
-        logger.error(f"获取任务配置列表失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    query = TaskConfigQuery(
+        task_type=task_type,
+        name_search=name_search,
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+        order_desc=order_desc,
+    )
+    return await task_service.list_task_configs(db=db, query=query)
 
 
 @router.get("/configs/{config_id}", response_model=TaskConfigDetailResponse)
@@ -183,47 +90,7 @@ async def get_task_config(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取单个配置详情"""
-    try:
-        # 1. 从数据库获取配置（无status字段）
-        config = await crud_task_config.get(db, config_id)
-        if not config:
-            raise HTTPException(status_code=404, detail="配置不存在")
-        
-        # 2. 从Redis获取独立的调度状态（增强的history服务）
-        schedule_info = await scheduler_service.get_task_full_info(config_id)
-        
-        result = {
-            # 数据库配置
-            'id': config.id,
-            'name': config.name,
-            'description': config.description,
-            'task_type': config.task_type,
-            'scheduler_type': config.scheduler_type.value,
-            'parameters': config.parameters,
-            'schedule_config': config.schedule_config,
-            'max_retries': config.max_retries,
-            'timeout_seconds': config.timeout_seconds,
-            'priority': config.priority,
-            'created_at': config.created_at,
-            'updated_at': config.updated_at,
-            
-            # Redis调度状态（统一服务，无重叠）
-            'schedule_status': schedule_info.get('status'),
-            'is_scheduled': schedule_info.get('is_scheduled', False),
-            'status_consistent': schedule_info.get('status_consistent', True),
-            'recent_history': schedule_info.get('recent_history', [])
-        }
-        
-        if include_stats:
-            stats = await crud_task_config.get_execution_stats(db, config_id)
-            result['stats'] = stats
-        
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取配置详情失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_task_config(db=db, config_id=config_id, include_stats=include_stats)
 
 
 @router.patch("/configs/{config_id}", response_model=TaskConfigResponse)
@@ -236,43 +103,7 @@ async def update_task_config(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """更新任务配置"""
-    try:
-        # 1. 检查配置是否存在
-        config = await crud_task_config.get(db, config_id)
-        if not config:
-            raise HTTPException(status_code=404, detail="配置不存在")
-        
-        # 2. 更新数据库配置
-        updated_config = await crud_task_config.update(db, config, update_data)
-        
-        # 3. 获取调度状态
-        schedule_info = await scheduler_service.get_task_full_info(config_id)
-        
-        return {
-            # 数据库配置
-            'id': updated_config.id,
-            'name': updated_config.name,
-            'description': updated_config.description,
-            'task_type': updated_config.task_type,
-            'scheduler_type': updated_config.scheduler_type.value,
-            'parameters': updated_config.parameters,
-            'schedule_config': updated_config.schedule_config,
-            'max_retries': updated_config.max_retries,
-            'timeout_seconds': updated_config.timeout_seconds,
-            'priority': updated_config.priority,
-            'created_at': updated_config.created_at,
-            'updated_at': updated_config.updated_at,
-            
-            # Redis调度状态
-            'schedule_status': schedule_info.get('status'),
-            'is_scheduled': schedule_info.get('is_scheduled', False),
-            'status_consistent': schedule_info.get('status_consistent', True)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"更新配置失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.update_task_config(db=db, config_id=config_id, update_data=update_data)
 
 
 @router.delete("/configs/{config_id}", response_model=TaskConfigDeleteResponse)
@@ -289,30 +120,7 @@ async def delete_task_config(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """删除配置（自动停止调度）"""
-    try:
-        # 1. 检查配置是否存在
-        config = await crud_task_config.get(db, config_id)
-        if not config:
-            raise HTTPException(status_code=404, detail="配置不存在")
-        
-        # 2. 先停止调度
-        await scheduler_service.unregister_task(config_id)
-        
-        # 3. 删除数据库配置
-        success = await crud_task_config.delete(db, config_id)
-        
-        if success:
-            return {
-                "success": True,
-                "message": f"配置 {config.name} 删除成功"
-            }
-        else:
-            raise HTTPException(status_code=500, detail="删除失败")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"删除配置失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.delete_task_config(db=db, config_id=config_id)
 
 
 # =============================================================================
@@ -329,22 +137,7 @@ async def start_schedule(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """启动任务调度"""
-    try:
-        config = await crud_task_config.get(db, config_id)
-        if not config:
-            raise HTTPException(status_code=404, detail="配置不存在")
-        
-        success, message = await scheduler_service.register_task(config)
-        return {
-            "success": success,
-            "message": message,
-            "config_id": config_id
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"启动调度失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.start_schedule(db=db, config_id=config_id)
 
 
 @router.post("/schedules/{config_id}/stop", response_model=ScheduleActionResponse)
@@ -355,16 +148,7 @@ async def stop_schedule(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """停止任务调度"""
-    try:
-        success, message = await scheduler_service.unregister_task(config_id)
-        return {
-            "success": success,
-            "message": message,
-            "config_id": config_id
-        }
-    except Exception as e:
-        logger.error(f"停止调度失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.stop_schedule(config_id=config_id)
 
 
 @router.post("/schedules/{config_id}/pause", response_model=ScheduleActionResponse)
@@ -375,16 +159,7 @@ async def pause_schedule(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """暂停任务调度"""
-    try:
-        success, message = await scheduler_service.pause_task(config_id)
-        return {
-            "success": success,
-            "message": message,
-            "config_id": config_id
-        }
-    except Exception as e:
-        logger.error(f"暂停调度失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.pause_schedule(config_id=config_id)
 
 
 @router.post("/schedules/{config_id}/resume", response_model=ScheduleActionResponse)
@@ -396,22 +171,7 @@ async def resume_schedule(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """恢复任务调度"""
-    try:
-        config = await crud_task_config.get(db, config_id)
-        if not config:
-            raise HTTPException(status_code=404, detail="配置不存在")
-        
-        success, message = await scheduler_service.resume_task(config)
-        return {
-            "success": success,
-            "message": message,
-            "config_id": config_id
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"恢复调度失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.resume_schedule(db=db, config_id=config_id)
 
 
 @router.get("/schedules", response_model=ScheduleListResponse)
@@ -421,15 +181,7 @@ async def get_all_schedules(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取所有调度状态"""
-    try:
-        schedules = await scheduler_service.get_all_schedules()
-        return {
-            "schedules": schedules,
-            "total": len(schedules)
-        }
-    except Exception as e:
-        logger.error(f"获取调度列表失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_all_schedules()
 
 
 @router.get("/schedules/{config_id}/history", response_model=ScheduleHistoryResponse)
@@ -439,16 +191,7 @@ async def get_schedule_history(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取调度历史"""
-    try:
-        history = await scheduler_service.state.get_history(config_id, limit)
-        return {
-            "config_id": config_id,
-            "history": history,
-            "count": len(history)
-        }
-    except Exception as e:
-        logger.error(f"获取调度历史失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_schedule_history(config_id=config_id, limit=limit)
 
 
 @router.get("/schedules/summary", response_model=ScheduleSummaryResponse)
@@ -456,12 +199,7 @@ async def get_schedule_summary(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取调度摘要"""
-    try:
-        summary = await scheduler_service.get_scheduler_summary()
-        return summary
-    except Exception as e:
-        logger.error(f"获取调度摘要失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_schedule_summary()
 
 
 # =============================================================================
@@ -477,32 +215,7 @@ async def get_config_executions(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """按配置获取执行记录"""
-    try:
-        executions = await crud_task_execution.get_executions_by_config(db, config_id, limit)
-        
-        results = []
-        for execution in executions:
-            results.append({
-                'id': execution.id,
-                'task_id': execution.task_id,
-                'config_id': execution.config_id,
-                'is_success': execution.is_success,
-                'started_at': execution.started_at,
-                'completed_at': execution.completed_at,
-                'duration_seconds': execution.duration_seconds,
-                'result': execution.result,
-                'error_message': execution.error_message,
-                'created_at': execution.created_at
-            })
-        
-        return {
-            "config_id": config_id,
-            "executions": results,
-            "count": len(results)
-        }
-    except Exception as e:
-        logger.error(f"获取配置执行记录失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_config_executions(db=db, config_id=config_id, limit=limit)
 
 
 @router.get("/executions/recent", response_model=RecentExecutionsResponse)
@@ -513,33 +226,7 @@ async def get_recent_executions(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取最近执行记录"""
-    try:
-        executions = await crud_task_execution.get_recent_executions(db, hours, limit)
-        
-        results = []
-        for execution in executions:
-            results.append({
-                'id': execution.id,
-                'task_id': execution.task_id,
-                'config_id': execution.config_id,
-                'config_name': execution.task_config.name if execution.task_config else None,
-                'task_type': execution.task_config.task_type if execution.task_config else None,
-                'is_success': execution.is_success,
-                'started_at': execution.started_at,
-                'completed_at': execution.completed_at,
-                'duration_seconds': execution.duration_seconds,
-                'error_message': execution.error_message,
-                'created_at': execution.created_at
-            })
-        
-        return {
-            "hours": hours,
-            "executions": results,
-            "count": len(results)
-        }
-    except Exception as e:
-        logger.error(f"获取最近执行记录失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_recent_executions(db=db, hours=hours, limit=limit)
 
 
 @router.get("/executions/failed", response_model=FailedExecutionsResponse)
@@ -550,34 +237,7 @@ async def get_failed_executions(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取失败执行记录"""
-    try:
-        executions = await crud_task_execution.get_failed_executions(db, days, limit)
-        
-        results = []
-        for execution in executions:
-            results.append({
-                'id': execution.id,
-                'task_id': execution.task_id,
-                'config_id': execution.config_id,
-                'config_name': execution.task_config.name if execution.task_config else None,
-                'task_type': execution.task_config.task_type if execution.task_config else None,
-                'is_success': execution.is_success,
-                'started_at': execution.started_at,
-                'completed_at': execution.completed_at,
-                'duration_seconds': execution.duration_seconds,
-                'error_message': execution.error_message,
-                'error_traceback': execution.error_traceback,
-                'created_at': execution.created_at
-            })
-        
-        return {
-            "days": days,
-            "failed_executions": results,
-            "count": len(results)
-        }
-    except Exception as e:
-        logger.error(f"获取失败执行记录失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_failed_executions(db=db, days=days, limit=limit)
 
 
 @router.get("/executions/stats")
@@ -590,16 +250,7 @@ async def get_execution_stats(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取执行统计"""
-    try:
-        if config_id:
-            stats = await crud_task_execution.get_stats_by_config(db, config_id, days)
-        else:
-            stats = await crud_task_execution.get_global_stats(db, days)
-        
-        return stats
-    except Exception as e:
-        logger.error(f"获取执行统计失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_execution_stats(db=db, config_id=config_id, days=days)
 
 
 @router.get("/executions/{task_id}", response_model=ExecutionDetailResponse)
@@ -609,31 +260,7 @@ async def get_execution_by_task_id(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """通过task_id查询执行记录"""
-    try:
-        execution = await crud_task_execution.get_by_task_id(db, task_id)
-        if not execution:
-            raise HTTPException(status_code=404, detail="执行记录不存在")
-        
-        return {
-            'id': execution.id,
-            'task_id': execution.task_id,
-            'config_id': execution.config_id,
-            'config_name': execution.task_config.name if execution.task_config else None,
-            'task_type': execution.task_config.task_type if execution.task_config else None,
-            'is_success': execution.is_success,
-            'started_at': execution.started_at,
-            'completed_at': execution.completed_at,
-            'duration_seconds': execution.duration_seconds,
-            'result': execution.result,
-            'error_message': execution.error_message,
-            'error_traceback': execution.error_traceback,
-            'created_at': execution.created_at
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"查询执行记录失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_execution_by_task_id(db=db, task_id=task_id)
 
 
 @router.delete("/executions/cleanup", response_model=ExecutionCleanupResponse)
@@ -645,16 +272,7 @@ async def cleanup_old_executions(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """清理旧执行记录（管理员）"""
-    try:
-        deleted_count = await crud_task_execution.cleanup_old_executions(db, days_to_keep)
-        return {
-            "success": True,
-            "deleted_count": deleted_count,
-            "message": f"清理了 {deleted_count} 条超过 {days_to_keep} 天的执行记录"
-        }
-    except Exception as e:
-        logger.error(f"清理执行记录失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.cleanup_execution_history(db=db, days_to_keep=days_to_keep)
 
 
 # =============================================================================
@@ -670,29 +288,7 @@ async def get_system_status(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """系统状态总览"""
-    try:
-        # 1. 获取配置统计
-        config_stats = await crud_task_config.get_stats(db)
-        
-        # 2. 获取调度状态摘要
-        schedule_summary = await scheduler_service.get_scheduler_summary()
-        
-        # 3. 获取执行统计
-        execution_stats = await crud_task_execution.get_global_stats(db, days=7)
-        
-        return {
-            "system_time": datetime.utcnow().isoformat(),
-            "scheduler_status": "运行中",
-            "database_status": "正常",
-            "redis_status": "正常",
-            
-            "config_stats": config_stats,
-            "schedule_summary": schedule_summary,
-            "execution_stats": execution_stats
-        }
-    except Exception as e:
-        logger.error(f"获取系统状态失败: {str(e)}")
-        raise HTTPException(status_code=503, detail=str(e))
+    return await task_service.get_system_status(db=db)
 
 
 @router.get("/system/health", response_model=SystemHealthResponse)
@@ -701,52 +297,7 @@ async def get_system_health(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """系统健康检查"""
-    try:
-        health_status = {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "components": {}
-        }
-        
-        # 数据库健康检查
-        try:
-            await crud_task_config.get_total_count(db)
-            health_status["components"]["database"] = {"status": "healthy", "message": "连接正常"}
-        except Exception as e:
-            health_status["components"]["database"] = {"status": "unhealthy", "message": str(e)}
-            health_status["status"] = "degraded"
-        
-        # Redis健康检查
-        try:
-            summary = await scheduler_service.get_scheduler_summary()
-            if "error" in summary:
-                health_status["components"]["redis"] = {"status": "unhealthy", "message": summary["error"]}
-                health_status["status"] = "degraded"
-            else:
-                health_status["components"]["redis"] = {"status": "healthy", "message": "连接正常"}
-        except Exception as e:
-            health_status["components"]["redis"] = {"status": "unhealthy", "message": str(e)}
-            health_status["status"] = "degraded"
-        
-        # 调度器健康检查
-        try:
-            schedules = await scheduler_service.get_all_schedules()
-            health_status["components"]["scheduler"] = {
-                "status": "healthy", 
-                "message": f"调度任务: {len(schedules)} 个"
-            }
-        except Exception as e:
-            health_status["components"]["scheduler"] = {"status": "unhealthy", "message": str(e)}
-            health_status["status"] = "degraded"
-        
-        return health_status
-    except Exception as e:
-        logger.error(f"健康检查失败: {str(e)}")
-        return {
-            "status": "unhealthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "error": str(e)
-        }
+    return await task_service.get_system_health(db=db)
 
 
 @router.get("/system/enums", response_model=SystemEnumsResponse)
@@ -756,16 +307,7 @@ async def get_system_enums(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取系统枚举值"""
-    try:
-        return {
-            "scheduler_types": [t.value for t in SchedulerType],
-            "schedule_actions": [a.value for a in ScheduleAction],
-            "task_types": list(tr.TASKS.keys()),
-            "schedule_statuses": ["active", "inactive", "paused", "error"]
-        }
-    except Exception as e:
-        logger.error(f"获取枚举值失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_system_enums()
 
 
 @router.get("/system/task-info", response_model=TaskInfoResponse)
@@ -775,17 +317,7 @@ async def get_task_info(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """获取所有任务的详细参数信息"""
-    try:
-        tasks_info = tr.list_all_tasks()
-        
-        return {
-            "tasks": tasks_info,
-            "total_count": len(tasks_info),
-            "generated_at": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"获取任务信息失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_task_info()
 
 
 @router.get("/system/dashboard", response_model=SystemDashboardResponse)
@@ -796,28 +328,4 @@ async def get_system_dashboard(
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
     """全局统计仪表板"""
-    try:
-        # 1. 配置统计
-        config_stats = await crud_task_config.get_stats(db)
-        
-        # 2. 调度状态摘要
-        schedule_summary = await scheduler_service.get_scheduler_summary()
-        
-        # 3. 执行统计（多个时间段）
-        stats_7d = await crud_task_execution.get_global_stats(db, days=7)
-        stats_30d = await crud_task_execution.get_global_stats(db, days=30)
-        
-        return {
-            "dashboard": {
-                "config_stats": config_stats,
-                "schedule_summary": schedule_summary,
-                "execution_stats": {
-                    "last_7_days": stats_7d,
-                    "last_30_days": stats_30d
-                },
-                "generated_at": datetime.utcnow().isoformat()
-            }
-        }
-    except Exception as e:
-        logger.error(f"获取仪表板数据失败: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await task_service.get_system_dashboard(db=db)

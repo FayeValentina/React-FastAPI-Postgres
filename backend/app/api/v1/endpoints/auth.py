@@ -4,21 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 from app.modules.auth.schemas import (
     LoginRequest,
-    UserCreate
+    UserCreate,
+    PasswordResetRequest,
+    PasswordResetConfirm,
+    PasswordResetResponse,
+    User,
+    Token,
+    RefreshTokenRequest,
+    TokenRevocationRequest,
 )
-from app.modules.auth.schemas import (
-    PasswordResetRequest, 
-    PasswordResetConfirm, 
-    PasswordResetResponse
-)
-from app.core.config import settings
-from app.core.security import verify_password, create_token_pair, verify_token, get_password_hash
-from app.modules.auth.repository import crud_user, crud_password_reset
-from app.infrastructure.external.email_service import email_service
 from app.infrastructure.database.postgres_base import get_async_session
-from app.modules.auth.schemas import User, Token, RefreshTokenRequest, TokenRevocationRequest
 from app.api.dependencies import get_current_active_user
-from app.core.exceptions import InvalidCredentialsError, InvalidRefreshTokenError
 from app.infrastructure.utils.common import handle_error
 from app.infrastructure.cache.cache_decorators import cache, invalidate
 from app.constant.cache_tags import CacheTags
@@ -26,6 +22,7 @@ from app.infrastructure.auth.auth_service import (
     AuthRedisService,
     get_auth_redis_service,
 )
+from app.modules.auth.service import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -46,42 +43,7 @@ async def login(
     - **remember_me**: 是否记住登录状态（如果为True，则延长令牌有效期）
     """
     try:
-        # 先尝试通过用户名查找
-        user = await crud_user.get_by_username(db, username=login_data.username)
-        if not user:
-            # 如果用户名未找到，尝试通过邮箱查找
-            user = await crud_user.get_by_email(db, email=login_data.username)
-        
-        if not user or not verify_password(login_data.password, user.hashed_password):
-            raise InvalidCredentialsError()
-        
-        # 创建令牌对
-        access_token, refresh_token, expires_at = create_token_pair(
-            subject=str(user.id), 
-            remember_me=login_data.remember_me
-        )
-        
-        # 在创建新令牌前，先吊销该用户的所有现有刷新令牌
-        revoke_success = await auth_redis.revoke_all_user_tokens(user.id)
-
-        # 将刷新令牌存储到Redis而不是数据库
-        store_success = await auth_redis.store_refresh_token(
-            token=refresh_token,
-            user_id=user.id,
-            expires_in_days=settings.security.REFRESH_TOKEN_EXPIRE_DAYS
-        )
-        
-        # 如果Redis存储失败，应该提供警告但不阻止登录
-        if not store_success:
-            logger.warning(f"刷新令牌存储到Redis失败，用户ID: {user.id}")
-            # 可以考虑降级方案或通知用户
-        
-        return Token(
-            access_token=access_token, 
-            refresh_token=refresh_token,
-            token_type="bearer",
-            expires_at=expires_at
-        )
+        return await auth_service.login(db=db, login_data=login_data, auth_redis=auth_redis)
     except Exception as e:
         raise handle_error(e)
 
@@ -103,46 +65,7 @@ async def refresh_token(
     这确保用户在任何时候只有一个有效的刷新令牌，提高系统安全性。
     """
     try:
-        # 验证刷新令牌的有效性
-        is_valid, payload, error_type = verify_token(refresh_data.refresh_token)
-        if not is_valid:
-            if error_type == "expired":
-                raise InvalidRefreshTokenError("刷新令牌已过期")
-            else:
-                raise InvalidRefreshTokenError()
-        
-        # 检查令牌类型
-        if payload.get("type") != "refresh_token":
-            raise InvalidRefreshTokenError("无效的令牌类型")
-        
-        # 从Redis检查刷新令牌是否存在
-        token_data = await auth_redis.get_refresh_token_payload(refresh_data.refresh_token)
-        if not token_data:
-            raise InvalidRefreshTokenError()
-        
-        # 提取用户标识
-        user_id = token_data.get("user_id")
-        if not user_id:
-            raise InvalidRefreshTokenError("令牌缺少用户标识")
-        
-        # 吊销当前使用的刷新令牌
-        await auth_redis.revoke_token(refresh_data.refresh_token)
-        
-        # 创建新的令牌对
-        access_token, new_refresh_token, expires_at = create_token_pair(subject=str(user_id))
-        
-        # 存储新的刷新令牌到Redis
-        await auth_redis.store_refresh_token(
-            token=new_refresh_token,
-            user_id=user_id
-        )
-        
-        return Token(
-            access_token=access_token,
-            refresh_token=new_refresh_token,
-            token_type="bearer",
-            expires_at=expires_at
-        )
+        return await auth_service.refresh_token(db=db, refresh_data=refresh_data, auth_redis=auth_redis)
     except Exception as e:
         raise handle_error(e)
 
@@ -161,11 +84,7 @@ async def revoke_token(
     - **token_type**: 令牌类型，默认为"refresh_token"
     """
     try:
-        if revocation_data.token_type != "refresh_token":
-            return
-        
-        # 吊销指定的刷新令牌（使用Redis服务）
-        await auth_redis.revoke_token(revocation_data.token)
+        await auth_service.revoke_token(revocation_data=revocation_data, auth_redis=auth_redis)
     except Exception as e:
         raise handle_error(e)
 
@@ -182,8 +101,7 @@ async def logout(
     此端点需要用户已通过JWT认证
     """
     try:
-        # 吊销用户的所有刷新令牌（从Redis）
-        await auth_redis.revoke_all_user_tokens(current_user.id)
+        await auth_service.logout(current_user=current_user, auth_redis=auth_redis)
     except Exception as e:
         raise handle_error(e)
 
@@ -204,8 +122,7 @@ async def register(
     - **full_name**: 全名（可选）
     """
     try:
-        # 使用统一的创建用户逻辑
-        return await crud_user.create_with_validation(db, obj_in=user_in)
+        return await auth_service.register_user(db=db, user_in=user_in)
     except Exception as e:
         raise handle_error(e)
 
@@ -221,7 +138,7 @@ async def read_users_me(
     
     此端点需要用户已通过JWT认证
     """
-    return current_user
+    return await auth_service.get_me(current_user)
 
 
 @router.post("/forgot-password", response_model=PasswordResetResponse)
@@ -235,32 +152,7 @@ async def forgot_password(
     - **email**: 用户邮箱地址
     """
     try:
-        # 查找用户
-        user = await crud_user.get_by_email(db, email=request_data.email)
-        
-        # 即使用户不存在，也返回成功消息（安全考虑，不暴露用户是否存在）
-        if not user:
-            return PasswordResetResponse(
-                message="如果该邮箱地址存在于我们的系统中，您将收到密码重置邮件"
-            )
-        
-        # 创建密码重置令牌
-        reset_token = await crud_password_reset.create(db, user_id=user.id)
-        
-        # 发送邮件
-        email_sent = await email_service.send_password_reset_email(
-            to_email=user.email,
-            reset_token=reset_token.token,
-            user_name=user.full_name or user.username
-        )
-        
-        if not email_sent:
-            raise ValueError("邮件发送失败，请稍后重试")
-        
-        return PasswordResetResponse(
-            message="如果该邮箱地址存在于我们的系统中，您将收到密码重置邮件"
-        )
-        
+        return await auth_service.forgot_password(db=db, request_data=request_data)
     except Exception as e:
         raise handle_error(e)
 
@@ -278,37 +170,7 @@ async def reset_password(
     - **new_password**: 新密码
     """
     try:
-        # 验证令牌
-        reset_token = await crud_password_reset.get_by_token(db, token=reset_data.token)
-        
-        if not reset_token or not reset_token.is_valid:
-            raise ValueError("无效或已过期的重置令牌")
-        
-        # 获取用户
-        user = await crud_user.get(db, id=reset_token.user_id)
-        if not user:
-            raise ValueError("用户不存在")
-        
-        # 更新密码
-        hashed_password = get_password_hash(reset_data.new_password)
-        user.hashed_password = hashed_password
-        
-        # 将修改后的用户对象添加到会话中（确保 SQLAlchemy 知道对象已被修改）
-        db.add(user)
-        
-        # 标记令牌为已使用
-        await crud_password_reset.use_token(db, token=reset_data.token)
-        
-        # 吊销用户的所有刷新令牌（强制重新登录）- 使用Redis服务
-        await auth_redis.revoke_all_user_tokens(user.id)
-        
-        await db.commit()
-        await db.refresh(user)
-        
-        return PasswordResetResponse(
-            message="密码重置成功，请使用新密码登录"
-        )
-        
+        return await auth_service.reset_password(db=db, reset_data=reset_data, auth_redis=auth_redis)
     except Exception as e:
         raise handle_error(e)
 
@@ -324,17 +186,6 @@ async def verify_reset_token(
     - **token**: 密码重置令牌
     """
     try:
-        reset_token = await crud_password_reset.get_by_token(db, token=token)
-        
-        if not reset_token or not reset_token.is_valid:
-            return PasswordResetResponse(
-                message="令牌无效或已过期",
-                success=False
-            )
-        
-        return PasswordResetResponse(
-            message="令牌有效"
-        )
-        
+        return await auth_service.verify_reset_token(db=db, token=token)
     except Exception as e:
         raise handle_error(e)
