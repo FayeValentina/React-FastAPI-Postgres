@@ -109,3 +109,13 @@ class CacheRedisService(RedisBase):
         except Exception as e:
             logger.error(f"根据标签失效缓存失败 (tag={tag}): {e}")
             return 0
+
+
+# 全局实例和依赖提供函数
+cache_redis_service = CacheRedisService()
+
+
+def get_cache_redis_service() -> CacheRedisService:
+    """FastAPI 依赖项：获取缓存相关的 Redis 服务"""
+    return cache_redis_service
+

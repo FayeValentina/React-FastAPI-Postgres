@@ -151,3 +151,13 @@ class AuthRedisService(RedisBase):
                 expired_count += 1
         
         return expired_count
+
+
+# 全局实例和依赖提供函数
+auth_redis_service = AuthRedisService()
+
+
+def get_auth_redis_service() -> AuthRedisService:
+    """FastAPI 依赖项：获取认证相关的 Redis 服务"""
+    return auth_redis_service
+

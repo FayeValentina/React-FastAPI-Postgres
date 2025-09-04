@@ -44,9 +44,9 @@ from app.modules.tasks.schemas import (
 from app.infrastructure.tasks.task_registry_decorators import SchedulerType, ScheduleAction
 from app.infrastructure.tasks import task_registry_decorators as tr
 from app.modules.tasks.repository import crud_task_config, crud_task_execution
-from app.core.redis_manager import redis_services
 from app.infrastructure.cache.cache_decorators import cache, invalidate
 from app.constant.cache_tags import CacheTags
+from app.infrastructure.scheduler.scheduler import scheduler_service
 
 logger = logging.getLogger(__name__)
 
@@ -74,12 +74,12 @@ async def create_task_config(
         
         # 2. 如果需要自动启动调度（使用统一的调度服务）
         if auto_schedule and config.scheduler_type != SchedulerType.MANUAL:
-            success, message = await redis_services.scheduler.register_task(db_config)
+            success, message = await scheduler_service.register_task(db_config)
             if not success:
                 logger.warning(f"自动启动调度失败: {message}")
         
         # 3. 组合返回数据（配置 + 调度状态）
-        schedule_info = await redis_services.scheduler.get_task_full_info(db_config.id)
+        schedule_info = await scheduler_service.get_task_full_info(db_config.id)
         
         return {
             # 数据库配置
@@ -137,7 +137,7 @@ async def list_task_configs(
         # 2. 为每个配置获取调度状态
         results = []
         for config in configs:
-            schedule_info = await redis_services.scheduler.get_task_full_info(config.id)
+            schedule_info = await scheduler_service.get_task_full_info(config.id)
             
             config_data = {
                 # 数据库配置
@@ -190,7 +190,7 @@ async def get_task_config(
             raise HTTPException(status_code=404, detail="配置不存在")
         
         # 2. 从Redis获取独立的调度状态（增强的history服务）
-        schedule_info = await redis_services.scheduler.get_task_full_info(config_id)
+        schedule_info = await scheduler_service.get_task_full_info(config_id)
         
         result = {
             # 数据库配置
@@ -246,7 +246,7 @@ async def update_task_config(
         updated_config = await crud_task_config.update(db, config, update_data)
         
         # 3. 获取调度状态
-        schedule_info = await redis_services.scheduler.get_task_full_info(config_id)
+        schedule_info = await scheduler_service.get_task_full_info(config_id)
         
         return {
             # 数据库配置
@@ -296,7 +296,7 @@ async def delete_task_config(
             raise HTTPException(status_code=404, detail="配置不存在")
         
         # 2. 先停止调度
-        await redis_services.scheduler.unregister_task(config_id)
+        await scheduler_service.unregister_task(config_id)
         
         # 3. 删除数据库配置
         success = await crud_task_config.delete(db, config_id)
@@ -334,7 +334,7 @@ async def start_schedule(
         if not config:
             raise HTTPException(status_code=404, detail="配置不存在")
         
-        success, message = await redis_services.scheduler.register_task(config)
+        success, message = await scheduler_service.register_task(config)
         return {
             "success": success,
             "message": message,
@@ -356,7 +356,7 @@ async def stop_schedule(
 ) -> Dict[str, Any]:
     """停止任务调度"""
     try:
-        success, message = await redis_services.scheduler.unregister_task(config_id)
+        success, message = await scheduler_service.unregister_task(config_id)
         return {
             "success": success,
             "message": message,
@@ -376,7 +376,7 @@ async def pause_schedule(
 ) -> Dict[str, Any]:
     """暂停任务调度"""
     try:
-        success, message = await redis_services.scheduler.pause_task(config_id)
+        success, message = await scheduler_service.pause_task(config_id)
         return {
             "success": success,
             "message": message,
@@ -401,7 +401,7 @@ async def resume_schedule(
         if not config:
             raise HTTPException(status_code=404, detail="配置不存在")
         
-        success, message = await redis_services.scheduler.resume_task(config)
+        success, message = await scheduler_service.resume_task(config)
         return {
             "success": success,
             "message": message,
@@ -422,7 +422,7 @@ async def get_all_schedules(
 ) -> Dict[str, Any]:
     """获取所有调度状态"""
     try:
-        schedules = await redis_services.scheduler.get_all_schedules()
+        schedules = await scheduler_service.get_all_schedules()
         return {
             "schedules": schedules,
             "total": len(schedules)
@@ -440,7 +440,7 @@ async def get_schedule_history(
 ) -> Dict[str, Any]:
     """获取调度历史"""
     try:
-        history = await redis_services.scheduler.state.get_history(config_id, limit)
+        history = await scheduler_service.state.get_history(config_id, limit)
         return {
             "config_id": config_id,
             "history": history,
@@ -457,7 +457,7 @@ async def get_schedule_summary(
 ) -> Dict[str, Any]:
     """获取调度摘要"""
     try:
-        summary = await redis_services.scheduler.get_scheduler_summary()
+        summary = await scheduler_service.get_scheduler_summary()
         return summary
     except Exception as e:
         logger.error(f"获取调度摘要失败: {str(e)}")
@@ -675,7 +675,7 @@ async def get_system_status(
         config_stats = await crud_task_config.get_stats(db)
         
         # 2. 获取调度状态摘要
-        schedule_summary = await redis_services.scheduler.get_scheduler_summary()
+        schedule_summary = await scheduler_service.get_scheduler_summary()
         
         # 3. 获取执行统计
         execution_stats = await crud_task_execution.get_global_stats(db, days=7)
@@ -718,7 +718,7 @@ async def get_system_health(
         
         # Redis健康检查
         try:
-            summary = await redis_services.scheduler.get_scheduler_summary()
+            summary = await scheduler_service.get_scheduler_summary()
             if "error" in summary:
                 health_status["components"]["redis"] = {"status": "unhealthy", "message": summary["error"]}
                 health_status["status"] = "degraded"
@@ -730,7 +730,7 @@ async def get_system_health(
         
         # 调度器健康检查
         try:
-            schedules = await redis_services.scheduler.get_all_schedules()
+            schedules = await scheduler_service.get_all_schedules()
             health_status["components"]["scheduler"] = {
                 "status": "healthy", 
                 "message": f"调度任务: {len(schedules)} 个"
@@ -801,7 +801,7 @@ async def get_system_dashboard(
         config_stats = await crud_task_config.get_stats(db)
         
         # 2. 调度状态摘要
-        schedule_summary = await redis_services.scheduler.get_scheduler_summary()
+        schedule_summary = await scheduler_service.get_scheduler_summary()
         
         # 3. 执行统计（多个时间段）
         stats_7d = await crud_task_execution.get_global_stats(db, days=7)

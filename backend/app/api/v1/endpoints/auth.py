@@ -14,7 +14,6 @@ from app.modules.auth.schemas import (
 from app.core.config import settings
 from app.core.security import verify_password, create_token_pair, verify_token, get_password_hash
 from app.modules.auth.repository import crud_user, crud_password_reset
-from app.core.redis_manager import redis_services
 from app.infrastructure.external.email_service import email_service
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.auth.schemas import User, Token, RefreshTokenRequest, TokenRevocationRequest
@@ -23,6 +22,10 @@ from app.core.exceptions import InvalidCredentialsError, InvalidRefreshTokenErro
 from app.infrastructure.utils.common import handle_error
 from app.infrastructure.cache.cache_decorators import cache, invalidate
 from app.constant.cache_tags import CacheTags
+from app.infrastructure.auth.auth_service import (
+    AuthRedisService,
+    get_auth_redis_service,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -33,6 +36,7 @@ async def login(
     request: Request,
     login_data: LoginRequest,
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    auth_redis: AuthRedisService = Depends(get_auth_redis_service),
 ) -> Token:
     """
     使用 JSON 数据登录获取访问令牌和刷新令牌
@@ -58,10 +62,10 @@ async def login(
         )
         
         # 在创建新令牌前，先吊销该用户的所有现有刷新令牌
-        revoke_success = await redis_services.auth.revoke_all_user_tokens(user.id)
-        
+        revoke_success = await auth_redis.revoke_all_user_tokens(user.id)
+
         # 将刷新令牌存储到Redis而不是数据库
-        store_success = await redis_services.auth.store_refresh_token(
+        store_success = await auth_redis.store_refresh_token(
             token=refresh_token,
             user_id=user.id,
             expires_in_days=settings.security.REFRESH_TOKEN_EXPIRE_DAYS
@@ -87,6 +91,7 @@ async def refresh_token(
     request: Request,
     refresh_data: RefreshTokenRequest,
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    auth_redis: AuthRedisService = Depends(get_auth_redis_service),
 ) -> Token:
     """
     使用刷新令牌获取新的访问令牌
@@ -111,7 +116,7 @@ async def refresh_token(
             raise InvalidRefreshTokenError("无效的令牌类型")
         
         # 从Redis检查刷新令牌是否存在
-        token_data = await redis_services.auth.get_refresh_token_payload(refresh_data.refresh_token)
+        token_data = await auth_redis.get_refresh_token_payload(refresh_data.refresh_token)
         if not token_data:
             raise InvalidRefreshTokenError()
         
@@ -121,13 +126,13 @@ async def refresh_token(
             raise InvalidRefreshTokenError("令牌缺少用户标识")
         
         # 吊销当前使用的刷新令牌
-        await redis_services.auth.revoke_token(refresh_data.refresh_token)
+        await auth_redis.revoke_token(refresh_data.refresh_token)
         
         # 创建新的令牌对
         access_token, new_refresh_token, expires_at = create_token_pair(subject=str(user_id))
         
         # 存储新的刷新令牌到Redis
-        await redis_services.auth.store_refresh_token(
+        await auth_redis.store_refresh_token(
             token=new_refresh_token,
             user_id=user_id
         )
@@ -146,7 +151,8 @@ async def refresh_token(
 async def revoke_token(
     revocation_data: TokenRevocationRequest,
     db: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[User, Depends(get_current_active_user)]
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_redis: AuthRedisService = Depends(get_auth_redis_service)
 ) -> None:
     """
     吊销刷新令牌
@@ -159,7 +165,7 @@ async def revoke_token(
             return
         
         # 吊销指定的刷新令牌（使用Redis服务）
-        await redis_services.auth.revoke_token(revocation_data.token)
+        await auth_redis.revoke_token(revocation_data.token)
     except Exception as e:
         raise handle_error(e)
 
@@ -167,7 +173,8 @@ async def revoke_token(
 @router.post("/logout", status_code=204)
 async def logout(
     current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)]
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    auth_redis: AuthRedisService = Depends(get_auth_redis_service)
 ) -> None:
     """
     登出并吊销用户的所有刷新令牌
@@ -176,7 +183,7 @@ async def logout(
     """
     try:
         # 吊销用户的所有刷新令牌（从Redis）
-        await redis_services.auth.revoke_all_user_tokens(current_user.id)
+        await auth_redis.revoke_all_user_tokens(current_user.id)
     except Exception as e:
         raise handle_error(e)
 
@@ -262,6 +269,7 @@ async def forgot_password(
 async def reset_password(
     reset_data: PasswordResetConfirm,
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    auth_redis: AuthRedisService = Depends(get_auth_redis_service),
 ) -> PasswordResetResponse:
     """
     重置密码
@@ -292,7 +300,7 @@ async def reset_password(
         await crud_password_reset.use_token(db, token=reset_data.token)
         
         # 吊销用户的所有刷新令牌（强制重新登录）- 使用Redis服务
-        await redis_services.auth.revoke_all_user_tokens(user.id)
+        await auth_redis.revoke_all_user_tokens(user.id)
         
         await db.commit()
         await db.refresh(user)

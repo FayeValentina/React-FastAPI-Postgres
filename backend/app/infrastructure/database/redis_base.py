@@ -361,3 +361,10 @@ class RedisBase:
             logger.error(f"Redis flushdb error: {e}")
             return False
 
+
+# FastAPI 依赖：提供 Redis 连接
+async def get_redis_connection():
+    """获取 Redis 客户端实例"""
+    return await redis_connection_manager.get_client()
+
+

@@ -42,7 +42,6 @@ backend/                        # FastAPI backend (Refactored v2.4)
 │   │   ├── security.py        # JWT and password handling
 │   │   ├── exceptions.py      # Custom exception classes
 │   │   ├── logging.py         # Logging configuration
-│   │   ├── redis_manager.py   # Unified Redis connection management
 │   │   ├── redis/             # Redis connection components
 │   │   │   ├── base.py        # Redis base class
 │   │   │   ├── config.py      # Redis configuration
@@ -355,7 +354,6 @@ poetry run pytest -v
 - `test_auth.py`: Authentication flow tests
 - `test_users.py`: User management tests
 - `test_task_management.py`: Task configuration and execution tests
-- `test_redis_services.py`: Redis service integration tests
 - `test_models.py`: Database model tests
 
 ## 📊 Database Management
@@ -427,7 +425,7 @@ docker run -p 8000:8000 --env-file .env reddit-scraper-backend
 ### Best Practices (Updated v2.4)
 - **Async/Await**: Use async operations for I/O
 - **Database**: Use CRUD classes for database operations
-- **Task Management**: Use `redis_services.scheduler` for task operations
+- **Task Management**: Use `scheduler_service` for task operations
 - **Status Handling**: Use boolean `is_success` for execution results
 - **Connection Management**: Use unified Redis connection pool
 - **Schema Organization**: Use modular schemas by functionality

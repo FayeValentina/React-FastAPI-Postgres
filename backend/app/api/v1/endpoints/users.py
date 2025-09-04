@@ -9,7 +9,6 @@ from app.modules.auth.schemas import (
 from app.modules.auth.repository import crud_user
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.auth.models import User
-from app.core.redis_manager import redis_services
 from app.api.dependencies import (
     get_current_active_user,
     get_current_superuser
