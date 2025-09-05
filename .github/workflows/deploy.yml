@@ -89,6 +89,27 @@ jobs:
         run: poetry run pytest --cov=app -q app/tests
         env:
           PYTHONPATH: .
+          
+          # 必需的安全配置 (使用虚拟值)
+          SECRET_KEY: "a_dummy_secret_key_for_testing"
+          ALGORITHM: "HS256"
+          
+          # 数据库配置 (使用虚拟值)
+          POSTGRES_HOST: "localhost"
+          POSTGRES_USER: "test_user"
+          POSTGRES_PASSWORD: "test_password"
+          POSTGRES_DB: "test_db"
+          POSTGRES_PORT: "5432"
+
+          # Redis 配置 (使用虚拟值)
+          REDIS_HOST: "localhost"
+          REDIS_PORT: "6379"
+
+          # RabbitMQ 配置 (使用虚拟值)
+          RABBITMQ_HOST: "localhost"
+          RABBITMQ_PORT: "5672"
+          RABBITMQ_USER: "guest"
+          RABBITMQ_PASSWORD: "guest"
 
   # ====================================================================
   # CI Job 3: Test Docker images build
