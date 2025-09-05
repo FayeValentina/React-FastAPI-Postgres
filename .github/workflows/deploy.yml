@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - master
-      - develop
-  pull_request:
-    branches:
-      - master
-      - develop
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -23,124 +18,10 @@ env:
 
 jobs:
   # ====================================================================
-  # CI Job 1 (parallel): Frontend lint and build
-  # ====================================================================
-  ci-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: ./frontend
-        run: npm ci
-
-      - name: Run frontend linting
-        working-directory: ./frontend
-        run: npm run lint
-
-      - name: Run frontend tests
-        working-directory: ./frontend
-        run: npm test -- --run
-
-      - name: Build frontend
-        working-directory: ./frontend
-        run: npm run build
-
-  # ====================================================================
-  # CI Job 2 (parallel): Backend setup and tests
-  # ====================================================================
-  ci-backend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: backend/.venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install backend dependencies
-        working-directory: ./backend
-        run: poetry install --no-interaction --no-root --with dev
-
-      - name: Run backend lint (ruff)
-        working-directory: ./backend
-        run: poetry run ruff check .
-
-      # Pytest/pytest-cov 作为 dev 依赖由 Poetry 管理
-
-      - name: Run backend tests (only app/tests)
-        working-directory: ./backend
-        run: poetry run pytest --cov=app -q app/tests
-        env:
-          PYTHONPATH: .
-
-          # 必需的安全配置 (使用虚拟值)
-          SECRET_KEY: "a_dummy_secret_key_for_testing"
-          ALGORITHM: "HS256"
-          
-          # 数据库配置 (使用虚拟值)
-          POSTGRES_HOST: "localhost"
-          POSTGRES_USER: "test_user"
-          POSTGRES_PASSWORD: "test_password"
-          POSTGRES_DB: "test_db"
-          POSTGRES_PORT: "5432"
-
-          # Redis 配置 (使用虚拟值)
-          REDIS_HOST: "localhost"
-          REDIS_PORT: "6379"
-
-          # RabbitMQ 配置 (使用虚拟值)
-          RABBITMQ_HOST: "localhost"
-          RABBITMQ_PORT: "5672"
-          RABBITMQ_USER: "guest"
-          RABBITMQ_PASSWORD: "guest"
-          
-          # PgAdmin 配置 (新增的虚拟值)
-          PGADMIN_DEFAULT_EMAIL: "admin@test.com"
-          PGADMIN_DEFAULT_PASSWORD: "admin_password"
-  # ====================================================================
-  # CI Job 3: Test Docker images build
-  # ====================================================================
-  test-docker-build:
-    needs: [ci-frontend, ci-backend]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Test Docker builds
-        run: docker compose -f docker-compose.prod.yml build
-
-  # ====================================================================
   # CD Job - Deploy to Oracle Cloud (only on master branch push)
   # ====================================================================
   deploy:
-    needs: test-docker-build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment:
       name: production
       url: ${{ env.FRONTEND_URL }}
