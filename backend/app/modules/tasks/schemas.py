@@ -1,7 +1,7 @@
 """
 任务配置相关的Pydantic模型
 """
-from pydantic import BaseModel, Field, validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
@@ -22,7 +22,7 @@ class TaskConfigBase(BaseModel):
     timeout_seconds: Optional[int] = Field(None, description="任务超时时间(秒)", gt=0)
     priority: int = Field(5, description="任务优先级(1-10)", ge=1, le=10)
     
-    @validator('task_type')
+    @field_validator('task_type')
     def validate_task_type(cls, v):
         from app.infrastructure.tasks import task_registry_decorators as tr
         if not tr.is_supported(v):
@@ -33,7 +33,7 @@ class TaskConfigBase(BaseModel):
 class TaskConfigCreate(TaskConfigBase):
     """创建任务配置"""
     
-    @validator('parameters')
+    @field_validator('parameters')
     def validate_parameters(cls, v, values):
         """验证任务参数"""
         task_type = values.get('task_type')
@@ -48,7 +48,7 @@ class TaskConfigCreate(TaskConfigBase):
                 
         return v
     
-    @validator('schedule_config')
+    @field_validator('schedule_config')
     def validate_schedule_config(cls, v, values):
         """验证调度配置"""
         scheduler_type = values.get('scheduler_type')

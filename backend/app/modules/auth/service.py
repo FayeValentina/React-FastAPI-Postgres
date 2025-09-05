@@ -232,7 +232,7 @@ class AuthService:
             filters.append(User.is_active == is_active)
         else:
             if not current_user.is_superuser:
-                filters.append(User.is_active == True)
+                filters.append(User.is_active.is_(True))
         if filters:
             query = query.where(and_(*filters))
         sort_fields = sort_by or ["created_at"]
@@ -277,4 +277,3 @@ class AuthService:
 
 
 auth_service = AuthService()
-

@@ -2,6 +2,8 @@
 任务注册系统（支持参数信息提取）
 """
 from typing import Dict, Optional, Callable, Set, List, Any, get_origin, get_args
+from enum import Enum
+
 import logging
 import importlib
 import pkgutil
@@ -215,7 +217,7 @@ def print_task_registry():
     print("=" * 50) 
 
 # 保留必要的枚举
-from enum import Enum
+ 
 
 class SchedulerType(str, Enum):
     """调度器类型枚举"""
@@ -240,7 +242,7 @@ def extract_config_id(job_id: str) -> Optional[int]:
     """从job_id提取config_id"""
     try:
         return int(job_id.split('_')[-1])
-    except:
+    except (ValueError, IndexError):
         return None
 
 def auto_discover_tasks(package_path: str = "app.modules.tasks.workers"):

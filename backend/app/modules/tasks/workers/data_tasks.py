@@ -42,7 +42,7 @@ async def export_data(
     """
     logger.info(f"开始导出数据... (Config ID: {config_id}, Format: {export_format})")
     
-    async with AsyncSessionLocal() as db:
+    async with AsyncSessionLocal():
         try:
             # 这里应该实现实际的数据导出逻辑
             
@@ -89,7 +89,7 @@ async def backup_data(
     """
     logger.info(f"开始备份数据... (Config ID: {config_id}, Type: {backup_type})")
     
-    async with AsyncSessionLocal() as db:
+    async with AsyncSessionLocal():
         try:
             # 这里应该实现实际的数据备份逻辑
             
