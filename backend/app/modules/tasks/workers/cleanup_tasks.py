@@ -35,6 +35,7 @@
    - 注意：TypeInfo 仅包含 type/args（无 raw），前端主要依赖 ui 渲染
 """
 from typing import Dict, Any, Optional, Annotated
+import datetime
 import logging
 
 from taskiq import Context, TaskiqDepends
@@ -42,8 +43,13 @@ from app.broker import broker
 from app.infrastructure.database.postgres_base import AsyncSessionLocal
 from app.modules.auth.repository import crud_password_reset
 from app.modules.content.repository import crud_reddit_content
+from app.modules.tasks.repository import crud_task_execution
+from app.infrastructure.auth.auth_service import auth_redis_service
 from app.infrastructure.tasks.exec_record_decorators import execution_handler
 from app.infrastructure.tasks.task_registry_decorators import task
+from app.infrastructure.utils.common import get_current_time
+from sqlalchemy import select, func
+from app.modules.tasks.models import TaskExecution
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +110,22 @@ async def cleanup_expired_tokens(
 @execution_handler
 async def cleanup_old_content(
     config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,  # 前端隐藏（后端自动注入/查询用）
-    days_old: Annotated[int, {"ui_hint": "number", "min": 1}] = 90,     # 数字输入，至少为 1
+    days_old: Annotated[
+        int,
+        {
+            "exclude_from_ui": False,
+            "ui_hint": "number",
+            "choices": [30, 90, 180, 365],
+            "label": "内容保留天数",
+            "description": "清理多少天前的旧内容（最小 1 天，默认 90 天）",
+            "placeholder": "如 90",
+            "min": 1,
+            "max": 3650,
+            "step": 1,
+            "pattern": "^[0-9]+$",
+            "example": 90,
+        },
+    ] = 90,     # 数字输入，至少为 1
     context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),  # 前端隐藏（依赖注入）
 ) -> Dict[str, Any]:
     """
@@ -127,3 +148,100 @@ async def cleanup_old_content(
         
         logger.info(f"清理旧内容完成: {result}")
         return result
+
+
+@task("CLEANUP_EXECUTIONS", queue="cleanup")
+@broker.task(
+    task_name="cleanup_old_executions",
+    queue="cleanup",
+    retry_on_error=True,
+    max_retries=3,
+)
+@execution_handler
+async def cleanup_old_executions_task(
+    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,  # 前端隐藏（与执行记录无强绑定，仅为统一参数）
+    days_to_keep: Annotated[
+        int,
+        {
+            "ui_hint": "number",
+            "label": "保留天数",
+            "description": "删除早于该天数的执行记录（默认 90 天）",
+            "placeholder": "如 90",
+            "min": 30,
+            "max": 3650,
+            "step": 1,
+            "choices": [30, 60, 90, 180, 365],
+            "example": 90,
+            "pattern": "^[0-9]+$",
+        },
+    ] = 90,
+    dry_run: Annotated[
+        bool,
+        {
+            "ui_hint": "boolean",
+            "label": "试运行(不执行删除)",
+            "description": "仅统计将要删除的记录数量，不执行实际删除",
+            "example": False,
+        },
+    ] = False,
+    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),  # 前端隐藏（依赖注入）
+) -> Dict[str, Any]:
+    """清理旧的执行记录（支持 dry-run 统计）。"""
+    logger.info(f"开始清理旧执行记录... 保留天数: {days_to_keep}, dry_run={dry_run}")
+
+    async with AsyncSessionLocal() as db:
+        cutoff = get_current_time() - datetime.timedelta(days=days_to_keep)
+
+        if dry_run:
+            # 仅统计将要删除的数量
+            result = await db.execute(
+                select(func.count(TaskExecution.id)).where(TaskExecution.created_at < cutoff)
+            )
+            would_delete = int(result.scalar() or 0)
+            summary = {
+                "config_id": config_id,
+                "days_to_keep": days_to_keep,
+                "dry_run": True,
+                "cutoff": cutoff.isoformat(),
+                "would_delete_count": would_delete,
+                "timestamp": get_current_time().isoformat(),
+            }
+            logger.info(f"执行记录清理试运行: {summary}")
+            return summary
+
+        # 实际删除
+        deleted = await crud_task_execution.cleanup_old_executions(db, days_to_keep=days_to_keep)
+        summary = {
+            "config_id": config_id,
+            "days_to_keep": days_to_keep,
+            "dry_run": False,
+            "cutoff": cutoff.isoformat(),
+            "deleted_count": int(deleted or 0),
+            "timestamp": get_current_time().isoformat(),
+        }
+        logger.info(f"执行记录清理完成: {summary}")
+        return summary
+
+
+@task("CLEANUP_AUTH_TOKENS", queue="cleanup")
+@broker.task(
+    task_name="cleanup_expired_auth_tokens",
+    queue="cleanup",
+    retry_on_error=True,
+    max_retries=3,
+)
+@execution_handler
+async def cleanup_expired_auth_tokens(
+    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
+    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
+) -> Dict[str, Any]:
+    """清理过期的认证刷新令牌（Redis）。"""
+    logger.info("开始清理过期的认证刷新令牌...")
+    count = await auth_redis_service.cleanup_expired_tokens()
+    result = {
+        "config_id": config_id,
+        "expired_token_deleted": int(count or 0),
+        "timestamp": get_current_time().isoformat(),
+    }
+    logger.info(f"清理过期认证令牌完成: {result}")
+    return result

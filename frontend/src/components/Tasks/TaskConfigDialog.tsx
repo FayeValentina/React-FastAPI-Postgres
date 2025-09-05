@@ -258,7 +258,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
                     onChange={(e) => handleParamChange(p.name, coerceOnChange(e.target.value, t))}
                   >
                     {(p.ui?.choices || []).map((opt, idx) => (
-                      <MenuItem key={`${p.name}-${idx}`} value={opt}>
+                      <MenuItem key={`${p.name}-${idx}`} value={String(opt)}>
                         {String(opt)}
                       </MenuItem>
                     ))}
