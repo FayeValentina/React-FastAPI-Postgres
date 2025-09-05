@@ -86,8 +86,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        - NODE_ENV=production
-        - VITE_API_URL=${FRONTEND_URL}/api
+        - VITE_API_URL=/api
     env_file:
       - .env.prod
     volumes:
