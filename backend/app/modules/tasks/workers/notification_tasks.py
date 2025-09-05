@@ -1,7 +1,7 @@
 """
 通知任务定义
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Annotated
 from datetime import datetime
 import logging
 
@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 )
 @execution_handler
 async def send_email(
-    config_id: Optional[int],
-    to_email: str,
+    to_email: Annotated[str, {"ui_hint": "email"}],
     subject: str,
-    context: Context = TaskiqDepends()
+    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
+    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
 ) -> Dict[str, Any]:
     """
     发送邮件

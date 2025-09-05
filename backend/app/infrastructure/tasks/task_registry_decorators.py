@@ -1,7 +1,18 @@
 """
-任务注册系统（支持参数信息提取）
+任务注册系统（支持参数信息提取 + Annotated UI元信息）
 """
-from typing import Dict, Optional, Callable, Set, List, Any, get_origin, get_args
+from typing import (
+    Dict,
+    Optional,
+    Callable,
+    Set,
+    List,
+    Any,
+    get_origin,
+    get_args,
+    Annotated,
+    Literal,
+)
 from enum import Enum
 
 import logging
@@ -11,20 +22,100 @@ import inspect
 
 logger = logging.getLogger(__name__)
 
-# 全局任务注册表
+# 全局任务注册表（唯一）
 TASKS: Dict[str, Dict] = {}
+
+
+def _unwrap_annotated(type_hint) -> tuple[Any, List[Any]]:
+    """如果是 typing.Annotated[T, meta...], 返回 (T, [meta...]); 否则 (type_hint, [])."""
+    try:
+        origin = get_origin(type_hint)
+        if origin is Annotated:
+            args = list(get_args(type_hint))
+            if args:
+                base = args[0]
+                meta = args[1:]
+                return base, meta
+    except Exception:
+        pass
+    return type_hint, []
+
+
+def _merge_ui_meta(meta_list: List[Any]) -> Optional[Dict[str, Any]]:
+    """将 Annotated 中的 meta 合并为字典，仅提取已知UI字段。"""
+    if not meta_list:
+        return None
+    ui: Dict[str, Any] = {}
+    keys = {
+        'exclude_from_ui', 'ui_hint', 'choices', 'label', 'description',
+        'placeholder', 'min', 'max', 'step', 'pattern', 'example'
+    }
+    for m in meta_list:
+        if m is None:
+            continue
+        if isinstance(m, dict):
+            for k, v in m.items():
+                if k in keys:
+                    ui[k] = v
+        else:
+            # 兼容对象形式的meta
+            for k in keys:
+                if hasattr(m, k):
+                    ui[k] = getattr(m, k)
+    return ui or None
+
+
+def _infer_ui_from_type(base_type: Any, param_name: str, default_repr: Optional[str]) -> Optional[Dict[str, Any]]:
+    """基于类型与名称的启发式 UI 推断（可被 Annotated 覆盖）。"""
+    ui: Dict[str, Any] = {}
+
+    try:
+        origin = get_origin(base_type)
+        # Literal → 下拉选择
+        if origin is Literal:
+            ui['ui_hint'] = ui.get('ui_hint') or 'select'
+            ui['choices'] = ui.get('choices') or list(get_args(base_type))
+    except Exception:
+        pass
+
+    # Enum → 下拉选择
+    try:
+        if inspect.isclass(base_type) and issubclass(base_type, Enum):
+            ui['ui_hint'] = ui.get('ui_hint') or 'select'
+            ui['choices'] = ui.get('choices') or [m.value for m in base_type]
+    except Exception:
+        pass
+
+    # 名称启发：email
+    if param_name.lower().endswith('email') and 'ui_hint' not in ui:
+        ui['ui_hint'] = 'email'
+
+    # 自动隐藏 context / fastapi.Depends 默认 / config_id
+    base_name = getattr(base_type, '__name__', str(base_type)).lower()
+    if param_name == 'config_id':
+        ui['exclude_from_ui'] = True
+    if param_name == 'context' or base_name == 'context':
+        ui['exclude_from_ui'] = True
+    if isinstance(default_repr, str) and (
+        'Dependency(' in default_repr or 'Depends(' in default_repr or 'TaskiqDepends' in default_repr
+    ):
+        ui['exclude_from_ui'] = True
+
+    return ui or None
 
 def _parse_type_annotation(type_hint) -> str:
     """递归解析类型注解，返回字符串表示"""
     if type_hint is None or type_hint is inspect.Parameter.empty:
         return "未指定"
-    
-    origin = get_origin(type_hint)
-    args = get_args(type_hint)
+    # 解包 Annotated
+    base_type, _ = _unwrap_annotated(type_hint)
+
+    origin = get_origin(base_type)
+    args = get_args(base_type)
     
     # 如果是基本类型或无参数的泛型，直接返回其名称
     if not origin:
-        type_name = getattr(type_hint, '__name__', str(type_hint))
+        type_name = getattr(base_type, '__name__', str(base_type))
         return type_name
     
     # 如果是泛型类型，则递归解析
@@ -34,7 +125,7 @@ def _parse_type_annotation(type_hint) -> str:
         return origin_name
     
     # 处理 Union 类型
-    if hasattr(type_hint, '__origin__') and str(type_hint).startswith('typing.Union'):
+    if hasattr(base_type, '__origin__') and str(base_type).startswith('typing.Union'):
         inner_types = " | ".join([_parse_type_annotation(arg) for arg in args])
         return f"({inner_types})"
     
@@ -45,15 +136,17 @@ def _parse_type_annotation(type_hint) -> str:
 def _parse_type_annotation_to_dict(type_hint) -> Dict[str, Any]:
     """递归解析类型注解，返回结构化的字典"""
     if type_hint is None or type_hint is inspect.Parameter.empty:
-        return {"type": "any", "raw": "未指定"}
-    
-    origin = get_origin(type_hint)
-    args = get_args(type_hint)
+        return {"type": "any"}
+    # 解包 Annotated
+    base_type, _ = _unwrap_annotated(type_hint)
+
+    origin = get_origin(base_type)
+    args = get_args(base_type)
     
     # 如果是基本类型或无参数的泛型，直接返回其名称
     if not origin:
-        type_name = getattr(type_hint, '__name__', str(type_hint))
-        return {"type": type_name.lower(), "raw": type_name}
+        type_name = getattr(base_type, '__name__', str(base_type))
+        return {"type": type_name.lower()}
 
     origin_name = getattr(origin, '__name__', str(origin)).lower()
     
@@ -65,13 +158,11 @@ def _parse_type_annotation_to_dict(type_hint) -> Dict[str, Any]:
             return {
                 "type": "optional",
                 "args": [_parse_type_annotation_to_dict(non_none_args[0])],
-                "raw": str(type_hint)
             }
         # 普通的 Union 类型
         return {
             "type": "union",
             "args": [_parse_type_annotation_to_dict(arg) for arg in args],
-            "raw": str(type_hint)
         }
 
     # 处理其他泛型类型
@@ -79,13 +170,9 @@ def _parse_type_annotation_to_dict(type_hint) -> Dict[str, Any]:
         return {
             "type": origin_name,
             "args": [_parse_type_annotation_to_dict(arg) for arg in args],
-            "raw": str(type_hint)
         }
     else:
-        return {
-            "type": origin_name,
-            "raw": str(type_hint)
-        }
+        return {"type": origin_name}
 
 def _extract_parameter_info(func: Callable) -> List[Dict[str, Any]]:
     """提取函数参数信息"""
@@ -94,16 +181,30 @@ def _extract_parameter_info(func: Callable) -> List[Dict[str, Any]]:
         params_info = []
         
         for name, param in sig.parameters.items():
+            # 解包 Annotated 获取基础类型与UI元信息
+            base_type, meta_list = _unwrap_annotated(param.annotation)
+            type_str = _parse_type_annotation(base_type)
+            type_info = _parse_type_annotation_to_dict(base_type)
+            default_repr = (
+                repr(param.default) if param.default is not inspect.Parameter.empty 
+                else None
+            )
+            required = param.default is inspect.Parameter.empty
+            kind = str(param.kind).replace('Parameter.', '').lower()
+
+            # 合并UI元信息：推断 < Annotated 覆盖
+            inferred_ui = _infer_ui_from_type(base_type, name, default_repr) or {}
+            annotated_ui = _merge_ui_meta(meta_list) or {}
+            ui = {**inferred_ui, **annotated_ui} if (inferred_ui or annotated_ui) else None
+
             param_info = {
                 'name': param.name,
-                'type': _parse_type_annotation(param.annotation),
-                'type_info': _parse_type_annotation_to_dict(param.annotation),
-                'default': (
-                    repr(param.default) if param.default is not inspect.Parameter.empty 
-                    else None
-                ),
-                'required': param.default is inspect.Parameter.empty,
-                'kind': str(param.kind).replace('Parameter.', '').lower()
+                'type': type_str,
+                'type_info': type_info,
+                'default': default_repr,
+                'required': required,
+                'kind': kind,
+                'ui': ui,
             }
             params_info.append(param_info)
             
