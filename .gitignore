@@ -105,7 +105,8 @@ htmlcov/
 
 # pytest
 .pytest_cache/
-
+backend/.env.dev
+backend/pytest.ini
 # mypy
 .mypy_cache/
 .dmypy.json
