@@ -125,6 +125,26 @@ class SchedulerCoreService:
         try:
             args = [config.id]
             kwargs = config.parameters or {}
+
+            # 参数校验：确保所有必填参数都已在配置中提供
+            try:
+                params = tr.get_parameters(config.task_type) or []
+                required_names = [
+                    p.get("name")
+                    for p in params
+                    if p.get("required") and p.get("name") not in ("config_id", "context")
+                ]
+                missing = [name for name in required_names if name not in kwargs or kwargs.get(name) in (None, "")]
+                if missing:
+                    logger.error(
+                        "任务参数缺失，无法注册调度: task_type=%s, config_id=%s, missing=%s",
+                        config.task_type,
+                        config.id,
+                        ",".join(missing),
+                    )
+                    return None
+            except Exception as e:
+                logger.warning("任务参数校验失败(忽略并继续): %s", e)
             
             task_id = f"scheduled_task_{config.id}"
             

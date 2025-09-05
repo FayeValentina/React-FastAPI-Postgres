@@ -26,7 +26,6 @@ async def send_email(
     config_id: Optional[int],
     to_email: str,
     subject: str,
-    content: str,
     context: Context = TaskiqDepends()
 ) -> Dict[str, Any]:
     """
@@ -43,7 +42,7 @@ async def send_email(
     """
     logger.info(f"开始发送邮件到 {to_email}... (Config ID: {config_id})")
     
-    async with AsyncSessionLocal() as db:
+    async with AsyncSessionLocal():
         try:
             # 这里应该实现实际的邮件发送逻辑
             # 使用email_service等

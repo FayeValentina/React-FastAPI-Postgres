@@ -220,7 +220,7 @@ class CRUDPasswordReset:
             update(PasswordReset)
             .where(
                 PasswordReset.user_id == user_id,
-                PasswordReset.is_used == False
+                PasswordReset.is_used.is_(False)
             )
             .values(
                 is_used=True,
@@ -246,7 +246,7 @@ class CRUDPasswordReset:
         # 条件1: 令牌已使用 (is_used == True)
         # 条件2: 令牌已过期 (expires_at < 当前时间)
         is_invalid_condition = (
-            (PasswordReset.is_used == True) | 
+            (PasswordReset.is_used.is_(True)) |
             (PasswordReset.expires_at < current_time)
         )
 

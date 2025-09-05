@@ -220,7 +220,7 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
                             json_body = json.loads(body)
                             self._filter_sensitive_data(json_body)
                             info["body"] = self._truncate_body(json.dumps(json_body, ensure_ascii=False))
-                        except:
+                        except Exception:
                             info["body"] = self._truncate_body(body.decode('utf-8', errors='replace'))
                     else:
                         content_type = response.headers.get("content-type", "")
@@ -241,7 +241,7 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
         if isinstance(body, bytes):
             try:
                 body = body.decode('utf-8', errors='replace')
-            except:
+            except Exception:
                 return f"[Binary data, length: {len(body)} bytes]"
                 
         if isinstance(body, str) and len(body) > self.max_body_length:

@@ -408,7 +408,7 @@ class CRUDTaskExecution:
             .where(
                 and_(
                     TaskExecution.started_at >= start_time,
-                    TaskExecution.is_success == False
+                    TaskExecution.is_success.is_(False)
                 )
             )
             .order_by(TaskExecution.started_at.desc())
@@ -459,7 +459,7 @@ class CRUDTaskExecution:
                 select(func.count(TaskExecution.id))
                 .where(and_(
                     TaskExecution.started_at >= start_time,
-                    TaskExecution.is_success == True
+                    TaskExecution.is_success.is_(True)
                 ))
             )
             success_count = success_result.scalar() or 0
@@ -468,7 +468,7 @@ class CRUDTaskExecution:
                 select(func.count(TaskExecution.id))
                 .where(and_(
                     TaskExecution.started_at >= start_time,
-                    TaskExecution.is_success == False
+                    TaskExecution.is_success.is_(False)
                 ))
             )
             failed_count = failed_result.scalar() or 0
@@ -491,7 +491,7 @@ class CRUDTaskExecution:
                 .where(
                     and_(
                         TaskExecution.started_at >= start_time,
-                        TaskExecution.is_success == True,
+                        TaskExecution.is_success.is_(True),
                         TaskExecution.duration_seconds.isnot(None)
                     )
                 )
@@ -546,7 +546,7 @@ class CRUDTaskExecution:
                     and_(
                         TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time,
-                        TaskExecution.is_success == True
+                        TaskExecution.is_success.is_(True)
                     )
                 )
             )
@@ -558,7 +558,7 @@ class CRUDTaskExecution:
                     and_(
                         TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time,
-                        TaskExecution.is_success == False
+                        TaskExecution.is_success.is_(False)
                     )
                 )
             )
@@ -571,7 +571,7 @@ class CRUDTaskExecution:
                     and_(
                         TaskExecution.config_id == config_id,
                         TaskExecution.started_at >= start_time,
-                        TaskExecution.is_success == True,
+                        TaskExecution.is_success.is_(True),
                         TaskExecution.duration_seconds.isnot(None)
                     )
                 )

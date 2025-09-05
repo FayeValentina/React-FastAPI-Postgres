@@ -6,129 +6,185 @@ on:
   pull_request:
     branches: [ master ]
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
-  # Domain is provided via GitHub Repository Variables (Settings → Variables → Actions)
   DOMAIN_MAIN: ${{ vars.DOMAIN_MAIN }}
   FRONTEND_URL: https://${{ vars.DOMAIN_MAIN }}
 
 jobs:
-  # CI Job - Code Quality & Testing
-  ci:
+  # ====================================================================
+  # CI Job 1 (parallel): Frontend lint and build
+  # ====================================================================
+  ci-frontend:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    # Frontend CI
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-    
-    - name: Install frontend dependencies
-      working-directory: ./frontend
-      run: npm ci
-    
-    - name: Run frontend linting
-      working-directory: ./frontend
-      run: npm run lint
-    
-    - name: Build frontend
-      working-directory: ./frontend
-      run: npm run build
-    
-    # Backend CI
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-    
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v3
-      with:
-        path: backend/.venv
-        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-    
-    - name: Install backend dependencies
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      working-directory: ./backend
-      run: poetry install --no-interaction --no-root
-      
-    # Docker Build Test
-    - name: Test Docker builds
-      run: |
-        docker compose -f docker-compose.prod.yml build
-    
-  # CD Job - Deploy to Oracle Cloud (only on master branch push)
-  deploy:
-    needs: ci
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run frontend linting
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: npm test -- --run
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+  # ====================================================================
+  # CI Job 2 (parallel): Backend setup and tests
+  # ====================================================================
+  ci-backend:
     runs-on: ubuntu-latest
-    # This job only runs on push events to the master branch, not on pull requests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: backend/.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: poetry install --no-interaction --no-root --with dev
+
+      - name: Run backend lint (ruff)
+        working-directory: ./backend
+        run: poetry run ruff check .
+
+      # Pytest/pytest-cov 作为 dev 依赖由 Poetry 管理
+
+      - name: Run backend tests (only app/tests)
+        working-directory: ./backend
+        run: poetry run pytest --cov=app -q app/tests
+        env:
+          PYTHONPATH: .
+
+          # 必需的安全配置 (使用虚拟值)
+          SECRET_KEY: "a_dummy_secret_key_for_testing"
+          ALGORITHM: "HS256"
+          
+          # 数据库配置 (使用虚拟值)
+          POSTGRES_HOST: "localhost"
+          POSTGRES_USER: "test_user"
+          POSTGRES_PASSWORD: "test_password"
+          POSTGRES_DB: "test_db"
+          POSTGRES_PORT: "5432"
+
+          # Redis 配置 (使用虚拟值)
+          REDIS_HOST: "localhost"
+          REDIS_PORT: "6379"
+
+          # RabbitMQ 配置 (使用虚拟值)
+          RABBITMQ_HOST: "localhost"
+          RABBITMQ_PORT: "5672"
+          RABBITMQ_USER: "guest"
+          RABBITMQ_PASSWORD: "guest"
+          
+          # PgAdmin 配置 (新增的虚拟值)
+          PGADMIN_DEFAULT_EMAIL: "admin@test.com"
+          PGADMIN_DEFAULT_PASSWORD: "admin_password"
+  # ====================================================================
+  # CI Job 3: Test Docker images build
+  # ====================================================================
+  test-docker-build:
+    needs: [ci-frontend, ci-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test Docker builds
+        run: docker compose -f docker-compose.prod.yml build
+
+  # ====================================================================
+  # CD Job - Deploy to Oracle Cloud (only on master branch push)
+  # ====================================================================
+  deploy:
+    needs: test-docker-build
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    # deploy to production environment
     environment:
       name: production
       url: ${{ env.FRONTEND_URL }}
-    
+
     steps:
-    - name: Deploy to Oracle Cloud
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.OCI_SSH_HOST }}
-        username: ${{ secrets.OCI_SSH_USER }}
-        key: ${{ secrets.OCI_SSH_KEY }}
-        script: |
-          # set -euo pipefail is a bash script that will exit the script if any command fails
-          set -euo pipefail
+      - name: Deploy to Oracle Cloud
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.OCI_SSH_HOST }}
+          username: ${{ secrets.OCI_SSH_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            set -euo pipefail
 
-          # Navigate to project directory
-          cd ~/web-app
-          
-          # Pull latest code
-          echo "🔄 Pulling latest code..."
-          git pull origin master
-          
-          # Create production environment file
+            cd ~/web-app
 
-          echo "📝 Creating production environment file..."
-          echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
+            echo "Pulling latest code..."
+            git pull origin master
 
-          # Ensure nginx entrypoint is executable and normalized (avoid CRLF issues)
-          echo "🔧 Ensuring nginx entrypoint permissions..."
-          chmod +x nginx/entrypoint.sh || true
-          sed -i 's/\r$//' nginx/entrypoint.sh || true
-                    
-          # Build new images, utilizing Docker cache
-          echo "🏗️ Building production images..."
-          docker compose -f docker-compose.prod.yml --env-file .env.prod build
-          
-          # Stop existing services
-          echo "🛑 Stopping existing services..."
-          docker compose -f docker-compose.prod.yml --env-file .env.prod down
-          
-          # Start new services with scaling, pulling latest base images
-          echo "🚀 Starting new services..."
-          # Now this line will work correctly with proper scaling
+            # Create production environment file temporarily (required by compose env_file directives)
+            echo "Creating production environment file (temporary)..."
+            echo '${{ secrets.ENV_PROD_VARS }}' > .env.prod
+            trap 'rm -f .env.prod' EXIT
 
-          docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always
+            echo "Ensuring nginx entrypoint permissions..."
+            chmod +x nginx/entrypoint.sh || true
+            sed -i 's/\r$//' nginx/entrypoint.sh || true
 
-          # Wait for services to be healthy
-          echo "⏳ Waiting for services to be ready..."
-          sleep 30
-          
-          # Check service status
-          echo "✅ Checking service status..."
-          docker compose -f docker-compose.prod.yml ps
-          
-          # Clean up unused Docker images and build cache (safely)
-          echo "🧹 Cleaning up unused Docker resources..."
-          docker system prune -f
-          
-          echo "🎉 Deployment completed successfully!"
+            echo "Building production images..."
+            docker compose -f docker-compose.prod.yml --env-file .env.prod build
+
+            echo "Stopping existing services..."
+            docker compose -f docker-compose.prod.yml --env-file .env.prod down
+
+            echo "Starting new services..."
+            docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always
+
+            echo "Waiting for services to be ready..."
+            timeout 120s bash -c ' \
+              until curl -fsS http://localhost/api/health > /dev/null; do \
+                echo "Service not ready yet, retrying in 5 seconds..."; \
+                sleep 5; \
+              done'
+
+            echo "Checking service status..."
+            docker compose -f docker-compose.prod.yml ps
+
+            echo "Cleaning up unused Docker resources..."
+            docker system prune -af
+
+            echo "Deployment completed successfully!"

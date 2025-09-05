@@ -26,9 +26,7 @@ class RedditPostBase(BaseModel):
 class RedditPostResponse(RedditPostBase):
     id: str
     scraped_at: datetime
-
-    class Config:
-        model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
 class RedditCommentBase(BaseModel):
     author: Optional[str] = None
@@ -47,9 +45,7 @@ class RedditCommentResponse(RedditCommentBase):
     id: str
     post_id: str
     scraped_at: datetime
-
-    class Config:
-        model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
 class RedditContentListResponse(BaseModel):
     posts: Optional[List[RedditPostResponse]] = None
