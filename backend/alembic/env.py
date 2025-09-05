@@ -30,8 +30,11 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(current_dir)
 
 # 导入你的 SQLAlchemy 模型
-from app.db.base import Base
-from app.models import *
+from app.infrastructure.database.postgres_base import Base
+from app.modules.auth.models import User
+from app.modules.auth.models import PasswordReset
+from app.modules.content.models import RedditComment,RedditPost
+from app.modules.tasks.models import TaskConfig, TaskExecution
 from app.core.config import settings
 
 # this is the Alembic Config object

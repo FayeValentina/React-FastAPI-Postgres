@@ -41,6 +41,35 @@ gunicorn = "^21.2.0"
 
 [tool.poetry.group.dev.dependencies]
 taskiq = {extras = ["reload"], version = "^0.11.18"}
+ruff = "^0.6.2"
+pytest = "^8.3.2"
+pytest-cov = "^6.0.0"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [
+  ".venv",
+  "alembic",
+  "migrations",
+  "__pycache__",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+]
+ignore = [
+  "E501",  # line length handled elsewhere to reduce noise
+  "F401",  # unused imports (phase-in later)
+  "F403",  # from module import *
+  "F405",  # name may be undefined from * import
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+combine-as-imports = true
 
 [build-system]
 requires = ["poetry-core"]

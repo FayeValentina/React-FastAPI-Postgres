@@ -245,7 +245,7 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 15 &&
-        poetry run taskiq worker --fs-discover --tasks-pattern 'app/tasks/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
+        poetry run taskiq worker --fs-discover --tasks-pattern 'app/modules/tasks/workers/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
       "
     networks:
       - prodNetWork

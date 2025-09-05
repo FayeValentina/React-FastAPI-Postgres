@@ -90,19 +90,19 @@ def setup_logging(
             "serialize": json_logs,
             "level": log_level,
             "format": simple_format,
-            "filter": lambda record: "request_id" not in record["extra"] and record["name"] != "app.middleware.logging"
+            "filter": lambda record: "request_id" not in record["extra"] and record["name"] != "app.api.middleware.logging"
         },
         {
             "sink": sys.stdout,
             "level": log_level,
             "format": log_format,
-            "filter": lambda record: "request_id" in record["extra"] and record["name"] != "app.middleware.logging"
+            "filter": lambda record: "request_id" in record["extra"] and record["name"] != "app.api.middleware.logging"
         },
         {
             "sink": sys.stdout,
             "level": "INFO",
             "format": "\n{message}",  # logging 中间件使用简化格式
-            "filter": lambda record: record["name"] == "app.middleware.logging"
+            "filter": lambda record: record["name"] == "app.api.middleware.logging"
         }
     ]
 
