@@ -2,9 +2,13 @@ name: Deploy to Oracle Cloud
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+      - develop
   pull_request:
-    branches: [ master ]
+    branches:
+      - master
+      - develop
 
 concurrency:
   group: deploy-${{ github.ref }}
