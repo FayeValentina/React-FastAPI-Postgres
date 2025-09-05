@@ -3,10 +3,9 @@ FROM node:20-slim as builder
 
 WORKDIR /app
 
-# 传入并导出构建期环境变量（供 Vite 使用）
-ARG NODE_ENV=production
+# 传入构建期环境变量（供 Vite 使用）。
+# 注意：不要在构建阶段设置/暴露 NODE_ENV=production，以免 npm ci 跳过 devDependencies。
 ARG VITE_API_URL
-ENV NODE_ENV=$NODE_ENV
 ENV VITE_API_URL=$VITE_API_URL
 
 # 复制 package 文件并安装依赖（使用 ci 确保锁定版本）
