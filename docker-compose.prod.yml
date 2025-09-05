@@ -57,7 +57,7 @@ services:
       oauth2_proxy:
         condition: service_healthy
       frontend_builder:
-        condition: service_started
+        condition: service_completed_successfully
       backend:
         condition: service_started
       portainer:

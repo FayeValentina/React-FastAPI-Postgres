@@ -3,7 +3,12 @@ FROM node:20-slim as builder
 
 WORKDIR /app
 
-# 复制package文件并安装所有依赖
+# 传入构建期环境变量（供 Vite 使用）。
+# 注意：不要在构建阶段设置/暴露 NODE_ENV=production，以免 npm ci 跳过 devDependencies。
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
+# 复制 package 文件并安装依赖（使用 ci 确保锁定版本）
 COPY package*.json ./
 RUN npm ci
 
@@ -11,13 +16,13 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# 生产阶段：轻量级容器，只包含构建结果
+# 运行阶段：仅负责将构建产物复制到挂载的 volume 中
 FROM alpine:latest
 
 WORKDIR /app
 
-# 复制构建好的文件
-COPY --from=builder /app/dist ./dist
+# 将构建好的文件放到不会被挂载覆盖的位置
+COPY --from=builder /app/dist /build
 
-# 容器启动后立即退出，构建结果保留在volume中
-CMD ["echo", "Frontend build completed"]
+# 启动时将 /build 内容复制到挂载卷 /app/dist 中
+CMD ["sh", "-c", "mkdir -p /app/dist && rm -rf /app/dist/* && cp -r /build/* /app/dist/ && echo 'Frontend build copied to volume'"]

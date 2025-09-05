@@ -48,6 +48,14 @@ location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
     access_log off;
 }
 
+# 确保 HTML 外壳不过期，避免发布后旧页面缓存
+location = /index.html {
+    root /usr/share/nginx/html;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+}
+
 # 前端路由 - 生产环境直接服务静态文件
 location / {
     root /usr/share/nginx/html;
@@ -80,4 +88,3 @@ location ~ /(\\.git|\\.env|docker-compose|Dockerfile) {
     access_log off;
     log_not_found off;
 }
-
