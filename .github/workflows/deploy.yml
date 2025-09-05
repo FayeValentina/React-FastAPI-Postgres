@@ -89,7 +89,7 @@ jobs:
         run: poetry run pytest --cov=app -q app/tests
         env:
           PYTHONPATH: .
-          
+
           # 必需的安全配置 (使用虚拟值)
           SECRET_KEY: "a_dummy_secret_key_for_testing"
           ALGORITHM: "HS256"
@@ -110,7 +110,10 @@ jobs:
           RABBITMQ_PORT: "5672"
           RABBITMQ_USER: "guest"
           RABBITMQ_PASSWORD: "guest"
-
+          
+          # PgAdmin 配置 (新增的虚拟值)
+          PGADMIN_DEFAULT_EMAIL: "admin@test.com"
+          PGADMIN_DEFAULT_PASSWORD: "admin_password"
   # ====================================================================
   # CI Job 3: Test Docker images build
   # ====================================================================
