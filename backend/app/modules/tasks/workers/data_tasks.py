@@ -1,7 +1,7 @@
 """
 数据处理任务定义
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Annotated, Literal
 from datetime import datetime
 import logging
 
@@ -23,11 +23,37 @@ logger = logging.getLogger(__name__)
 )
 @execution_handler
 async def export_data(
-    config_id: Optional[int],
-    export_format: str = "json",
-    date_range: Dict[str, str] = None,
-    context: Context = TaskiqDepends(),
-    test_para: Optional[List[Dict[str,any]]] = None 
+    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
+    export_format: Annotated[str, {"ui_hint": "select", "choices": ["json", "csv", "excel"]}] = "json",
+    date_range: Annotated[
+        Optional[Dict[str, str]],
+        {
+            "exclude_from_ui": False,
+            "ui_hint": "json",
+            "label": "日期范围",
+            "description": "导出的起止日期（包含边界）。格式: {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}",
+            "placeholder": "例如:\n{\n  \"start\": \"2025-01-01\",\n  \"end\": \"2025-01-31\"\n}",
+            "example": {"start": "2025-01-01", "end": "2025-01-31"}
+        }
+    ] = None,
+    query_config: Annotated[Optional[Dict[str, Any]], {"ui_hint": "json", "description": "复杂查询配置（多层结构）", "example": {
+        "filters": {
+            "include": [
+                {"field": "category", "op": "in", "value": ["news", "blog"]},
+                {"field": "published_at", "op": "range", "value": {"start": "2025-01-01", "end": "2025-01-31"}}
+            ],
+            "exclude": [
+                {"field": "status", "op": "eq", "value": "archived"}
+            ]
+        },
+        "options": {
+            "limit": 100,
+            "sort": {"by": "created_at", "order": "desc"},
+            "case_sensitive": False
+        }
+    }}] = None,
+    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
+    test_para: Annotated[Optional[List[Dict[str, Any]]], {"ui_hint": "json", "example": [{"key": "value"}]}] = None,
 ) -> Dict[str, Any]:
     """
     导出数据
@@ -50,6 +76,7 @@ async def export_data(
                 "config_id": config_id,
                 "export_format": export_format,
                 "date_range": date_range,
+                "query_config": query_config,
                 "exported_records": 0,  # 应该是实际导出的记录数
                 "file_path": f"exports/data_{config_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.{export_format}",
                 "timestamp": datetime.utcnow().isoformat()
@@ -73,9 +100,9 @@ async def export_data(
 )
 @execution_handler
 async def backup_data(
-    config_id: Optional[int],
-    backup_type: str = "full",
-    context: Context = TaskiqDepends()
+    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
+    backup_type: Annotated[Literal["full", "incremental"], {"ui_hint": "select"}] = "full",
+    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
 ) -> Dict[str, Any]:
     """
     备份数据

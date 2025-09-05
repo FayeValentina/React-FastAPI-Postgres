@@ -352,13 +352,26 @@ class SystemEnumsResponse(BaseModel):
 
 
 class TypeInfo(BaseModel):
-    """结构化类型信息"""
+    """结构化类型信息（前端渲染不需要原始类型字符串）"""
     type: str = Field(..., description="类型名称")
     args: Optional[List['TypeInfo']] = Field(None, description="类型参数")
-    raw: str = Field(..., description="原始类型字符串")
 
 # 支持前向引用
 TypeInfo.model_rebuild()
+
+class UIMetaInfo(BaseModel):
+    """前端渲染的UI元信息（由后端任务注册时生成）"""
+    exclude_from_ui: bool = Field(False, description="是否在前端隐藏该参数")
+    ui_hint: Optional[str] = Field(None, description="控件类型建议，如 select/number/text/json/boolean/email/password/textarea")
+    choices: Optional[List[Any]] = Field(None, description="可选值列表（用于select等）")
+    label: Optional[str] = Field(None, description="显示标签（可选）")
+    description: Optional[str] = Field(None, description="参数描述（可选）")
+    placeholder: Optional[str] = Field(None, description="占位提示（可选）")
+    min: Optional[float] = Field(None, description="数值最小值（可选）")
+    max: Optional[float] = Field(None, description="数值最大值（可选）")
+    step: Optional[float] = Field(None, description="数值步进（可选）")
+    pattern: Optional[str] = Field(None, description="输入匹配模式（可选）")
+    example: Optional[Any] = Field(None, description="示例值（JSON 可用作结构提示）")
 
 
 class TaskParameterInfo(BaseModel):
@@ -369,6 +382,7 @@ class TaskParameterInfo(BaseModel):
     default: Optional[str] = Field(None, description="默认值")
     required: bool = Field(..., description="是否必需")
     kind: str = Field(..., description="参数种类")
+    ui: Optional[UIMetaInfo] = Field(None, description="前端渲染UI元信息")
 
 
 class TaskInfo(BaseModel):
