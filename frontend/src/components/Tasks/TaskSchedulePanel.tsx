@@ -200,14 +200,14 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
           return (
             <Accordion key={cfg.id} expanded={expanded === cfg.id} onChange={() => handleExpand(cfg.id)}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
                   <Box>
                     <Typography variant="subtitle1">{cfg.name}</Typography>
                     <Typography variant="body2" color="text.secondary">
                       {cfg.task_type} · {cfg.scheduler_type}
                     </Typography>
                   </Box>
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="center">
                     <Chip size="small" label={`实例: ${allIds.length}`} />
                     <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => { e.stopPropagation(); handleCreateInstance(cfg.id); }}>
                       新增实例
@@ -218,37 +218,39 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
               <AccordionDetails>
                 {/* Active instances table */}
                 <Typography variant="subtitle2" gutterBottom>活跃实例</Typography>
-                <Table size="small" component={Paper}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>schedule_id</TableCell>
-                      <TableCell>触发器</TableCell>
-                      <TableCell>下次运行</TableCell>
-                      <TableCell align="right">操作</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {active.length === 0 ? (
+                <Box className="scroll-x">
+                  <Table size="small" component={Paper} sx={{ minWidth: 700 }}>
+                    <TableHead>
                       <TableRow>
-                        <TableCell colSpan={4} align="center">无活跃实例</TableCell>
+                        <TableCell>schedule_id</TableCell>
+                        <TableCell>触发器</TableCell>
+                        <TableCell>下次运行</TableCell>
+                        <TableCell align="right">操作</TableCell>
                       </TableRow>
-                    ) : active.map((s) => (
-                      <TableRow key={s.schedule_id}>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{s.schedule_id}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{s.schedule}</TableCell>
-                        <TableCell>{s.next_run ? new Date(s.next_run).toLocaleString('zh-CN') : '-'}</TableCell>
-                        <TableCell align="right">
-                          <IconButton size="small" color="warning" onClick={() => handlePause(s.schedule_id, cfg.id)} title="暂停">
-                            <PauseIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" color="error" onClick={() => handleUnregister(s.schedule_id, cfg.id)} title="注销">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHead>
+                    <TableBody>
+                      {active.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center">无活跃实例</TableCell>
+                        </TableRow>
+                      ) : active.map((s) => (
+                        <TableRow key={s.schedule_id}>
+                          <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{s.schedule_id}</TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{s.schedule}</TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>{s.next_run ? new Date(s.next_run).toLocaleString('zh-CN') : '-'}</TableCell>
+                          <TableCell align="right">
+                            <IconButton size="small" color="warning" onClick={() => handlePause(s.schedule_id, cfg.id)} title="暂停">
+                              <PauseIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" color="error" onClick={() => handleUnregister(s.schedule_id, cfg.id)} title="注销">
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
 
                 {/* Paused/Inactive instances */}
                 <Box sx={{ mt: 2 }}>
@@ -258,8 +260,8 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
                   ) : (
                     <Stack spacing={1}>
                       {pausedIds.map((sid) => (
-                        <Box key={sid} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Typography sx={{ fontFamily: 'monospace' }}>{sid}</Typography>
+                        <Box key={sid} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                          <Typography sx={{ fontFamily: 'monospace', wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{sid}</Typography>
                           <Box>
                             <IconButton size="small" color="success" onClick={() => handleResume(sid, cfg.id)} title="恢复">
                               <ResumeIcon fontSize="small" />

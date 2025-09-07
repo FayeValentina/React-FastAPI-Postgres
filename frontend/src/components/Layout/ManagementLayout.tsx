@@ -14,13 +14,17 @@ import {
   Container,
   Button,
   Divider,
+  IconButton,
+  useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Schedule as TaskIcon,
   Dashboard as DashboardIcon,
   Settings as SettingsIcon,
+  Menu as MenuIcon,
 } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
 
 interface ManagementLayoutProps {
   children: React.ReactNode;
@@ -62,6 +66,11 @@ const menuSections = [
 const ManagementLayout: React.FC<ManagementLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  const toggleDrawer = () => setMobileOpen((v) => !v);
 
   const handleMenuClick = (path: string, implemented: boolean) => {
     if (implemented) {
@@ -73,16 +82,27 @@ const ManagementLayout: React.FC<ManagementLayoutProps> = ({ children }) => {
     <Box sx={{ display: 'flex' }}>
       <AppBar
         position="fixed"
-        sx={{
+        sx={isMobile ? undefined : {
           width: `calc(100% - ${DRAWER_WIDTH}px)`,
           ml: `${DRAWER_WIDTH}px`,
         }}
       >
         <Toolbar>
+          {isMobile && (
+            <IconButton
+              edge="start"
+              color="inherit"
+              aria-label="open menu"
+              onClick={toggleDrawer}
+              sx={{ mr: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
           <Button
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate('/dashboard')}
-            sx={{ mr: 2, color: 'white' }}
+            sx={{ mr: 2, color: 'white', display: { xs: 'none', sm: 'inline-flex' } }}
           >
             返回仪表板
           </Button>
@@ -101,7 +121,10 @@ const ManagementLayout: React.FC<ManagementLayoutProps> = ({ children }) => {
             boxSizing: 'border-box',
           },
         }}
-        variant="permanent"
+        variant={isMobile ? 'temporary' : 'permanent'}
+        open={isMobile ? mobileOpen : true}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
         anchor="left"
       >
         <Toolbar>
@@ -165,8 +188,8 @@ const ManagementLayout: React.FC<ManagementLayoutProps> = ({ children }) => {
         sx={{
           flexGrow: 1,
           bgcolor: 'background.default',
-          p: 3,
-          width: `calc(100% - ${DRAWER_WIDTH}px)`,
+          p: { xs: 2, md: 3 },
+          width: isMobile ? '100%' : `calc(100% - ${DRAWER_WIDTH}px)`,
         }}
       >
         <Toolbar />

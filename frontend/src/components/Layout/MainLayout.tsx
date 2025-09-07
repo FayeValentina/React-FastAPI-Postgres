@@ -7,8 +7,8 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Container component="main" sx={{ flex: 1, py: 4 }}>
+    <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      <Container component="main" sx={{ flex: 1, py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
         {children}
       </Container>
     </Box>
