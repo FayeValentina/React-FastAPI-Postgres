@@ -14,7 +14,7 @@ from app.core.exceptions import ApiError, AuthenticationError
 from app.infrastructure.utils.common import create_exception_handlers
 # from app.core.task_manager import task_manager  # 已删除，使用新架构
 from app.broker import broker
-from app.infrastructure.database.redis_pool import redis_connection_manager
+from app.infrastructure.redis.redis_pool import redis_connection_manager
 from app.infrastructure.scheduler.scheduler import scheduler_service
 
 # 配置日志系统

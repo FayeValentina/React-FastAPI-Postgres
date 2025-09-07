@@ -7,7 +7,8 @@ import json
 from datetime import datetime
 from enum import Enum
 
-from app.infrastructure.database.redis_base import RedisBase
+from app.infrastructure.redis.redis_base import RedisBase
+from app.infrastructure.redis.keyspace import redis_keys
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,7 @@ class ScheduleHistoryRedisService(RedisBase):
     
     def __init__(self):
         super().__init__(key_prefix="schedule:")
-        self.status_prefix = "status:"
-        self.metadata_prefix = "meta:"
-        self.history_prefix = "history:"
-        self.statistics_prefix = "stats:"
+        # Use centralized key helpers for subkeys
         self.max_history = 100
         self.default_ttl = 7 * 24 * 3600  # 7天过期
     
@@ -47,7 +45,7 @@ class ScheduleHistoryRedisService(RedisBase):
     async def set_task_status(self, config_id: int, status: ScheduleStatus) -> bool:
         """设置任务调度状态"""
         try:
-            success = await self.set(f"{self.status_prefix}{config_id}", status.value)
+            success = await self.set(redis_keys.scheduler.status(config_id), status.value)
             
             # 同时记录状态变更事件
             await self.add_history_event(
@@ -67,7 +65,7 @@ class ScheduleHistoryRedisService(RedisBase):
     async def get_task_status(self, config_id: int) -> ScheduleStatus:
         """获取任务调度状态"""
         try:
-            status_str = await self.get(f"{self.status_prefix}{config_id}")
+            status_str = await self.get(redis_keys.scheduler.status(config_id))
             if status_str:
                 return ScheduleStatus(status_str)
             return ScheduleStatus.INACTIVE
@@ -78,11 +76,11 @@ class ScheduleHistoryRedisService(RedisBase):
     async def get_all_task_statuses(self) -> Dict[int, str]:
         """获取所有任务状态"""
         try:
-            status_keys = await self.scan_keys(f"{self.status_prefix}*")
+            status_keys = await self.scan_keys(f"{redis_keys.scheduler.STATUS_PREFIX}*")
             statuses = {}
             
             for key in status_keys:
-                config_id_str = key.replace(self.status_prefix, "")
+                config_id_str = key.replace(redis_keys.scheduler.STATUS_PREFIX, "")
                 try:
                     config_id = int(config_id_str)
                     status = await self.get(key)
@@ -110,7 +108,7 @@ class ScheduleHistoryRedisService(RedisBase):
         """设置任务元数据"""
         try:
             metadata.setdefault("updated_at", datetime.utcnow().isoformat())
-            return await self.set_json(f"{self.metadata_prefix}{config_id}", metadata, self.default_ttl)
+            return await self.set_json(redis_keys.scheduler.metadata(config_id), metadata, self.default_ttl)
         except Exception as e:
             logger.error(f"设置任务元数据失败: {e}")
             return False
@@ -118,7 +116,7 @@ class ScheduleHistoryRedisService(RedisBase):
     async def get_task_metadata(self, config_id: int) -> Dict[str, Any]:
         """获取任务元数据"""
         try:
-            metadata = await self.get_json(f"{self.metadata_prefix}{config_id}")
+            metadata = await self.get_json(redis_keys.scheduler.metadata(config_id))
             return metadata or {}
         except Exception as e:
             logger.error(f"获取任务元数据失败: {e}")
@@ -130,7 +128,7 @@ class ScheduleHistoryRedisService(RedisBase):
         """添加调度历史事件 (使用新的 pipeline 上下文管理器)"""
         try:
             event_data.setdefault("timestamp", datetime.utcnow().isoformat())
-            history_key = f"{self.history_prefix}{config_id}"
+            history_key = redis_keys.scheduler.history(config_id)
             
             async with self.pipeline() as pipe:
                 # 1. 将新事件推入列表左侧
@@ -152,7 +150,7 @@ class ScheduleHistoryRedisService(RedisBase):
     async def get_history(self, config_id: int, limit: int = 50) -> List[Dict[str, Any]]:
         """获取调度历史"""
         try:
-            history_data = await self.lrange(f"{self.history_prefix}{config_id}", 0, limit - 1)
+            history_data = await self.lrange(redis_keys.scheduler.history(config_id), 0, limit - 1)
             return [json.loads(item) for item in history_data if item]
         except Exception as e:
             logger.error(f"获取历史记录失败: {e}")

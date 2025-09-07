@@ -11,7 +11,7 @@ from taskiq import ScheduledTask
 from app.modules.tasks.models import TaskConfig
 from app.infrastructure.tasks.task_registry_decorators import SchedulerType
 from app.infrastructure.tasks import task_registry_decorators as tr
-
+from app.infrastructure.redis.keyspace import redis_keys
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +80,9 @@ class SchedulerCoreService:
     async def unregister_task(self, config_id: int) -> bool:
         """从TaskIQ调度器注销任务"""
         try:
-            task_id = f"scheduled_task_{config_id}"
+            # Centralized schedule_id naming
+            
+            task_id = redis_keys.scheduler.schedule_id_for_config(config_id)
             await self.schedule_source.delete_schedule(task_id)
             logger.info(f"成功注销调度任务: config_id={config_id}")
             return True
@@ -146,7 +148,7 @@ class SchedulerCoreService:
             except Exception as e:
                 logger.warning("任务参数校验失败(忽略并继续): %s", e)
             
-            task_id = f"scheduled_task_{config.id}"
+            task_id = redis_keys.scheduler.schedule_id_for_config(config.id)
             
             labels = {
                 "config_id": str(config.id),
