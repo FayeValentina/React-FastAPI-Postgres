@@ -4,7 +4,7 @@ export interface TaskConfig {
   name: string;
   description?: string;
   task_type: string;
-  scheduler_type: 'manual' | 'interval' | 'cron' | 'date';
+  scheduler_type: 'manual' | 'cron' | 'date';
   parameters: Record<string, unknown>;
   schedule_config: Record<string, unknown>;
   max_retries: number;
@@ -23,7 +23,7 @@ export interface TaskConfigCreate {
   name: string;
   description?: string;
   task_type: string;
-  scheduler_type: 'manual' | 'interval' | 'cron' | 'date';
+  scheduler_type: 'manual' | 'cron' | 'date';
   parameters: Record<string, unknown>;
   schedule_config: Record<string, unknown>;
   max_retries?: number;

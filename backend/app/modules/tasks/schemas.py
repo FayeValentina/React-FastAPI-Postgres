@@ -1,7 +1,7 @@
 """
 任务配置相关的Pydantic模型
 """
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, ValidationInfo
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
@@ -34,9 +34,10 @@ class TaskConfigCreate(TaskConfigBase):
     """创建任务配置"""
     
     @field_validator('parameters')
-    def validate_parameters(cls, v, values):
+    def validate_parameters(cls, v, info: ValidationInfo):
         """验证任务参数"""
-        task_type = values.get('task_type')
+        data = info.data or {}
+        task_type = data.get('task_type')
         if not task_type:
             return v
         
@@ -49,9 +50,10 @@ class TaskConfigCreate(TaskConfigBase):
         return v
     
     @field_validator('schedule_config')
-    def validate_schedule_config(cls, v, values):
+    def validate_schedule_config(cls, v, info: ValidationInfo):
         """验证调度配置"""
-        scheduler_type = values.get('scheduler_type')
+        data = info.data or {}
+        scheduler_type = data.get('scheduler_type')
         if not scheduler_type:
             return v
             
