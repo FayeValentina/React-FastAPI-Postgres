@@ -176,10 +176,10 @@ const SystemMonitoringPage: React.FC = () => {
               <CardContent sx={{ textAlign: 'center' }}>
                 <StatsIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
                 <Typography variant="h4" color="success.main">
-                  {systemStatus?.schedule_summary.active_tasks || 0}
+                  {systemStatus?.schedule_summary.active_schedules || 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  活跃任务
+                  活跃实例
                 </Typography>
               </CardContent>
             </Card>

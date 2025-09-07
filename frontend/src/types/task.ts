@@ -35,7 +35,7 @@ export type TaskConfigUpdate = Partial<Omit<TaskConfigCreate, 'task_type' | 'sch
 
 // ============== 调度相关类型 ==============
 export interface ScheduleInfo {
-  task_id: string;
+  schedule_id: string;
   task_name: string;
   config_id?: number;
   schedule: string;
@@ -52,12 +52,23 @@ export interface ScheduleHistoryEvent {
 }
 
 export interface ScheduleSummary {
-  total_tasks: number;
-  active_tasks: number;
-  paused_tasks: number;
-  inactive_tasks: number;
-  error_tasks: number;
+  total_schedules: number;
+  active_schedules: number;
+  paused_schedules: number;
+  inactive_schedules: number;
+  error_schedules: number;
   last_updated: string;
+}
+
+export interface ConfigSchedulesResponse {
+  config_id: number;
+  schedule_ids: string[];
+}
+
+export interface ScheduleOperationResponse {
+  success: boolean;
+  message: string;
+  schedule_id: string;
 }
 
 // ============== 执行相关类型 ==============

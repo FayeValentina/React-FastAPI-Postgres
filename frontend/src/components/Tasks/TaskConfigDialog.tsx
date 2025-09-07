@@ -123,17 +123,21 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
   // ------- Cron 构造器：初始化与同步 -------
   const initCronBuilderFromConfig = (sc: Record<string, unknown>) => {
-    const minute = String((sc as any).minute ?? '*');
-    const hour = String((sc as any).hour ?? '*');
-    const day = String((sc as any).day ?? '*');
-    const month = String((sc as any).month ?? '*');
-    const dow = String((sc as any).day_of_week ?? '*');
-    const expr = (sc as any).cron_expression as string | undefined;
+    const getStr = (key: string, fallback = '*') => {
+      const v = sc[key];
+      return v === undefined || v === null ? fallback : String(v);
+    };
+    const minute = getStr('minute');
+    const hour = getStr('hour');
+    const day = getStr('day');
+    const dow = getStr('day_of_week');
+    const expr = typeof sc['cron_expression'] === 'string' ? (sc['cron_expression'] as string) : undefined;
 
-    let m = minute, h = hour, d = day, mo = month, w = dow;
+    let m = minute, h = hour, d = day, w = dow;
     if (expr && expr.split(' ').length >= 5) {
       const parts = expr.trim().split(/\s+/).slice(0, 5);
-      [m, h, d, mo, w] = parts as [string, string, string, string, string];
+      // parts: minute hour day month dow
+      [m, h, d, , w] = parts as [string, string, string, string, string];
     }
 
     // 推断频率
@@ -169,10 +173,11 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
       initCronBuilderFromConfig(formData.schedule_config || {});
       setCronMode('builder');
     }
-  }, [formData.scheduler_type]);
+  }, [formData.scheduler_type, formData.schedule_config]);
 
   const cronStringFromBuilder = () => {
-    let minute = '*', hour = '*', day = '*', month = '*', day_of_week = '*';
+    let minute = '*', hour = '*', day = '*', day_of_week = '*';
+    const month = '*';
     switch (cronFreq) {
       case 'minute':
         minute = `*/${Math.min(59, Math.max(1, Number(everyNMinutes) || 1))}`;
@@ -200,13 +205,13 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
   const applyBuilderToScheduleConfig = () => {
     const [minute, hour, day, month, day_of_week] = cronStringFromBuilder().split(' ');
-    const sc = { ...(formData.schedule_config || {}) } as Record<string, unknown>;
-    delete (sc as any).cron_expression;
-    (sc as any).minute = minute;
-    (sc as any).hour = hour;
-    (sc as any).day = day;
-    (sc as any).month = month;
-    (sc as any).day_of_week = day_of_week;
+    const sc: Record<string, unknown> = { ...(formData.schedule_config || {}) };
+    delete sc['cron_expression'];
+    sc['minute'] = minute;
+    sc['hour'] = hour;
+    sc['day'] = day;
+    sc['month'] = month;
+    sc['day_of_week'] = day_of_week;
     handleChange('schedule_config', sc);
   };
 
@@ -242,9 +247,9 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
       newErrors.task_type = '请选择任务类型';
     }
     if (formData.scheduler_type === 'cron') {
-      const sc = (formData.schedule_config || {}) as Record<string, unknown>;
-      const hasExpr = !!(sc as any).cron_expression;
-      const hasParts = ['minute', 'hour', 'day', 'month', 'day_of_week'].every((k) => (sc as any)[k] !== undefined);
+      const sc: Record<string, unknown> = (formData.schedule_config || {});
+      const hasExpr = typeof sc['cron_expression'] === 'string' && (sc['cron_expression'] as string).trim() !== '';
+      const hasParts = ['minute', 'hour', 'day', 'month', 'day_of_week'].every((k) => sc[k] !== undefined);
       if (!hasExpr && !hasParts) {
         newErrors.schedule_config = '请使用构造器或输入Cron表达式';
       }
@@ -518,7 +523,16 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <FormControl fullWidth>
                   <InputLabel>任务频率</InputLabel>
-                  <Select label="任务频率" value={cronFreq} onChange={(e) => setCronFreq(e.target.value as any)}>
+                  <Select
+                    label="任务频率"
+                    value={cronFreq}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === 'minute' || v === 'hour' || v === 'day' || v === 'week' || v === 'month') {
+                        setCronFreq(v);
+                      }
+                    }}
+                  >
                     <MenuItem value="minute">每分钟</MenuItem>
                     <MenuItem value="hour">每小时</MenuItem>
                     <MenuItem value="day">每天</MenuItem>

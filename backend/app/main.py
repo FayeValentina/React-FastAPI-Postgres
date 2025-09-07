@@ -41,34 +41,24 @@ async def lifespan(app: FastAPI):
         await scheduler_service.initialize()
         logger.info("Redis连接池和调度器初始化成功")
         
-        # 从数据库加载调度任务到Redis
-        from app.infrastructure.database.postgres_base import AsyncSessionLocal
-        from app.modules.tasks.repository import crud_task_config
-        from app.infrastructure.tasks.task_registry_decorators import SchedulerType
-        
-        async with AsyncSessionLocal() as db:
-            # 获取所有任务配置（不再筛选status）
-            configs = await crud_task_config.get_by_type(db, None)  # 获取所有配置
-            
-            loaded_count = 0
-            failed_count = 0
-            
-            for config in configs:
-                # 只加载需要调度的任务
-                if config.scheduler_type != SchedulerType.MANUAL:
-                    try:
-                        success, message = await scheduler_service.register_task(config)
-                        if success:
-                            loaded_count += 1
-                            logger.debug(f"成功加载调度任务: {config.name} (ID: {config.id})")
-                        else:
-                            failed_count += 1
-                            logger.warning(f"加载任务失败: {config.name} - {message}")
-                    except Exception as e:
-                        failed_count += 1
-                        logger.error(f"加载任务 {config.name} 失败: {e}")
-            
-            logger.info(f"从数据库加载调度任务完成: 成功 {loaded_count} 个, 失败 {failed_count} 个")
+        # 运行启动时维护流程：清理遗留、清理孤儿、确保默认实例
+        try:
+            legacy = await scheduler_service.cleanup_legacy_artifacts()
+            logger.info(f"遗留清理完成: {legacy}")
+        except Exception as e:
+            logger.warning(f"遗留清理出错: {e}")
+
+        try:
+            orphans = await scheduler_service.cleanup_orphan_schedules()
+            logger.info(f"孤儿调度实例清理: {orphans}")
+        except Exception as e:
+            logger.warning(f"孤儿清理出错: {e}")
+
+        try:
+            ensured = await scheduler_service.ensure_default_instances()
+            logger.info(f"默认实例保证: {ensured}")
+        except Exception as e:
+            logger.warning(f"默认实例保证出错: {e}")
         
         logger.info("应用启动成功")
         
