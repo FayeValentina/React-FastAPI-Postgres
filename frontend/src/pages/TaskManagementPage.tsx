@@ -107,7 +107,22 @@ const TaskManagementPage: React.FC = () => {
 
   const handleScheduleAction = async (configId: number, action: string) => {
     try {
-      await postData(`/v1/tasks/schedules/${configId}/${action}`, {});
+      if (action === 'start') {
+        await postData(`/v1/tasks/configs/${configId}/schedules`, {});
+      } else if (action === 'stop') {
+        // unregister all instances
+        const idx = await fetchData<{ config_id: number; schedule_ids: string[] }>(`/v1/tasks/configs/${configId}/schedules`);
+        await Promise.all((idx.schedule_ids || []).map((sid) => deleteData(`/v1/tasks/schedules/${sid}`)));
+      } else if (action === 'pause' || action === 'resume') {
+        // derive active vs paused from global list
+        const all = await fetchData<{ schedules: Array<{ schedule_id: string; config_id?: number }> }>(`/v1/tasks/schedules`);
+        const idx = await fetchData<{ config_id: number; schedule_ids: string[] }>(`/v1/tasks/configs/${configId}/schedules`);
+        const activeSet = new Set((all.schedules || []).filter(s => s.config_id === configId).map(s => s.schedule_id));
+        const targetIds = action === 'pause'
+          ? Array.from(activeSet)
+          : (idx.schedule_ids || []).filter(sid => !activeSet.has(sid));
+        await Promise.all(targetIds.map((sid) => postData(`/v1/tasks/schedules/${sid}/${action}`, {})));
+      }
       await loadConfigs();
     } catch (error) {
       console.error(`Failed to ${action} schedule:`, error);

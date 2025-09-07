@@ -8,8 +8,8 @@ from app.modules.auth.models import User
 from app.api.dependencies import get_current_superuser
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.tasks.schemas import (
-    TaskConfigCreate, 
-    TaskConfigUpdate, 
+    TaskConfigCreate,
+    TaskConfigUpdate,
     TaskConfigResponse,
     TaskConfigDetailResponse,
     TaskConfigListResponse,
@@ -20,15 +20,20 @@ from app.modules.tasks.schemas import (
     FailedExecutionsResponse,
     ExecutionDetailResponse,
     ExecutionCleanupResponse,
-    ScheduleActionResponse,
+    ScheduleOperationResponse,
     ScheduleListResponse,
     ScheduleHistoryResponse,
     ScheduleSummaryResponse,
+    ConfigSchedulesResponse,
+    ScheduleInstanceResponse,
     SystemStatusResponse,
     SystemHealthResponse,
     SystemEnumsResponse,
     TaskInfoResponse,
-    SystemDashboardResponse
+    SystemDashboardResponse,
+    OrphanListResponse,
+    OrphanCleanupResponse,
+    CleanupLegacyResponse,
 )
 from app.infrastructure.cache.cache_decorators import cache, invalidate
 from app.constant.cache_tags import CacheTags
@@ -128,50 +133,49 @@ async def delete_task_config(
 # 核心理念：纯调度操作，状态一致性验证
 # =============================================================================
 
-@router.post("/schedules/{config_id}/start", response_model=ScheduleActionResponse)
+@router.post("/configs/{config_id}/schedules", response_model=ScheduleOperationResponse, status_code=201)
 @invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
-async def start_schedule(
+async def create_schedule_instance(
     request: Request,
     config_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """启动任务调度"""
-    return await task_service.start_schedule(db=db, config_id=config_id)
+    """从配置创建一个新的调度实例（返回 schedule_id）。"""
+    return await task_service.create_schedule_instance(db=db, config_id=config_id)
 
 
-@router.post("/schedules/{config_id}/stop", response_model=ScheduleActionResponse)
+@router.delete("/schedules/{schedule_id}", response_model=ScheduleOperationResponse)
 @invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
-async def stop_schedule(
+async def unregister_schedule(
     request: Request,
-    config_id: int,
+    schedule_id: str,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """停止任务调度"""
-    return await task_service.stop_schedule(config_id=config_id)
+    """注销调度实例。"""
+    return await task_service.unregister_schedule(schedule_id=schedule_id)
 
 
-@router.post("/schedules/{config_id}/pause", response_model=ScheduleActionResponse)
+@router.post("/schedules/{schedule_id}/pause", response_model=ScheduleOperationResponse)
 @invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
 async def pause_schedule(
     request: Request,
-    config_id: int,
+    schedule_id: str,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """暂停任务调度"""
-    return await task_service.pause_schedule(config_id=config_id)
+    """暂停调度实例"""
+    return await task_service.pause_schedule(schedule_id=schedule_id)
 
 
-@router.post("/schedules/{config_id}/resume", response_model=ScheduleActionResponse)
+@router.post("/schedules/{schedule_id}/resume", response_model=ScheduleOperationResponse)
 @invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
 async def resume_schedule(
     request: Request,
-    config_id: int,
-    db: AsyncSession = Depends(get_async_session),
+    schedule_id: str,
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """恢复任务调度"""
-    return await task_service.resume_schedule(db=db, config_id=config_id)
+    """恢复调度实例"""
+    return await task_service.resume_schedule(schedule_id=schedule_id)
 
 
 @router.get("/schedules", response_model=ScheduleListResponse)
@@ -184,14 +188,32 @@ async def get_all_schedules(
     return await task_service.get_all_schedules()
 
 
-@router.get("/schedules/{config_id}/history", response_model=ScheduleHistoryResponse)
-async def get_schedule_history(
+@router.get("/configs/{config_id}/schedules", response_model=ConfigSchedulesResponse)
+async def list_config_schedules(
     config_id: int,
+    current_user: Annotated[User, Depends(get_current_superuser)] = None,
+) -> Dict[str, Any]:
+    """列出配置下的所有调度实例ID。"""
+    return await task_service.list_config_schedules(config_id=config_id)
+
+
+@router.get("/schedules/{schedule_id}", response_model=ScheduleInstanceResponse)
+async def get_schedule_instance(
+    schedule_id: str,
+    current_user: Annotated[User, Depends(get_current_superuser)] = None,
+) -> Dict[str, Any]:
+    """获取单个调度实例的详细信息。"""
+    return await task_service.get_schedule_info(schedule_id=schedule_id)
+
+
+@router.get("/schedules/{schedule_id}/history", response_model=ScheduleHistoryResponse)
+async def get_schedule_history(
+    schedule_id: str,
     limit: int = Query(50, ge=1, le=200, description="历史记录数量"),
     current_user: Annotated[User, Depends(get_current_superuser)] = None,
 ) -> Dict[str, Any]:
-    """获取调度历史"""
-    return await task_service.get_schedule_history(config_id=config_id, limit=limit)
+    """获取调度实例的历史事件。"""
+    return await task_service.get_schedule_history(schedule_id=schedule_id, limit=limit)
 
 
 @router.get("/schedules/summary", response_model=ScheduleSummaryResponse)
@@ -329,3 +351,33 @@ async def get_system_dashboard(
 ) -> Dict[str, Any]:
     """全局统计仪表板"""
     return await task_service.get_system_dashboard(db=db)
+
+
+# =============================================================================
+# 五、管理员维护端点 /system/cleanup & /system/orphans
+# =============================================================================
+
+@router.get("/system/orphans", response_model=OrphanListResponse)
+async def list_orphans(
+    current_user: Annotated[User, Depends(get_current_superuser)] = None,
+) -> Dict[str, Any]:
+    """列出孤儿调度实例（无对应 TaskConfig）。"""
+    return await task_service.list_orphans()
+
+
+@router.post("/system/cleanup/orphans", response_model=OrphanCleanupResponse)
+@invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
+async def cleanup_orphans(
+    current_user: Annotated[User, Depends(get_current_superuser)] = None,
+) -> Dict[str, Any]:
+    """手动清理孤儿调度实例。"""
+    return await task_service.cleanup_orphans()
+
+
+@router.post("/system/cleanup/legacy", response_model=CleanupLegacyResponse)
+@invalidate([CacheTags.SYSTEM_STATUS, CacheTags.SYSTEM_DASHBOARD, CacheTags.SCHEDULE_LIST])
+async def cleanup_legacy(
+    current_user: Annotated[User, Depends(get_current_superuser)] = None,
+) -> Dict[str, Any]:
+    """手动清理遗留旧键与旧格式调度ID。"""
+    return await task_service.cleanup_legacy()
