@@ -14,10 +14,6 @@ import {
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  PlayArrow as StartIcon,
-  Stop as StopIcon,
-  Pause as PauseIcon,
-  PlayCircle as ResumeIcon,
 } from '@mui/icons-material';
 import { TaskConfig } from '../../types/task';
 
@@ -26,7 +22,7 @@ interface TaskConfigListProps {
   loading: boolean;
   onEdit: (config: TaskConfig) => void;
   onDelete: (config: TaskConfig) => void;
-  onScheduleAction: (configId: number, action: string) => void;
+  scheduleCounts?: Record<number, { active: number; paused: number }>;
 }
 
 const TaskConfigList: React.FC<TaskConfigListProps> = ({
@@ -34,7 +30,7 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
   loading,
   onEdit,
   onDelete,
-  onScheduleAction,
+  scheduleCounts = {},
 }) => {
   const getSchedulerTypeColor = (type: string): 'default' | 'primary' | 'secondary' | 'warning' => {
     switch (type) {
@@ -45,14 +41,7 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
     }
   };
 
-  const getStatusColor = (status?: string): 'default' | 'success' | 'warning' | 'error' => {
-    switch (status) {
-      case 'active': return 'success';
-      case 'paused': return 'warning';
-      case 'error': return 'error';
-      default: return 'default';
-    }
-  };
+  // config与schedule完全解耦，移除状态颜色计算
 
   if (loading) {
     return (
@@ -82,13 +71,10 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
                 <Typography variant="h6" component="h2">
                   {config.name}
                 </Typography>
-                {config.is_scheduled && (
-                  <Chip
-                    label={config.schedule_status || 'scheduled'}
-                    color={getStatusColor(config.schedule_status)}
-                    size="small"
-                  />
-                )}
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Chip label={`活跃: ${scheduleCounts[config.id]?.active ?? 0}`} color="success" size="small" />
+                  <Chip label={`暂停: ${scheduleCounts[config.id]?.paused ?? 0}`} color={(scheduleCounts[config.id]?.paused ?? 0) > 0 ? 'warning' : 'default'} size="small" />
+                </Box>
               </Box>
 
               {config.description && (
@@ -119,49 +105,6 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
             </CardContent>
 
             <CardActions>
-              {config.is_scheduled ? (
-                <>
-                  <Tooltip title="停止调度">
-                    <IconButton
-                      size="small"
-                      onClick={() => onScheduleAction(config.id, 'stop')}
-                    >
-                      <StopIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="暂停调度">
-                    <IconButton
-                      size="small"
-                      onClick={() => onScheduleAction(config.id, 'pause')}
-                    >
-                      <PauseIcon />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              ) : (
-                <Tooltip title="启动调度">
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={() => onScheduleAction(config.id, 'start')}
-                  >
-                    <StartIcon />
-                  </IconButton>
-                </Tooltip>
-              )}
-              
-              {config.schedule_status === 'paused' && (
-                <Tooltip title="恢复调度">
-                  <IconButton
-                    size="small"
-                    color="success"
-                    onClick={() => onScheduleAction(config.id, 'resume')}
-                  >
-                    <ResumeIcon />
-                  </IconButton>
-                </Tooltip>
-              )}
-
               <Box sx={{ ml: 'auto' }}>
                 <Tooltip title="编辑">
                   <IconButton

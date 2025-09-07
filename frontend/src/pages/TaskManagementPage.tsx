@@ -20,7 +20,7 @@ import TaskConfigList from '../components/Tasks/TaskConfigList';
 import TaskConfigDialog from '../components/Tasks/TaskConfigDialog';
 import TaskSchedulePanel from '../components/Tasks/TaskSchedulePanel';
 import TaskExecutionPanel from '../components/Tasks/TaskExecutionPanel';
-import { TaskConfig, TaskConfigCreate, TaskConfigUpdate } from '../types/task';
+import { TaskConfig, TaskConfigCreate, TaskConfigUpdate, ScheduleInfo, ConfigSchedulesResponse } from '../types/task';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -47,6 +47,7 @@ const TaskManagementPage: React.FC = () => {
   
   const [tabValue, setTabValue] = useState(0);
   const [configs, setConfigs] = useState<TaskConfig[]>([]);
+  const [scheduleCounts, setScheduleCounts] = useState<Record<number, { active: number; paused: number }>>({});
   const [selectedConfig, setSelectedConfig] = useState<TaskConfig | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -60,7 +61,40 @@ const TaskManagementPage: React.FC = () => {
     
     try {
       const response = await fetchData<{ items: TaskConfig[], total: number }>(configsUrl);
-      setConfigs(response.items || []);
+      const items = response.items || [];
+      setConfigs(items);
+
+      // also compute schedule counts per config (active vs paused/inactive)
+      try {
+        const all = await fetchData<{ schedules: ScheduleInfo[] }>(`/v1/tasks/schedules`);
+        const activeByConfig = new Map<number, number>();
+        (all.schedules || []).forEach((s) => {
+          if (s.config_id != null) {
+            activeByConfig.set(s.config_id, (activeByConfig.get(s.config_id) || 0) + 1);
+          }
+        });
+
+        const idsResp = await Promise.all(
+          items.map((cfg) =>
+            fetchData<ConfigSchedulesResponse>(`/v1/tasks/configs/${cfg.id}/schedules`).catch(() => ({ config_id: cfg.id, schedule_ids: [] }))
+          )
+        );
+
+        const counts: Record<number, { active: number; paused: number }> = {};
+        idsResp.forEach((resp) => {
+          const cfgId = resp.config_id;
+          const total = (resp.schedule_ids || []).length;
+          const active = activeByConfig.get(cfgId) || 0;
+          const paused = Math.max(total - active, 0);
+          counts[cfgId] = { active, paused };
+        });
+        setScheduleCounts(counts);
+      } catch {
+        // if schedule endpoints fail, fall back to zeros
+        const empty: Record<number, { active: number; paused: number }> = {};
+        items.forEach((cfg) => (empty[cfg.id] = { active: 0, paused: 0 }));
+        setScheduleCounts(empty);
+      }
     } catch (error) {
       console.error('Failed to load configs:', error);
     }
@@ -105,29 +139,7 @@ const TaskManagementPage: React.FC = () => {
     }
   };
 
-  const handleScheduleAction = async (configId: number, action: string) => {
-    try {
-      if (action === 'start') {
-        await postData(`/v1/tasks/configs/${configId}/schedules`, {});
-      } else if (action === 'stop') {
-        // unregister all instances
-        const idx = await fetchData<{ config_id: number; schedule_ids: string[] }>(`/v1/tasks/configs/${configId}/schedules`);
-        await Promise.all((idx.schedule_ids || []).map((sid) => deleteData(`/v1/tasks/schedules/${sid}`)));
-      } else if (action === 'pause' || action === 'resume') {
-        // derive active vs paused from global list
-        const all = await fetchData<{ schedules: Array<{ schedule_id: string; config_id?: number }> }>(`/v1/tasks/schedules`);
-        const idx = await fetchData<{ config_id: number; schedule_ids: string[] }>(`/v1/tasks/configs/${configId}/schedules`);
-        const activeSet = new Set((all.schedules || []).filter(s => s.config_id === configId).map(s => s.schedule_id));
-        const targetIds = action === 'pause'
-          ? Array.from(activeSet)
-          : (idx.schedule_ids || []).filter(sid => !activeSet.has(sid));
-        await Promise.all(targetIds.map((sid) => postData(`/v1/tasks/schedules/${sid}/${action}`, {})));
-      }
-      await loadConfigs();
-    } catch (error) {
-      console.error(`Failed to ${action} schedule:`, error);
-    }
-  };
+  // config 与调度已分离，调度操作移至调度面板
 
   if (!isSuperuser) {
     return (
@@ -193,7 +205,7 @@ const TaskManagementPage: React.FC = () => {
             loading={loading}
             onEdit={handleEditConfig}
             onDelete={handleDeleteConfig}
-            onScheduleAction={handleScheduleAction}
+            scheduleCounts={scheduleCounts}
           />
         </TabPanel>
 
