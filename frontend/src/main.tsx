@@ -1,13 +1,14 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
+import { ThemeProvider, CssBaseline } from '@mui/material'
+import { createTheme, responsiveFontSizes } from '@mui/material/styles'
 import { useAuthStore } from './stores/auth-store'
 import { NotificationProvider } from './components/Common/NotificationSystem'
 import AppRoutes from './routes'
 import './index.css'
 
-const theme = createTheme({
+let theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
@@ -21,6 +22,7 @@ const theme = createTheme({
     fontFamily: '"Inter", "system-ui", "Avenir", "Helvetica", "Arial", sans-serif',
   },
 });
+theme = responsiveFontSizes(theme);
 
 // 应用启动时初始化认证状态
 const initAuth = async () => {

@@ -111,7 +111,7 @@ const TaskExecutionPanel: React.FC<TaskExecutionPanelProps> = ({ configs }) => {
       )}
 
       {/* 过滤器 */}
-      <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>配置筛选</InputLabel>
           <Select

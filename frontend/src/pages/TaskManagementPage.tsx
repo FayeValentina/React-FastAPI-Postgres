@@ -154,11 +154,11 @@ const TaskManagementPage: React.FC = () => {
   return (
     <ManagementLayout>
       <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" gutterBottom>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, gap: 2, flexWrap: 'wrap' }}>
+          <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: 20, sm: 24, md: 28 } }}>
             任务管理中心
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button
               variant="outlined"
               startIcon={<DashboardIcon />}

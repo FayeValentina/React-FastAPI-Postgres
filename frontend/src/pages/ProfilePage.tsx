@@ -172,7 +172,7 @@ const ProfilePage: React.FC = () => {
     <MainLayout>
       <Container maxWidth="md">
         <Box sx={{ py: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1, flexWrap: 'wrap' }}>
             <Button
               startIcon={<ArrowBackIcon />}
               onClick={() => navigate('/dashboard')}
@@ -287,7 +287,7 @@ const ProfilePage: React.FC = () => {
                       </Grid>
                     </Grid>
 
-                    <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                    <Box sx={{ mt: 3, display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                       <Button
                         type="submit"
                         variant="contained"
