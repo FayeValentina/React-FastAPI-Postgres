@@ -63,6 +63,28 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
 
   // derive per-config state lazily when expanded
 
+  // Also eagerly load per-config schedule indices so counts are accurate without expanding
+  useEffect(() => {
+    const fetchAllConfigIndices = async () => {
+      if (!configs || configs.length === 0) return;
+      try {
+        const results = await Promise.all(
+          configs.map((cfg) =>
+            fetchData<ConfigSchedulesResponse>(`/v1/tasks/configs/${cfg.id}/schedules`).catch(() => ({ config_id: cfg.id, schedule_ids: [] }))
+          )
+        );
+        const map: Record<number, string[]> = {};
+        results.forEach((r) => {
+          map[r.config_id] = r.schedule_ids || [];
+        });
+        setConfigSchedules(map);
+      } catch {
+        // ignore; counts will be zero until expanded/explicit refresh
+      }
+    };
+    fetchAllConfigIndices();
+  }, [configs, fetchData]);
+
   const handleExpand = async (configId: number) => {
     setExpanded((prev) => (prev === configId ? false : configId));
     // Lazy-load schedule IDs for this config
@@ -186,7 +208,7 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip size="small" label={`实例: ${allIds.length || active.length}`} />
+                    <Chip size="small" label={`实例: ${allIds.length}`} />
                     <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => { e.stopPropagation(); handleCreateInstance(cfg.id); }}>
                       新增实例
                     </Button>
@@ -216,10 +238,10 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
                         <TableCell sx={{ fontFamily: 'monospace' }}>{s.schedule}</TableCell>
                         <TableCell>{s.next_run ? new Date(s.next_run).toLocaleString('zh-CN') : '-'}</TableCell>
                         <TableCell align="right">
-                          <IconButton size="small" onClick={() => handlePause(s.schedule_id, cfg.id)} title="暂停">
+                          <IconButton size="small" color="warning" onClick={() => handlePause(s.schedule_id, cfg.id)} title="暂停">
                             <PauseIcon fontSize="small" />
                           </IconButton>
-                          <IconButton size="small" onClick={() => handleUnregister(s.schedule_id, cfg.id)} title="注销">
+                          <IconButton size="small" color="error" onClick={() => handleUnregister(s.schedule_id, cfg.id)} title="注销">
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </TableCell>
@@ -239,10 +261,10 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
                         <Box key={sid} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Typography sx={{ fontFamily: 'monospace' }}>{sid}</Typography>
                           <Box>
-                            <IconButton size="small" onClick={() => handleResume(sid, cfg.id)} title="恢复">
+                            <IconButton size="small" color="success" onClick={() => handleResume(sid, cfg.id)} title="恢复">
                               <ResumeIcon fontSize="small" />
                             </IconButton>
-                            <IconButton size="small" onClick={() => handleUnregister(sid, cfg.id)} title="注销">
+                            <IconButton size="small" color="error" onClick={() => handleUnregister(sid, cfg.id)} title="注销">
                               <DeleteIcon fontSize="small" />
                             </IconButton>
                           </Box>
