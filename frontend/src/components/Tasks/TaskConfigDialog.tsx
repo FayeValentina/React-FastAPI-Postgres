@@ -512,7 +512,11 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
           { v: 5, l: '周五' },
           { v: 6, l: '周六' },
         ];
-        const cronPreview = cronMode === 'builder' ? cronStringFromBuilder() : (formData.schedule_config.cron_expression || '');
+        const cronPreview: string = cronMode === 'builder'
+          ? cronStringFromBuilder()
+          : (typeof formData.schedule_config['cron_expression'] === 'string'
+            ? (formData.schedule_config['cron_expression'] as string)
+            : '');
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 1 }}>
