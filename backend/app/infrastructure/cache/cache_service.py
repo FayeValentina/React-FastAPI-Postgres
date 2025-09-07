@@ -2,8 +2,8 @@
 
 import logging
 from typing import Optional, Dict, Any, List
-from app.infrastructure.database.redis_base import RedisBase
-
+from app.infrastructure.redis.redis_base import RedisBase
+from app.infrastructure.redis.keyspace import redis_keys
 logger = logging.getLogger(__name__)
 
 class CacheConfig:
@@ -69,7 +69,7 @@ class CacheRedisService(RedisBase):
     async def add_key_to_tag(self, tag: str, cache_key: str) -> bool:
         """将缓存键关联到标签，并为标签集合续期"""
         try:
-            tag_set_key = f"tag:{tag}"
+            tag_set_key = redis_keys.cache.tag(tag)
             # 直接使用新的上下文管理器
             async with self.pipeline() as pipe:
             # ！！！注意：在 pipeline 中，命令不会立即执行，而是被添加到队列中
@@ -86,7 +86,8 @@ class CacheRedisService(RedisBase):
     async def invalidate_by_tag(self, tag: str) -> int:
         """根据标签失效所有相关缓存"""
         try:
-            tag_set_key = f"tag:{tag}"
+
+            tag_set_key = redis_keys.cache.tag(tag)
             
             # 获取标签下的所有缓存键 (可能返回 bytes)
             cache_keys_raw = await self.smembers(tag_set_key)
@@ -113,4 +114,3 @@ class CacheRedisService(RedisBase):
 
 # 全局实例和依赖提供函数
 cache_redis_service = CacheRedisService()
-

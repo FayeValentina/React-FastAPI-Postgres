@@ -15,6 +15,9 @@ import {
   Divider,
   Box,
   Collapse,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import { TaskConfig, TaskConfigCreate, TaskConfigUpdate, SystemEnums } from '../../types/task';
 import { TaskInfoResponse, TaskParameterInfo } from '../../types/task-info';
@@ -51,6 +54,16 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
   const [paramErrors, setParamErrors] = useState<Record<string, string>>({});
   const [taskInfos, setTaskInfos] = useState<TaskInfoResponse | null>(null);
   const [exampleOpen, setExampleOpen] = useState<Record<string, boolean>>({});
+  const [schedulerTypes, setSchedulerTypes] = useState<string[]>(['manual', 'cron', 'date']);
+  // Cron 构造器状态
+  const [cronMode, setCronMode] = useState<'builder' | 'expert'>('builder');
+  const [cronFreq, setCronFreq] = useState<'minute' | 'hour' | 'day' | 'week' | 'month'>('day');
+  const [everyNMinutes, setEveryNMinutes] = useState<number>(5);
+  const [minuteOfHour, setMinuteOfHour] = useState<number>(0);
+  const [hourOfDay, setHourOfDay] = useState<number>(3);
+  const [minuteOfDay, setMinuteOfDay] = useState<number>(0);
+  const [dayOfMonth, setDayOfMonth] = useState<number>(1);
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1]); // 0=周日,1=周一
 
   const toggleExample = (key: string) => {
     setExampleOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -69,6 +82,9 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
     // 加载系统枚举值
     fetchData<SystemEnums>('/v1/tasks/system/enums').then((data) => {
       setTaskTypes(data.task_types || []);
+      if (Array.isArray(data.scheduler_types) && data.scheduler_types.length > 0) {
+        setSchedulerTypes(data.scheduler_types);
+      }
     });
     // 加载任务参数元数据
     fetchData<TaskInfoResponse>('/v1/tasks/system/task-info').then((data) => {
@@ -105,6 +121,107 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
     setErrors({});
   }, [config]);
 
+  // ------- Cron 构造器：初始化与同步 -------
+  const initCronBuilderFromConfig = (sc: Record<string, unknown>) => {
+    const getStr = (key: string, fallback = '*') => {
+      const v = sc[key];
+      return v === undefined || v === null ? fallback : String(v);
+    };
+    const minute = getStr('minute');
+    const hour = getStr('hour');
+    const day = getStr('day');
+    const dow = getStr('day_of_week');
+    const expr = typeof sc['cron_expression'] === 'string' ? (sc['cron_expression'] as string) : undefined;
+
+    let m = minute, h = hour, d = day, w = dow;
+    if (expr && expr.split(' ').length >= 5) {
+      const parts = expr.trim().split(/\s+/).slice(0, 5);
+      // parts: minute hour day month dow
+      [m, h, d, , w] = parts as [string, string, string, string, string];
+    }
+
+    // 推断频率
+    if (w !== '*') {
+      setCronFreq('week');
+      setDaysOfWeek(w.split(',').filter(Boolean).map((x) => Number(x)).filter((n) => !Number.isNaN(n)));
+    } else if (d !== '*' && d !== '?') {
+      setCronFreq('month');
+      const dom = parseInt(d, 10);
+      setDayOfMonth(Number.isNaN(dom) ? 1 : Math.min(31, Math.max(1, dom)));
+    } else if (h !== '*') {
+      setCronFreq('day');
+    } else if (m.startsWith('*/')) {
+      setCronFreq('minute');
+      const n = parseInt(m.slice(2), 10);
+      setEveryNMinutes(Number.isNaN(n) ? 5 : Math.min(59, Math.max(1, n)));
+    } else {
+      setCronFreq('hour');
+    }
+
+    // 数值部分
+    const mh = parseInt(h, 10);
+    const mm = parseInt(m, 10);
+    if (!Number.isNaN(mh)) setHourOfDay(Math.min(23, Math.max(0, mh)));
+    if (!Number.isNaN(mm)) {
+      setMinuteOfHour(Math.min(59, Math.max(0, mm)));
+      setMinuteOfDay(Math.min(59, Math.max(0, mm)));
+    }
+  };
+
+  useEffect(() => {
+    if (formData.scheduler_type === 'cron') {
+      initCronBuilderFromConfig(formData.schedule_config || {});
+      setCronMode('builder');
+    }
+  }, [formData.scheduler_type, formData.schedule_config]);
+
+  const cronStringFromBuilder = () => {
+    let minute = '*', hour = '*', day = '*', day_of_week = '*';
+    const month = '*';
+    switch (cronFreq) {
+      case 'minute':
+        minute = `*/${Math.min(59, Math.max(1, Number(everyNMinutes) || 1))}`;
+        break;
+      case 'hour':
+        minute = String(Math.min(59, Math.max(0, Number(minuteOfHour) || 0)));
+        break;
+      case 'day':
+        minute = String(Math.min(59, Math.max(0, Number(minuteOfDay) || 0)));
+        hour = String(Math.min(23, Math.max(0, Number(hourOfDay) || 0)));
+        break;
+      case 'week':
+        minute = String(Math.min(59, Math.max(0, Number(minuteOfDay) || 0)));
+        hour = String(Math.min(23, Math.max(0, Number(hourOfDay) || 0)));
+        day_of_week = daysOfWeek.length > 0 ? daysOfWeek.join(',') : '*';
+        break;
+      case 'month':
+        minute = String(Math.min(59, Math.max(0, Number(minuteOfDay) || 0)));
+        hour = String(Math.min(23, Math.max(0, Number(hourOfDay) || 0)));
+        day = String(Math.min(31, Math.max(1, Number(dayOfMonth) || 1)));
+        break;
+    }
+    return `${minute} ${hour} ${day} ${month} ${day_of_week}`;
+  };
+
+  const applyBuilderToScheduleConfig = () => {
+    const [minute, hour, day, month, day_of_week] = cronStringFromBuilder().split(' ');
+    const sc: Record<string, unknown> = { ...(formData.schedule_config || {}) };
+    delete sc['cron_expression'];
+    sc['minute'] = minute;
+    sc['hour'] = hour;
+    sc['day'] = day;
+    sc['month'] = month;
+    sc['day_of_week'] = day_of_week;
+    handleChange('schedule_config', sc);
+  };
+
+  useEffect(() => {
+    if (formData.scheduler_type === 'cron' && cronMode === 'builder') {
+      applyBuilderToScheduleConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cronFreq, everyNMinutes, minuteOfHour, hourOfDay, minuteOfDay, dayOfMonth, daysOfWeek, cronMode]);
+
   const handleChange = (field: keyof TaskConfigCreate, value: unknown) => {
     setFormData(prev => ({
       ...prev,
@@ -122,20 +239,25 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.name.trim()) {
       newErrors.name = '请输入任务名称';
     }
     if (!formData.task_type) {
       newErrors.task_type = '请选择任务类型';
     }
-    if (formData.scheduler_type === 'cron' && !formData.schedule_config.cron_expression) {
-      newErrors.schedule_config = '请输入Cron表达式';
+    if (formData.scheduler_type === 'cron') {
+      const sc: Record<string, unknown> = (formData.schedule_config || {});
+      const hasExpr = typeof sc['cron_expression'] === 'string' && (sc['cron_expression'] as string).trim() !== '';
+      const hasParts = ['minute', 'hour', 'day', 'month', 'day_of_week'].every((k) => sc[k] !== undefined);
+      if (!hasExpr && !hasParts) {
+        newErrors.schedule_config = '请使用构造器或输入Cron表达式';
+      }
+      if (cronMode === 'builder' && cronFreq === 'week' && daysOfWeek.length === 0) {
+        newErrors.schedule_config = '请选择至少一个星期几';
+      }
     }
-    if (formData.scheduler_type === 'interval' && !formData.schedule_config.interval_seconds) {
-      newErrors.schedule_config = '请输入间隔时间';
-    }
-    
+
     setErrors(newErrors);
     setParamErrors({});
     return Object.keys(newErrors).length === 0;
@@ -249,7 +371,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
           if (widget === 'select') {
             return (
-              <Grid item xs={12} sm={6} key={p.name}>
+              <Grid item xs={12} key={p.name}>
                 <FormControl fullWidth error={!!paramErrors[p.name]}>
                   <InputLabel>{label}</InputLabel>
                   <Select
@@ -275,7 +397,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
           if (widget === 'boolean') {
             return (
-              <Grid item xs={12} sm={6} key={p.name}>
+              <Grid item xs={12} key={p.name}>
                 <FormControl fullWidth>
                   <Typography variant="body2" gutterBottom>{label}</Typography>
                   <Select
@@ -297,7 +419,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
           if (widget === 'number') {
             return (
-              <Grid item xs={12} sm={6} key={p.name}>
+              <Grid item xs={12} key={p.name}>
                 <TextField
                   {...commonProps}
                   type="number"
@@ -357,7 +479,7 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
           // text / email
           return (
-            <Grid item xs={12} sm={6} key={p.name}>
+            <Grid item xs={12} key={p.name}>
               <TextField
                 {...commonProps}
                 type={widget === 'email' ? 'email' : 'text'}
@@ -377,37 +499,145 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
 
   const renderScheduleConfig = () => {
     switch (formData.scheduler_type) {
-      case 'cron':
+      case 'cron': {
+        const minutes = Array.from({ length: 60 }, (_, i) => i);
+        const hours = Array.from({ length: 24 }, (_, i) => i);
+        const days = Array.from({ length: 31 }, (_, i) => i + 1);
+        const weekDays = [
+          { v: 0, l: '周日' },
+          { v: 1, l: '周一' },
+          { v: 2, l: '周二' },
+          { v: 3, l: '周三' },
+          { v: 4, l: '周四' },
+          { v: 5, l: '周五' },
+          { v: 6, l: '周六' },
+        ];
+        const cronPreview: string = cronMode === 'builder'
+          ? cronStringFromBuilder()
+          : (typeof formData.schedule_config['cron_expression'] === 'string'
+            ? (formData.schedule_config['cron_expression'] as string)
+            : '');
         return (
-          <TextField
-            fullWidth
-            label="Cron表达式"
-            value={formData.schedule_config.cron_expression || ''}
-            onChange={(e) => handleChange('schedule_config', { 
-              ...formData.schedule_config, 
-              cron_expression: e.target.value 
-            })}
-            error={!!errors.schedule_config}
-            helperText={errors.schedule_config || '例如: 0 */2 * * * (每2小时)'}
-          />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button size="small" variant={cronMode === 'builder' ? 'contained' : 'outlined'} onClick={() => setCronMode('builder')}>向导</Button>
+              <Button size="small" variant={cronMode === 'expert' ? 'contained' : 'outlined'} onClick={() => setCronMode('expert')}>高级</Button>
+            </Box>
+            {cronMode === 'builder' ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>任务频率</InputLabel>
+                  <Select
+                    label="任务频率"
+                    value={cronFreq}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === 'minute' || v === 'hour' || v === 'day' || v === 'week' || v === 'month') {
+                        setCronFreq(v);
+                      }
+                    }}
+                  >
+                    <MenuItem value="minute">每分钟</MenuItem>
+                    <MenuItem value="hour">每小时</MenuItem>
+                    <MenuItem value="day">每天</MenuItem>
+                    <MenuItem value="week">每周</MenuItem>
+                    <MenuItem value="month">每月</MenuItem>
+                  </Select>
+                </FormControl>
+                {cronFreq === 'minute' && (
+                  <TextField
+                    label="每隔 N 分钟"
+                    type="number"
+                    inputProps={{ min: 1, max: 59 }}
+                    value={everyNMinutes}
+                    onChange={(e) => setEveryNMinutes(parseInt(e.target.value || '1', 10))}
+                  />
+                )}
+                {cronFreq === 'hour' && (
+                  <FormControl fullWidth>
+                    <InputLabel>每小时的第几分钟</InputLabel>
+                    <Select label="每小时的第几分钟" value={minuteOfHour} onChange={(e) => setMinuteOfHour(Number(e.target.value))}>
+                      {minutes.map((m) => (
+                        <MenuItem key={m} value={m}>{m.toString().padStart(2, '0')}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+                {(cronFreq === 'day' || cronFreq === 'week' || cronFreq === 'month') && (
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>小时</InputLabel>
+                      <Select label="小时" value={hourOfDay} onChange={(e) => setHourOfDay(Number(e.target.value))}>
+                        {hours.map((h) => (
+                          <MenuItem key={h} value={h}>{h.toString().padStart(2, '0')}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <FormControl fullWidth>
+                      <InputLabel>分钟</InputLabel>
+                      <Select label="分钟" value={minuteOfDay} onChange={(e) => setMinuteOfDay(Number(e.target.value))}>
+                        {minutes.map((m) => (
+                          <MenuItem key={m} value={m}>{m.toString().padStart(2, '0')}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                )}
+                {cronFreq === 'week' && (
+                  <FormGroup>
+                    <Typography variant="body2" sx={{ mb: 1 }}>每周的：</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
+                      {weekDays.map((d) => (
+                        <FormControlLabel
+                          key={d.v}
+                          control={
+                            <Checkbox
+                              checked={daysOfWeek.includes(d.v)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setDaysOfWeek((prev) => {
+                                  const set = new Set(prev);
+                                  if (checked) set.add(d.v); else set.delete(d.v);
+                                  return Array.from(set).sort((a, b) => a - b);
+                                });
+                              }}
+                            />
+                          }
+                          label={d.l}
+                        />
+                      ))}
+                    </Box>
+                  </FormGroup>
+                )}
+                {cronFreq === 'month' && (
+                  <FormControl fullWidth>
+                    <InputLabel>每月的第几天</InputLabel>
+                    <Select label="每月的第几天" value={dayOfMonth} onChange={(e) => setDayOfMonth(Number(e.target.value))}>
+                      {days.map((d) => (
+                        <MenuItem key={d} value={d}>{d}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+                <Typography variant="caption" color="text.secondary">预览: {cronPreview}</Typography>
+                {errors.schedule_config && (
+                  <Typography variant="caption" color="error">{errors.schedule_config}</Typography>
+                )}
+              </Box>
+            ) : (
+              <TextField
+                fullWidth
+                label="Cron表达式"
+                value={formData.schedule_config.cron_expression || ''}
+                onChange={(e) => handleChange('schedule_config', { ...formData.schedule_config, cron_expression: e.target.value })}
+                placeholder="例如: 0 3 * * * (每天 03:00)"
+                error={!!errors.schedule_config}
+                helperText={errors.schedule_config || '支持标准5段式 Cron (分 时 日 月 周)'}
+              />
+            )}
+          </Box>
         );
-        
-      case 'interval':
-        return (
-          <TextField
-            fullWidth
-            label="间隔时间 (秒)"
-            type="number"
-            value={formData.schedule_config.interval_seconds || ''}
-            onChange={(e) => handleChange('schedule_config', { 
-              ...formData.schedule_config, 
-              interval_seconds: parseInt(e.target.value) 
-            })}
-            error={!!errors.schedule_config}
-            helperText={errors.schedule_config}
-          />
-        );
-        
+      }
       case 'date':
         return (
           <TextField
@@ -422,7 +652,6 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
             InputLabelProps={{ shrink: true }}
           />
         );
-        
       default:
         return null;
     }
@@ -500,10 +729,11 @@ const TaskConfigDialog: React.FC<TaskConfigDialogProps> = ({
                 label="调度类型"
                 disabled={!!config}
               >
-                <MenuItem value="manual">手动</MenuItem>
-                <MenuItem value="interval">间隔</MenuItem>
-                <MenuItem value="cron">Cron</MenuItem>
-                <MenuItem value="date">定时</MenuItem>
+                {schedulerTypes.map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {t === 'manual' ? '手动' : t === 'cron' ? 'Cron' : t === 'date' ? '定时' : t}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
           </Grid>

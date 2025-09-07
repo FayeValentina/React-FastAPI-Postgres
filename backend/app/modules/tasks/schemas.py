@@ -1,7 +1,7 @@
 """
 任务配置相关的Pydantic模型
 """
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, ValidationInfo
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
@@ -34,9 +34,10 @@ class TaskConfigCreate(TaskConfigBase):
     """创建任务配置"""
     
     @field_validator('parameters')
-    def validate_parameters(cls, v, values):
+    def validate_parameters(cls, v, info: ValidationInfo):
         """验证任务参数"""
-        task_type = values.get('task_type')
+        data = info.data or {}
+        task_type = data.get('task_type')
         if not task_type:
             return v
         
@@ -49,9 +50,10 @@ class TaskConfigCreate(TaskConfigBase):
         return v
     
     @field_validator('schedule_config')
-    def validate_schedule_config(cls, v, values):
+    def validate_schedule_config(cls, v, info: ValidationInfo):
         """验证调度配置"""
-        scheduler_type = values.get('scheduler_type')
+        data = info.data or {}
+        scheduler_type = data.get('scheduler_type')
         if not scheduler_type:
             return v
             
@@ -212,26 +214,26 @@ class ExecutionCleanupResponse(BaseModel):
 # =============================================================================
 
 @register_pydantic_model
-class ScheduleActionResponse(BaseModel):
-    """调度操作响应 - POST /schedules/{id}/{action}"""
+class ScheduleOperationResponse(BaseModel):
+    """调度实例操作响应 - 对 schedule_id 的操作结果"""
     success: bool = Field(..., description="操作是否成功")
     message: str = Field(..., description="操作结果消息")
-    config_id: int = Field(..., description="任务配置ID")
-    
+    schedule_id: str = Field(..., description="调度实例ID")
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "success": True,
-                "message": "任务 205 启动成功",
-                "config_id": 205
+                "message": "paused",
+                "schedule_id": "scheduled_task:123:550e8400-e29b-41d4-a716-446655440000"
             }
         }
     )
 
 
 class ScheduledJobInfo(BaseModel):
-    """调度任务信息"""
-    task_id: str = Field(..., description="任务ID")
+    """调度任务信息（TaskIQ 列表项）"""
+    schedule_id: str = Field(..., description="调度实例ID")
     task_name: str = Field(..., description="任务名称")
     config_id: Optional[int] = Field(None, description="配置ID")
     schedule: str = Field(..., description="调度配置")
@@ -261,8 +263,8 @@ class ScheduleListResponse(BaseModel):
 
 @register_pydantic_model
 class ScheduleHistoryResponse(BaseModel):
-    """调度历史响应 - GET /schedules/{id}/history"""
-    config_id: int = Field(..., description="配置ID")
+    """调度历史响应 - GET /schedules/{schedule_id}/history"""
+    schedule_id: str = Field(..., description="调度实例ID")
     history: List[ScheduleHistoryEvent] = Field(..., description="历史事件列表")
     count: int = Field(..., description="事件数量")
 
@@ -270,12 +272,35 @@ class ScheduleHistoryResponse(BaseModel):
 @register_pydantic_model
 class ScheduleSummaryResponse(BaseModel):
     """调度摘要响应 - GET /schedules/summary"""
-    total_tasks: int = Field(..., description="总任务数")
-    active_tasks: int = Field(..., description="活跃任务数")
-    paused_tasks: int = Field(..., description="暂停任务数")
-    inactive_tasks: int = Field(..., description="未激活任务数")
-    error_tasks: int = Field(..., description="错误任务数")
+    total_schedules: int = Field(..., description="总调度实例数")
+    active_schedules: int = Field(..., description="活跃实例数")
+    paused_schedules: int = Field(..., description="暂停实例数")
+    inactive_schedules: int = Field(..., description="未激活实例数")
+    error_schedules: int = Field(..., description="错误实例数")
     last_updated: str = Field(..., description="最后更新时间")
+
+
+@register_pydantic_model
+class ConfigSchedulesResponse(BaseModel):
+    """配置下的调度实例列表 - GET /configs/{config_id}/schedules"""
+    config_id: int = Field(..., description="配置ID")
+    schedule_ids: List[str] = Field(..., description="调度实例ID列表")
+
+
+@register_pydantic_model
+class ScheduleInstanceInfo(BaseModel):
+    """调度实例详情（来自 Redis 状态服务合成）"""
+    schedule_id: str = Field(..., description="调度实例ID")
+    status: str = Field(..., description="实例状态")
+    metadata: Dict[str, Any] = Field(..., description="元数据")
+    recent_history: List[ScheduleHistoryEvent] = Field(..., description="最近历史事件")
+    is_scheduled: bool = Field(..., description="是否处于调度状态")
+
+
+@register_pydantic_model
+class ScheduleInstanceResponse(ScheduleInstanceInfo):
+    """调度实例详情响应 - GET /schedules/{schedule_id}"""
+    pass
     
 # =============================================================================
 # 基础模型
@@ -294,12 +319,12 @@ class ConfigStatsInfo(BaseModel):
 
 
 class ScheduleSummaryInfo(BaseModel):
-    """调度摘要信息"""
-    total_tasks: int = Field(..., description="总任务数")
-    active_tasks: int = Field(..., description="活跃任务数")
-    paused_tasks: int = Field(..., description="暂停任务数")
-    inactive_tasks: int = Field(..., description="未激活任务数")
-    error_tasks: int = Field(..., description="错误任务数")
+    """调度摘要信息（schedule_id 粒度）"""
+    total_schedules: int = Field(..., description="总调度实例数")
+    active_schedules: int = Field(..., description="活跃实例数")
+    paused_schedules: int = Field(..., description="暂停实例数")
+    inactive_schedules: int = Field(..., description="未激活实例数")
+    error_schedules: int = Field(..., description="错误实例数")
     last_updated: str = Field(..., description="最后更新时间")
 
 
@@ -421,3 +446,30 @@ class DashboardInfo(BaseModel):
 class SystemDashboardResponse(BaseModel):
     """系统仪表板响应 - GET /system/dashboard"""
     dashboard: DashboardInfo = Field(..., description="仪表板数据")
+
+
+# =============================================================================
+# 管理与清理端点响应
+# =============================================================================
+
+@register_pydantic_model
+class OrphanListResponse(BaseModel):
+    """孤儿调度实例列表 - GET /system/orphans"""
+    orphan_schedule_ids: List[str] = Field(..., description="孤儿调度实例ID列表")
+    count: int = Field(..., description="总数")
+
+
+@register_pydantic_model
+class OrphanCleanupResponse(BaseModel):
+    """孤儿调度清理结果 - POST /system/cleanup/orphans"""
+    checked: int = Field(..., description="检查数量")
+    removed: int = Field(..., description="移除数量")
+    errors: int = Field(..., description="错误数量")
+    ids: List[str] = Field(..., description="已移除的调度实例ID")
+
+
+@register_pydantic_model
+class CleanupLegacyResponse(BaseModel):
+    """遗留清理结果 - POST /system/cleanup/legacy"""
+    legacy_keys_removed: Dict[str, int] = Field(..., description="删除的旧键数量，按类别统计")
+    legacy_schedules_removed: int = Field(..., description="删除的旧格式调度ID数量")

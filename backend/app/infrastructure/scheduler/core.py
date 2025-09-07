@@ -11,7 +11,7 @@ from taskiq import ScheduledTask
 from app.modules.tasks.models import TaskConfig
 from app.infrastructure.tasks.task_registry_decorators import SchedulerType
 from app.infrastructure.tasks import task_registry_decorators as tr
-
+from app.infrastructure.redis.keyspace import redis_keys
 logger = logging.getLogger(__name__)
 
 
@@ -57,32 +57,34 @@ class SchedulerCoreService:
         except Exception as e:
             logger.error(f"调度器关闭失败: {e}")
     
-    async def register_task(self, config: TaskConfig) -> bool:
-        """注册任务到TaskIQ调度器"""
+    async def register_task(self, config: TaskConfig, schedule_id: Optional[str] = None) -> Optional[str]:
+        """注册任务到TaskIQ调度器，返回 schedule_id（失败返回 None）。"""
         try:
             task_func = tr.get_function(config.task_type)
             if not task_func:
                 logger.error(f"找不到任务类型 {config.task_type}")
-                return False
-            
-            scheduled_task = self._build_scheduled_task(config, task_func)
+                return None
+
+            scheduled_task = self._build_scheduled_task(config, task_func, schedule_id=schedule_id)
             if not scheduled_task:
-                return False
-            
+                return None
+
             await self.schedule_source.add_schedule(scheduled_task)
-            logger.info(f"成功注册调度任务: {config.name} (ID: {config.id})")
-            return True
-            
+            logger.info(
+                "成功注册调度任务: %s (config_id=%s, schedule_id=%s)",
+                config.name, config.id, getattr(scheduled_task, 'schedule_id', 'unknown')
+            )
+            return getattr(scheduled_task, 'schedule_id', None)
+
         except Exception as e:
             logger.error(f"注册调度任务失败: {e}")
-            return False
+            return None
     
-    async def unregister_task(self, config_id: int) -> bool:
-        """从TaskIQ调度器注销任务"""
+    async def unregister_task(self, schedule_id: str) -> bool:
+        """从TaskIQ调度器注销任务（按 schedule_id）。"""
         try:
-            task_id = f"scheduled_task_{config_id}"
-            await self.schedule_source.delete_schedule(task_id)
-            logger.info(f"成功注销调度任务: config_id={config_id}")
+            await self.schedule_source.delete_schedule(schedule_id)
+            logger.info(f"成功注销调度任务: schedule_id={schedule_id}")
             return True
         except Exception as e:
             logger.error(f"注销调度任务失败: {e}")
@@ -101,12 +103,12 @@ class SchedulerCoreService:
                         config_id = int(config_id)
                 
                 task_info = {
-                    "task_id": getattr(schedule, 'schedule_id', 'unknown'),
+                    "schedule_id": getattr(schedule, 'schedule_id', 'unknown'),
                     "task_name": schedule.task_name,
                     "config_id": config_id,
                     "schedule": getattr(schedule, 'cron', getattr(schedule, 'time', 'unknown')),
                     "labels": getattr(schedule, 'labels', {}),
-                    "next_run": self._get_next_run_time(schedule)
+                    "next_run": self._get_next_run_time(schedule),
                 }
                 tasks.append(task_info)
             
@@ -115,13 +117,13 @@ class SchedulerCoreService:
             logger.error(f"获取调度任务列表失败: {e}")
             return []
     
-    async def is_task_scheduled(self, config_id: int) -> bool:
-        """检查任务是否在TaskIQ调度器中"""
+    async def is_schedule_present(self, schedule_id: str) -> bool:
+        """检查特定 schedule_id 是否存在于 TaskIQ 调度器中"""
         schedules = await self.get_all_schedules()
-        return any(task.get("config_id") == config_id for task in schedules)
+        return any(task.get("schedule_id") == schedule_id for task in schedules)
     
-    def _build_scheduled_task(self, config: TaskConfig, task_func) -> Optional[ScheduledTask]:
-        """构建调度任务"""
+    def _build_scheduled_task(self, config: TaskConfig, task_func, schedule_id: Optional[str] = None) -> Optional[ScheduledTask]:
+        """构建调度任务（支持自定义 schedule_id，用于恢复/恢复原实例）。"""
         try:
             args = [config.id]
             kwargs = config.parameters or {}
@@ -146,7 +148,8 @@ class SchedulerCoreService:
             except Exception as e:
                 logger.warning("任务参数校验失败(忽略并继续): %s", e)
             
-            task_id = f"scheduled_task_{config.id}"
+            # schedule_id: new format scheduled_task:{config_id}:{uuid}
+            task_id = schedule_id or redis_keys.scheduler.build_schedule_id(config.id)
             
             labels = {
                 "config_id": str(config.id),

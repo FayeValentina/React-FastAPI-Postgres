@@ -28,7 +28,7 @@ class TaskService:
                 success, message = await scheduler_service.register_task(db_config)
                 if not success:
                     logger.warning(f"自动启动调度失败: {message}")
-            schedule_info = await scheduler_service.get_task_full_info(db_config.id)
+            schedule_info = await self._aggregate_config_status(db_config.id)
             return {
                 'id': db_config.id,
                 'name': db_config.name,
@@ -56,7 +56,7 @@ class TaskService:
             configs, total = await crud_task_config.get_by_query(db, query)
             results = []
             for config in configs:
-                schedule_info = await scheduler_service.get_task_full_info(config.id)
+                schedule_info = await self._aggregate_config_status(config.id)
                 results.append({
                     'id': config.id,
                     'name': config.name,
@@ -90,7 +90,7 @@ class TaskService:
             config = await crud_task_config.get(db, config_id)
             if not config:
                 raise HTTPException(status_code=404, detail="配置不存在")
-            schedule_info = await scheduler_service.get_task_full_info(config_id)
+            schedule_info = await self._aggregate_config_status(config_id)
             result = {
                 'id': config.id,
                 'name': config.name,
@@ -125,7 +125,7 @@ class TaskService:
             if not config:
                 raise HTTPException(status_code=404, detail="配置不存在")
             updated_config = await crud_task_config.update(db, config, update_data)
-            schedule_info = await scheduler_service.get_task_full_info(config_id)
+            schedule_info = await self._aggregate_config_status(config_id)
             return {
                 'id': updated_config.id,
                 'name': updated_config.name,
@@ -154,7 +154,13 @@ class TaskService:
             config = await crud_task_config.get(db, config_id)
             if not config:
                 raise HTTPException(status_code=404, detail="配置不存在")
-            await scheduler_service.unregister_task(config_id)
+            # 取消所有与该配置关联的调度实例
+            try:
+                schedule_ids = await scheduler_service.list_config_schedules(config_id)
+                for sid in schedule_ids:
+                    await scheduler_service.unregister(sid)
+            except Exception as e:
+                logger.warning(f"删除配置前注销调度失败: config_id={config_id}, err={e}")
             success = await crud_task_config.delete(db, config_id)
             if success:
                 return {"success": True, "message": f"配置 {config.name} 删除成功"}
@@ -166,46 +172,45 @@ class TaskService:
             raise HTTPException(status_code=400, detail=str(e))
 
     # Schedule management
-    async def start_schedule(self, db: AsyncSession, config_id: int) -> Dict[str, Any]:
+    async def create_schedule_instance(self, db: AsyncSession, config_id: int) -> Dict[str, Any]:
         try:
             config = await crud_task_config.get(db, config_id)
             if not config:
                 raise HTTPException(status_code=404, detail="配置不存在")
-            success, message = await scheduler_service.register_task(config)
-            return {"success": success, "message": message, "config_id": config_id}
+            success, schedule_id_or_msg = await scheduler_service.register_task(config)
+            return {
+                "success": success,
+                "message": "created" if success else schedule_id_or_msg,
+                "schedule_id": schedule_id_or_msg if success else None,
+            }
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"启动调度失败: {str(e)}")
+            logger.error(f"创建调度实例失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
-    async def stop_schedule(self, config_id: int) -> Dict[str, Any]:
+    async def unregister_schedule(self, schedule_id: str) -> Dict[str, Any]:
         try:
-            success, message = await scheduler_service.unregister_task(config_id)
-            return {"success": success, "message": message, "config_id": config_id}
+            success, message = await scheduler_service.unregister(schedule_id)
+            return {"success": success, "message": message, "schedule_id": schedule_id}
         except Exception as e:
-            logger.error(f"停止调度失败: {str(e)}")
+            logger.error(f"注销调度实例失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
-    async def pause_schedule(self, config_id: int) -> Dict[str, Any]:
+    async def pause_schedule(self, schedule_id: str) -> Dict[str, Any]:
         try:
-            success, message = await scheduler_service.pause_task(config_id)
-            return {"success": success, "message": message, "config_id": config_id}
+            success, message = await scheduler_service.pause(schedule_id)
+            return {"success": success, "message": message, "schedule_id": schedule_id}
         except Exception as e:
-            logger.error(f"暂停调度失败: {str(e)}")
+            logger.error(f"暂停调度实例失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
-    async def resume_schedule(self, db: AsyncSession, config_id: int) -> Dict[str, Any]:
+    async def resume_schedule(self, schedule_id: str) -> Dict[str, Any]:
         try:
-            config = await crud_task_config.get(db, config_id)
-            if not config:
-                raise HTTPException(status_code=404, detail="配置不存在")
-            success, message = await scheduler_service.resume_task(config)
-            return {"success": success, "message": message, "config_id": config_id}
-        except HTTPException:
-            raise
+            success, message = await scheduler_service.resume(schedule_id)
+            return {"success": success, "message": message, "schedule_id": schedule_id}
         except Exception as e:
-            logger.error(f"恢复调度失败: {str(e)}")
+            logger.error(f"恢复调度实例失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
     async def get_all_schedules(self) -> Dict[str, Any]:
@@ -216,10 +221,10 @@ class TaskService:
             logger.error(f"获取调度列表失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
-    async def get_schedule_history(self, config_id: int, limit: int) -> Dict[str, Any]:
+    async def get_schedule_history(self, schedule_id: str, limit: int) -> Dict[str, Any]:
         try:
-            history = await scheduler_service.state.get_history(config_id, limit)
-            return {"config_id": config_id, "history": history, "count": len(history)}
+            history = await scheduler_service.state.get_schedule_history(schedule_id, limit)
+            return {"schedule_id": schedule_id, "history": history, "count": len(history)}
         except Exception as e:
             logger.error(f"获取调度历史失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
@@ -230,6 +235,63 @@ class TaskService:
         except Exception as e:
             logger.error(f"获取调度摘要失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
+
+    # New schedule_id-first helpers
+    async def list_config_schedules(self, config_id: int) -> Dict[str, Any]:
+        try:
+            schedule_ids = await scheduler_service.list_config_schedules(config_id)
+            return {"config_id": config_id, "schedule_ids": schedule_ids}
+        except Exception as e:
+            logger.error(f"获取配置的调度实例失败: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    async def get_schedule_info(self, schedule_id: str) -> Dict[str, Any]:
+        try:
+            info = await scheduler_service.get_schedule_full_info(schedule_id)
+            return info
+        except Exception as e:
+            logger.error(f"获取调度实例信息失败: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Aggregation helper used by config responses
+    async def _aggregate_config_status(self, config_id: int) -> Dict[str, Any]:
+        try:
+            schedule_ids = await scheduler_service.list_config_schedules(config_id)
+            if not schedule_ids:
+                return {
+                    "status": "inactive",
+                    "is_scheduled": False,
+                    "status_consistent": True,
+                    "recent_history": [],
+                }
+            statuses = []
+            recent_history: List[Dict[str, Any]] = []
+            for sid in schedule_ids:
+                st = await scheduler_service.state.get_schedule_status(sid)
+                statuses.append(st.value)
+                hist = await scheduler_service.state.get_schedule_history(sid, limit=2)
+                recent_history.extend(hist)
+            is_active = any(s == "active" for s in statuses)
+            status = "active" if is_active else ("paused" if any(s == "paused" for s in statuses) else "inactive")
+            # sort recent_history by timestamp desc if present
+            try:
+                recent_history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            except Exception:
+                pass
+            return {
+                "status": status,
+                "is_scheduled": is_active,
+                "status_consistent": True,
+                "recent_history": recent_history[:5],
+            }
+        except Exception as e:
+            logger.warning(f"聚合配置状态失败: config_id={config_id}, err={e}")
+            return {
+                "status": "error",
+                "is_scheduled": False,
+                "status_consistent": False,
+                "recent_history": [],
+            }
 
     # Execution management
     async def get_config_executions(self, db: AsyncSession, config_id: int, limit: int) -> Dict[str, Any]:
@@ -470,6 +532,30 @@ class TaskService:
             logger.error(f"获取仪表板数据失败: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
+    # Admin maintenance utilities
+    async def list_orphans(self) -> Dict[str, Any]:
+        try:
+            ids = await scheduler_service.find_orphan_schedule_ids()
+            return {"orphan_schedule_ids": ids, "count": len(ids)}
+        except Exception as e:
+            logger.error(f"获取孤儿调度实例失败: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    async def cleanup_orphans(self) -> Dict[str, Any]:
+        try:
+            result = await scheduler_service.cleanup_orphan_schedules()
+            return result
+        except Exception as e:
+            logger.error(f"清理孤儿调度实例失败: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    async def cleanup_legacy(self) -> Dict[str, Any]:
+        try:
+            result = await scheduler_service.cleanup_legacy_artifacts()
+            return result
+        except Exception as e:
+            logger.error(f"清理遗留资源失败: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+
 
 task_service = TaskService()
-

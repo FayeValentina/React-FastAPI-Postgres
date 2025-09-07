@@ -39,7 +39,6 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
   const getSchedulerTypeColor = (type: string): 'default' | 'primary' | 'secondary' | 'warning' => {
     switch (type) {
       case 'manual': return 'default';
-      case 'interval': return 'primary';
       case 'cron': return 'secondary';
       case 'date': return 'warning';
       default: return 'default';

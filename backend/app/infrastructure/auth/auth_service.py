@@ -1,8 +1,8 @@
 from typing import Optional, Set
 from datetime import datetime, timedelta
 import json
-
-from app.infrastructure.database.redis_base import RedisBase
+from app.infrastructure.redis.keyspace import redis_keys
+from app.infrastructure.redis.redis_base import RedisBase
 from app.core.config import settings
 import logging
 
@@ -13,8 +13,6 @@ class AuthRedisService(RedisBase):
     
     def __init__(self):
         super().__init__(key_prefix="auth:")
-        self.token_prefix = "token:"
-        self.user_tokens_prefix = "user_tokens:"
     
     async def store_refresh_token(
         self,
@@ -34,8 +32,8 @@ class AuthRedisService(RedisBase):
             "expires_at": (datetime.utcnow() + timedelta(days=expires_in_days)).isoformat()
         }
         
-        token_key = f"{self.token_prefix}{token}"
-        user_tokens_key = f"{self.user_tokens_prefix}{user_id}"
+        token_key = redis_keys.auth.token(token)
+        user_tokens_key = redis_keys.auth.user_tokens(user_id)
 
         try:
             async with self.pipeline() as pipe:
@@ -57,7 +55,7 @@ class AuthRedisService(RedisBase):
     
     async def get_refresh_token_payload(self, token: str) -> Optional[dict]:
         """获取刷新令牌数据"""
-        return await self.get_json(f"{self.token_prefix}{token}")
+        return await self.get_json(redis_keys.auth.token(token))
     
     async def revoke_token(self, token: str) -> bool:
         """撤销令牌 (使用新的 pipeline 上下文管理器)"""
@@ -67,8 +65,7 @@ class AuthRedisService(RedisBase):
             return False
         
         user_id = token_data.get("user_id")
-        
-        token_key = f"{self.token_prefix}{token}"
+        token_key = redis_keys.auth.token(token)
 
         try:
             async with self.pipeline() as pipe:
@@ -76,7 +73,7 @@ class AuthRedisService(RedisBase):
                 pipe.delete(self._make_key(token_key))
                 # 2. 如果有关联的用户，从用户的令牌集合中移除
                 if user_id:
-                    user_tokens_key = f"{self.user_tokens_prefix}{user_id}"
+                    user_tokens_key = redis_keys.auth.user_tokens(user_id)
                     pipe.srem(self._make_key(user_tokens_key), token)
                 
                 results = await pipe.execute()
@@ -89,7 +86,7 @@ class AuthRedisService(RedisBase):
     
     async def revoke_all_user_tokens(self, user_id: int) -> bool:
         """撤销用户的所有令牌 (使用新的 pipeline 上下文管理器)"""
-        user_tokens_key = f"{self.user_tokens_prefix}{user_id}"
+        user_tokens_key = redis_keys.auth.user_tokens(user_id)
         
         # 获取用户所有token
         tokens_bytes = await self.smembers(user_tokens_key)
@@ -101,7 +98,7 @@ class AuthRedisService(RedisBase):
         try:
             async with self.pipeline() as pipe:
                 # 1. 准备删除所有单独的令牌键
-                token_keys_to_delete = [self._make_key(f"{self.token_prefix}{token}") for token in tokens]
+                token_keys_to_delete = [self._make_key(redis_keys.auth.token(token)) for token in tokens]
                 if token_keys_to_delete:
                     pipe.delete(*token_keys_to_delete)
                 
@@ -119,7 +116,7 @@ class AuthRedisService(RedisBase):
         """获取用户token数量"""
         try:
             async with self._connection_manager.get_connection() as client:
-                count = await client.scard(self._make_key(f"{self.user_tokens_prefix}{user_id}"))
+                count = await client.scard(self._make_key(redis_keys.auth.user_tokens(user_id)))
                 return count or 0
         except Exception:
             return 0
@@ -140,12 +137,13 @@ class AuthRedisService(RedisBase):
     async def cleanup_expired_tokens(self) -> int:
         """清理过期的token（这个方法可以被定时任务调用）"""
         # 获取所有token键
-        token_keys = await self.scan_keys(f"{self.token_prefix}*")
+
+        token_keys = await self.scan_keys(f"{redis_keys.auth.TOKEN_PREFIX}*")
         
         expired_count = 0
         for key in token_keys:
             # 检查每个token是否过期
-            token = key.replace(self.token_prefix, "")
+            token = key.replace(redis_keys.auth.TOKEN_PREFIX, "")
             if not await self.is_token_valid(token):
                 await self.revoke_token(token)
                 expired_count += 1
@@ -160,4 +158,3 @@ auth_redis_service = AuthRedisService()
 def get_auth_redis_service() -> AuthRedisService:
     """FastAPI 依赖项：获取认证相关的 Redis 服务"""
     return auth_redis_service
-
