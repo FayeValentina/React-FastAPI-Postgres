@@ -22,7 +22,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // 显示加载状态
   if (loading) {
     return fallback || (
-      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="100vh">
+      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="100dvh">
         <CircularProgress />
         <Typography variant="h6" sx={{ mt: 2 }}>
           正在验证身份...

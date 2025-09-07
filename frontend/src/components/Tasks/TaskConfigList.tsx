@@ -67,11 +67,11 @@ const TaskConfigList: React.FC<TaskConfigListProps> = ({
         <Grid item xs={12} sm={6} md={4} key={config.id}>
           <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <CardContent sx={{ flexGrow: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 1, flexWrap: 'wrap' }}>
                 <Typography variant="h6" component="h2">
                   {config.name}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                   <Chip label={`活跃: ${scheduleCounts[config.id]?.active ?? 0}`} color="success" size="small" />
                   <Chip label={`暂停: ${scheduleCounts[config.id]?.paused ?? 0}`} color={(scheduleCounts[config.id]?.paused ?? 0) > 0 ? 'warning' : 'default'} size="small" />
                 </Box>
