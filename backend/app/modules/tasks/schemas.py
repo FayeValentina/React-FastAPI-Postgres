@@ -146,7 +146,8 @@ class TaskExecutionInfo(BaseModel):
     """任务执行信息基础模型"""
     id: int = Field(..., description="执行记录ID")
     task_id: str = Field(..., description="任务ID")
-    config_id: int = Field(..., description="配置ID")
+    # config_id 在某些情况下可能为空（例如无绑定配置的执行记录）
+    config_id: Optional[int] = Field(None, description="配置ID")
     is_success: bool = Field(..., description="执行是否成功")
     started_at: datetime = Field(..., description="开始时间")
     completed_at: datetime = Field(..., description="完成时间")

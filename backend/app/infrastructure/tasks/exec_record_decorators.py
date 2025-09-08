@@ -6,9 +6,9 @@ import functools
 import logging
 from typing import Callable, Any, Optional, Dict
 from datetime import datetime
+from taskiq import Context
 
 logger = logging.getLogger(__name__)
-
 
 async def _create_execution_record(
     config_id: Optional[int],
@@ -61,32 +61,17 @@ def execution_handler(func: Callable) -> Callable:
             # 通常config_id是第一个参数
             config_id = args[0] if isinstance(args[0], (int, type(None))) else None
         
-        # 智能地查找 Context 对象
-        from taskiq import Context
-        context: Context = None
+        # 直接从 kwargs 获取 Context（各任务均显式声明 context 参数）
+        context: Optional[Context] = kwargs.get("context")
         
-        # 从 args 中查找 Context 实例
-        for arg in args:
-            if isinstance(arg, Context):
-                context = arg
-                break
-        
-        # 如果 args 中没有，从 kwargs 中查找
-        if not context:
-            for kwarg_val in kwargs.values():
-                if isinstance(kwarg_val, Context):
-                    context = kwarg_val
-                    break
-        
-        # 从 Context 中安全地获取 task_id
-        real_task_id = None
-        if context and hasattr(context, 'message') and context.message:
-            real_task_id = context.message.task_id
+        # 从 Context 中安全地获取 task_id（简化版）
+        msg = getattr(context, "message", None) if context is not None else None
+        real_task_id = getattr(msg, "task_id", None)
         
         # 如果上下文中没有，再从 kwargs 中找备选
         if not real_task_id:
             real_task_id = kwargs.get('task_id')
-        
+
         start_time = datetime.utcnow()
         
         try:
