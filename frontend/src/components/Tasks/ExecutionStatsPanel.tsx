@@ -318,12 +318,35 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
   return (
     <Card>
       <CardHeader
+        sx={{
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          '& .MuiCardHeader-content': { minWidth: 0, flex: '1 1 auto' },
+          '& .MuiCardHeader-action': {
+            mt: { xs: 1, sm: 0 },
+            width: { xs: '100%', sm: 'auto' },
+          },
+        }}
         avatar={<StatsIcon color="primary" />}
         title="执行统计"
+        titleTypographyProps={{
+          variant: 'h6',
+          sx: { whiteSpace: 'normal', wordBreak: 'keep-all' },
+        }}
         subheader={`执行情况分析 - ${timeRange === '7d' ? '最近7天' : timeRange === '30d' ? '最近30天' : '最近90天'}`}
+        subheaderTypographyProps={{ sx: { whiteSpace: 'normal', wordBreak: 'keep-all' } }}
         action={
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'flex-start', sm: 'flex-end' },
+              width: { xs: '100%', sm: 'auto' },
+            }}
+          >
+            <FormControl size="small" sx={{ minWidth: { xs: 96, sm: 120 } }}>
               <InputLabel>时间范围</InputLabel>
               <Select
                 value={timeRange}
@@ -335,7 +358,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
                 <MenuItem value="90d">最近90天</MenuItem>
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 100 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: 88, sm: 100 } }}>
               <InputLabel>视图</InputLabel>
               <Select
                 value={viewMode}
