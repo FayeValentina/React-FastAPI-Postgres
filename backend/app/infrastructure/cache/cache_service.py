@@ -1,4 +1,4 @@
-# backend/app/services/redis/cache.py (适配 v4.0 装饰器的最终版)
+# 缓存 Redis 服务（配合基于标签的缓存装饰器使用）
 
 import logging
 from typing import Optional, Dict, Any, List
@@ -27,8 +27,8 @@ class CacheConfig:
 
 class CacheRedisService(RedisBase):
     """
-    缓存Redis服务 - v4.0 简化版
-    该服务现在是一个轻量级封装，所有复杂的Key生成逻辑都已移至 cache_decorators.py 中的 CacheKeyFactory。
+    缓存Redis服务（轻量封装）。
+    复杂的缓存键生成逻辑位于 cache_decorators.py 中的 _generate_cache_key。
     """
     
     def __init__(self):
@@ -37,21 +37,16 @@ class CacheRedisService(RedisBase):
     
     # ========== 标签化缓存新方法 ==========
     
-    async def get_binary_data(self, cache_key: str) -> Optional[bytes]:
-        """获取二进制缓存数据"""
+    async def get_binary_data(self, cache_key: str) -> Optional[str]:
+        """获取缓存数据（decode_responses=True 环境下返回 str）"""
         try:
             data = await self.get(cache_key)
             if data is None:
                 return None
-            
-            # 如果Redis客户端返回bytes，直接返回
-            if isinstance(data, bytes):
-                return data
-            
-            # 如果返回str，编码为bytes（兼容性处理）
-            if isinstance(data, str):
-                return data.encode('utf-8')
-                
+            # 连接池 decode_responses=True，直接返回 str
+            if isinstance(data, (str, bytes)):
+                # 若底层返回 bytes（罕见），也统一解码
+                return data.decode('utf-8') if isinstance(data, bytes) else data
             return None
         except Exception as e:
             logger.error(f"获取二进制缓存失败 (key={cache_key}): {e}")
@@ -78,7 +73,8 @@ class CacheRedisService(RedisBase):
                 pipe.expire(self._make_key(tag_set_key), CacheConfig.TAG_TTL)
 
                 result = await pipe.execute()
-            return result[0] > 0
+            # 幂等语义：只要执行成功（无异常），即视为确保已关联
+            return True
         except Exception as e:
             logger.error(f"添加键到标签失败 (tag={tag}, key={cache_key}): {e}")
             return False
@@ -89,13 +85,10 @@ class CacheRedisService(RedisBase):
 
             tag_set_key = redis_keys.cache.tag(tag)
             
-            # 获取标签下的所有缓存键 (可能返回 bytes)
-            cache_keys_raw = await self.smembers(tag_set_key)
-            if not cache_keys_raw:
+            # 获取标签下的所有缓存键（decode_responses=True 下为 str 集合）
+            cache_keys = await self.smembers(tag_set_key)
+            if not cache_keys:
                 return 0
-            
-            # ⭐ 核心修复：将 bytes 解码为 str
-            cache_keys = [key.decode('utf-8') if isinstance(key, bytes) else key for key in cache_keys_raw]
             
             # 删除所有关联的缓存键
             deleted_count = 0

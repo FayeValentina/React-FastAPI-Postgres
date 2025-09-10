@@ -212,6 +212,16 @@ class RedisBase:
             logger.error(f"Redis sismember error (name={name}, value={value}): {e}")
             return False
 
+    async def scard(self, name: str) -> int:
+        """获取集合基数"""
+        try:
+            async with self._connection_manager.get_connection() as client:
+                result = await client.scard(self._make_key(name))
+                return int(result or 0)
+        except Exception as e:
+            logger.error(f"Redis scard error (name={name}): {e}")
+            return 0
+
     # ========== 列表操作 ==========
     
     async def lpush(self, name: str, *values: Any) -> int:

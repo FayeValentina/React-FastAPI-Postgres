@@ -60,19 +60,11 @@ class ScheduleHistoryRedisService(RedisBase):
 
     async def list_schedule_ids(self, config_id: int) -> List[str]:
         try:
-            raw = await self.smembers(redis_keys.scheduler.config_index(config_id))
-            if not raw:
+            ids_set = await self.smembers(redis_keys.scheduler.config_index(config_id))
+            if not ids_set:
                 return []
-            ids: List[str] = []
-            for v in raw:
-                if isinstance(v, bytes):
-                    try:
-                        ids.append(v.decode("utf-8"))
-                    except Exception:
-                        continue
-                else:
-                    ids.append(str(v))
-            return ids
+            # decode_responses=True 下元素为 str，统一转为 str 以确保类型
+            return [str(v) for v in ids_set]
         except Exception as e:
             logger.error(f"读取索引失败: config_id={config_id}, err={e}")
             return []
