@@ -121,7 +121,7 @@ const AutoRefreshControl: React.FC<AutoRefreshControlProps> = ({
         open={menuOpen}
         onClose={handleMenuClose}
         PaperProps={{
-          sx: { minWidth: 200 }
+          sx: { minWidth: 200, maxWidth: 'calc(100vw - 32px)' }
         }}
       >
         <Box sx={{ px: 2, py: 1 }}>

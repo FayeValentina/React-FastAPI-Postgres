@@ -89,8 +89,8 @@ const ForgotPasswordPage: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Card sx={{ width: '100%', maxWidth: 400 }}>
-          <CardContent sx={{ p: 4 }}>
+        <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 420 } }}>
+          <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Button
                 startIcon={<ArrowBackIcon />}

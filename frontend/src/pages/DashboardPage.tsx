@@ -10,6 +10,7 @@ import {
   Chip,
   Grid,
   Alert,
+  Container,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -64,7 +65,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <MainLayout>
-      <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+      <Container maxWidth="lg" sx={{ p: { xs: 2, md: 3 } }}>
         <Typography variant="h4" gutterBottom>
           用户仪表板
         </Typography>
@@ -195,7 +196,7 @@ const DashboardPage: React.FC = () => {
             </Card>
           </Grid>
         </Grid>
-      </Box>
+      </Container>
     </MainLayout>
   );
 };

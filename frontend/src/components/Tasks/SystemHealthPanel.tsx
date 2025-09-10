@@ -65,7 +65,7 @@ const SystemHealthPanel: React.FC<SystemHealthPanelProps> = ({ health }) => {
           sx={{ mb: 2, height: 8, borderRadius: 1 }}
         />
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(auto-fit, minmax(160px, 1fr))', sm: 'repeat(auto-fit, minmax(200px, 1fr))' }, gap: 2 }}>
           <Box>
             <Typography variant="caption" color="text.secondary">系统状态</Typography>
             <Typography variant="body1">
