@@ -160,9 +160,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
           }),
           zIndex: 9999,
           pointerEvents: 'none',
+          px: { xs: 2, sm: 0 },
         }}
       >
-        <Stack spacing={1} sx={{ minWidth: 320, maxWidth: 480 }}>
+        <Stack spacing={1} sx={{ width: 'min(92vw, 480px)' }}>
           {notifications.map((notification) => (
             <Slide
               key={notification.id}

@@ -191,8 +191,8 @@ const ProfilePage: React.FC = () => {
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <Avatar sx={{ mr: 2, bgcolor: 'primary.main', width: 64, height: 64 }}>
-                      <PersonIcon sx={{ fontSize: 32 }} />
+                    <Avatar sx={{ mr: 2, bgcolor: 'primary.main', width: { xs: 56, sm: 64 }, height: { xs: 56, sm: 64 } }}>
+                      <PersonIcon sx={{ fontSize: { xs: 28, sm: 32 } }} />
                     </Avatar>
                     <Box>
                       <Typography variant="h5" gutterBottom>

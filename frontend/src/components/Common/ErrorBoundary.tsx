@@ -90,7 +90,7 @@ class ErrorBoundary extends Component<Props, State> {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: '400px',
+            minHeight: { xs: '60dvh', sm: '400px' },
             p: 3,
           }}
         >
@@ -98,7 +98,7 @@ class ErrorBoundary extends Component<Props, State> {
             elevation={3}
             sx={{
               p: 4,
-              maxWidth: 600,
+              maxWidth: { xs: '100%', sm: 600 },
               width: '100%',
               textAlign: 'center',
             }}
@@ -171,10 +171,10 @@ class ErrorBoundary extends Component<Props, State> {
                         <Box
                           component="pre"
                           sx={{
-                            fontSize: '0.75rem',
+                            fontSize: { xs: '0.7rem', sm: '0.75rem' },
                             fontFamily: 'monospace',
                             overflow: 'auto',
-                            maxHeight: '200px',
+                            maxHeight: { xs: '40dvh', sm: '200px' },
                             bgcolor: 'grey.100',
                             p: 1,
                             borderRadius: 1,

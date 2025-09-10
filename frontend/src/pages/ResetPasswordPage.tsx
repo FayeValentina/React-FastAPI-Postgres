@@ -159,8 +159,8 @@ const ResetPasswordPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          <Card sx={{ width: '100%', maxWidth: 400 }}>
-            <CardContent sx={{ p: 4, textAlign: 'center' }}>
+          <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 420 } }}>
+            <CardContent sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
               <CircularProgress sx={{ mb: 2 }} />
               <Typography variant="body1">
                 正在验证重置链接...
@@ -184,8 +184,8 @@ const ResetPasswordPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          <Card sx={{ width: '100%', maxWidth: 400 }}>
-            <CardContent sx={{ p: 4, textAlign: 'center' }}>
+          <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 420 } }}>
+            <CardContent sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
               <Alert severity="error" sx={{ mb: 2 }}>
                 {tokenMessage}
               </Alert>
@@ -231,8 +231,8 @@ const ResetPasswordPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          <Card sx={{ width: '100%', maxWidth: 400 }}>
-            <CardContent sx={{ p: 4, textAlign: 'center' }}>
+          <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 420 } }}>
+            <CardContent sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
               <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
               <Typography variant="h5" gutterBottom>
                 密码重置成功
@@ -265,8 +265,8 @@ const ResetPasswordPage: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Card sx={{ width: '100%', maxWidth: 400 }}>
-          <CardContent sx={{ p: 4 }}>
+        <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 420 } }}>
+          <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
             <Typography component="h1" variant="h4" align="center" gutterBottom>
               重置密码
             </Typography>

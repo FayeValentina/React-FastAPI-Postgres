@@ -247,7 +247,7 @@ const ExecutionStatsPanel: React.FC<ExecutionStatsPanelProps> = ({ refreshTrigge
                       </TableCell>
                       <TableCell align="right">
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                          <Box sx={{ minWidth: 50, mr: 1 }}>
+                          <Box sx={{ minWidth: { xs: 40, sm: 50 }, mr: 1 }}>
                             <LinearProgress
                               variant="determinate"
                               value={percentage}

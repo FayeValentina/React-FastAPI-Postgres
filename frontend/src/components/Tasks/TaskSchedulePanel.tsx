@@ -219,7 +219,7 @@ const TaskSchedulePanel: React.FC<TaskSchedulePanelProps> = ({ configs }) => {
                 {/* Active instances table */}
                 <Typography variant="subtitle2" gutterBottom>活跃实例</Typography>
                 <Box className="scroll-x">
-                  <Table size="small" component={Paper} sx={{ minWidth: 700 }}>
+                  <Table size="small" component={Paper} sx={{ minWidth: { xs: 560, sm: 640, md: 700 } }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>schedule_id</TableCell>
