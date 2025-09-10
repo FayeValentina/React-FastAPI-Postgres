@@ -30,6 +30,7 @@ broker = (
         RedisAsyncResultBackend(
             redis_url=settings.redis.CONNECTION_URL,
             result_ex_time=settings.taskiq.RESULT_EX_TIME,
+            serializer=JSONSerializer(),
         )
     )
 )
