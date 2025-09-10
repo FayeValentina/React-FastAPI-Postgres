@@ -1,44 +1,62 @@
-FROM python:3.11-slim
+## ===================================================================
+## Stage 1: Builder
+## - Install full toolchain and Poetry
+## - Create a project-local virtualenv with all deps installed
+## ===================================================================
+FROM python:3.11 as builder
 
-# 设置工作目录
 WORKDIR /app
 
-# 创建非root用户
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-# 安装系统依赖
+# System deps helpful for building wheels
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
-    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装Poetry
-RUN pip install poetry
+# Install Poetry
+RUN pip install --no-cache-dir poetry
 
-# 复制poetry配置文件
+# Copy dependency metadata and install
 COPY pyproject.toml poetry.lock* ./
+RUN poetry config virtualenvs.in-project true && \
+    poetry install --no-root --no-interaction --no-ansi
 
-# 配置poetry并安装依赖
-RUN poetry config virtualenvs.create false && \
-    poetry config virtualenvs.in-project false && \
-    poetry install --only main --no-interaction --no-ansi
+## ===================================================================
+## Stage 2: Final runtime image (slim)
+## - Copy only the built virtualenv and app code
+## - No compilers or build tools
+## ===================================================================
+FROM python:3.11-slim
 
-# 创建日志目录
+WORKDIR /app
+
+# Create non-root user and minimal runtime tools for healthchecks/entry
+RUN apt-get update && apt-get install -y \
+    bash \
+    curl \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# App log dir
 RUN mkdir -p /var/log/app && chown -R appuser:appuser /var/log/app
 
-# 复制应用代码
+# Copy the virtualenv from the builder stage
+COPY --from=builder /app/.venv ./.venv
+
+# Put venv on PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy application code
 COPY . .
 
-# 修改所有权为appuser
+# Permissions
 RUN chown -R appuser:appuser /app
 
-# 切换到非root用户
 USER appuser
 
-# 设置环境变量
+# Environment
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-ENV POETRY_CACHE_DIR=/tmp/poetry_cache
 
 EXPOSE 8000
