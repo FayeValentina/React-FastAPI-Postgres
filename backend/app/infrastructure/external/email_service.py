@@ -1,8 +1,9 @@
-import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import List, Optional
+from typing import Optional
 import logging
+
+import aiosmtplib
 
 from app.core.config import settings
 
@@ -72,15 +73,15 @@ class EmailService:
             html_part = MIMEText(html_content, 'html', 'utf-8')
             msg.attach(html_part)
             
-            # 发送邮件
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                if self.use_tls:
-                    server.starttls()
-                
-                if self.username and self.password:
-                    server.login(self.username, self.password)
-                
-                server.send_message(msg)
+            # 使用异步 SMTP 客户端发送邮件，避免阻塞事件循环
+            await aiosmtplib.send(
+                msg,
+                hostname=self.smtp_server,
+                port=self.smtp_port,
+                start_tls=self.use_tls,
+                username=self.username or None,
+                password=self.password or None,
+            )
             
             logger.info(f"邮件已发送到: {to_email}")
             return True

@@ -176,21 +176,40 @@ class SchedulerService:
             if not schedules:
                 return orphan_ids
 
+            # 收集所有带有 config_id 的调度，并按 config_id 分组
+            id_to_sids: Dict[int, List[str]] = {}
+            for s in schedules:
+                schedule_id = s.get("schedule_id")
+                cfg_id = s.get("config_id")
+                if not schedule_id:
+                    continue
+                if cfg_id is None:
+                    # 没有关联配置，直接视为孤儿
+                    orphan_ids.append(schedule_id)
+                    continue
+                try:
+                    cfg_int = int(cfg_id)
+                except Exception:
+                    orphan_ids.append(schedule_id)
+                    continue
+                id_to_sids.setdefault(cfg_int, []).append(schedule_id)
+
+            if not id_to_sids:
+                return orphan_ids
+
+            # 一次性查询现存的 TaskConfig ID，减少数据库压力
             from app.modules.tasks.models import TaskConfig as TaskConfigModel
             async with AsyncSessionLocal() as db:
-                for s in schedules:
-                    schedule_id = s.get("schedule_id")
-                    cfg_id = s.get("config_id")
-                    if not schedule_id:
-                        continue
-                    if cfg_id is None:
-                        orphan_ids.append(schedule_id)
-                        continue
-                    # check DB existence
-                    result = await db.execute(select(TaskConfigModel.id).where(TaskConfigModel.id == int(cfg_id)))
-                    exists = result.scalar_one_or_none()
-                    if not exists:
-                        orphan_ids.append(schedule_id)
+                result = await db.execute(
+                    select(TaskConfigModel.id).where(TaskConfigModel.id.in_(list(id_to_sids.keys())))
+                )
+                existing_ids = set(result.scalars())
+
+            # 找出不存在于数据库中的 config_id，并收集对应的 schedule_id
+            missing_ids = set(id_to_sids.keys()) - existing_ids
+            for mid in missing_ids:
+                orphan_ids.extend(id_to_sids.get(mid, []))
+
             return orphan_ids
         except Exception as e:
             logger.error(f"扫描孤儿调度实例失败: {e}")
