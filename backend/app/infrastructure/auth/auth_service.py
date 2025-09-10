@@ -1,9 +1,10 @@
 from typing import Optional, Set
-from datetime import datetime, timedelta
+from datetime import timedelta
 import json
 from app.infrastructure.redis.keyspace import redis_keys
 from app.infrastructure.redis.redis_base import RedisBase
 from app.core.config import settings
+from app.infrastructure.utils.common import get_current_time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,10 +27,11 @@ class AuthRedisService(RedisBase):
         
         ttl = expires_in_days * 24 * 3600  # 转换为秒
         
+        now = get_current_time()
         token_data = {
             "user_id": user_id,
-            "created_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(days=expires_in_days)).isoformat()
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=expires_in_days)).isoformat()
         }
         
         token_key = redis_keys.auth.token(token)
@@ -88,12 +90,11 @@ class AuthRedisService(RedisBase):
         """撤销用户的所有令牌 (使用新的 pipeline 上下文管理器)"""
         user_tokens_key = redis_keys.auth.user_tokens(user_id)
         
-        # 获取用户所有token
-        tokens_bytes = await self.smembers(user_tokens_key)
-        if not tokens_bytes:
+        # 获取用户所有token（decode_responses=True 下为 str 集合）
+        tokens_set = await self.smembers(user_tokens_key)
+        if not tokens_set:
             return True
-            
-        tokens = [t.decode('utf-8') if isinstance(t, bytes) else t for t in tokens_bytes]
+        tokens = [str(t) for t in tokens_set]
 
         try:
             async with self.pipeline() as pipe:
@@ -115,9 +116,8 @@ class AuthRedisService(RedisBase):
     async def get_user_token_count(self, user_id: int) -> int:
         """获取用户token数量"""
         try:
-            async with self._connection_manager.get_connection() as client:
-                count = await client.scard(self._make_key(redis_keys.auth.user_tokens(user_id)))
-                return count or 0
+            count = await self.scard(redis_keys.auth.user_tokens(user_id))
+            return count or 0
         except Exception:
             return 0
     
@@ -129,8 +129,9 @@ class AuthRedisService(RedisBase):
         
         # 检查是否过期
         try:
-            expires_at = datetime.fromisoformat(token_data["expires_at"])
-            return datetime.utcnow() < expires_at
+            from datetime import datetime as _dt
+            expires_at = _dt.fromisoformat(token_data["expires_at"])
+            return get_current_time() < expires_at
         except (KeyError, ValueError):
             return False
     

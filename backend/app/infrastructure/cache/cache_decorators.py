@@ -48,6 +48,25 @@ def _generate_cache_key(
     for name, value in bound_args.arguments.items():
         if name not in exclude_params:
             filtered_params[name] = value
+
+    # 特殊处理：即使排除了 current_user，也将其稳定身份加入键（按用户隔离缓存）
+    try:
+        if 'current_user' in bound_args.arguments:
+            user_obj = bound_args.arguments.get('current_user')
+            user_id = None
+            # 常见模型: SQLAlchemy/Pydantic，优先 id 作为稳定标识
+            if user_obj is not None:
+                user_id = getattr(user_obj, 'id', None)
+                if user_id is None and isinstance(user_obj, dict):
+                    user_id = user_obj.get('id')
+                if user_id is None:
+                    # 降级：使用用户名/邮箱作为键的一部分（若存在）
+                    user_id = getattr(user_obj, 'username', None) or getattr(user_obj, 'email', None)
+            if user_id is not None:
+                filtered_params['__user_id__'] = user_id
+    except Exception:
+        # 任何异常都不影响生成缓存键
+        pass
     
     # 从过滤后的参数生成稳定的字符串表示
     # 注意：使用 sorted 确保参数顺序一致性
