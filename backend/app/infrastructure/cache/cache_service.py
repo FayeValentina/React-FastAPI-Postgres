@@ -72,7 +72,7 @@ class CacheRedisService(RedisBase):
                 pipe.sadd(self._make_key(tag_set_key), cache_key)
                 pipe.expire(self._make_key(tag_set_key), CacheConfig.TAG_TTL)
 
-                result = await pipe.execute()
+                await pipe.execute()
             # 幂等语义：只要执行成功（无异常），即视为确保已关联
             return True
         except Exception as e:
