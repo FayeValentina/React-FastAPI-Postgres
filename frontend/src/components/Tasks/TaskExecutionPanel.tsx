@@ -112,7 +112,7 @@ const TaskExecutionPanel: React.FC<TaskExecutionPanelProps> = ({ configs }) => {
 
       {/* 过滤器 */}
       <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ flex: 1, minWidth: { xs: 140, sm: 200 } }}>
           <InputLabel>配置筛选</InputLabel>
           <Select
             value={filter.configId}
@@ -126,7 +126,7 @@ const TaskExecutionPanel: React.FC<TaskExecutionPanelProps> = ({ configs }) => {
           </Select>
         </FormControl>
         
-        <FormControl size="small" sx={{ minWidth: 120 }}>
+        <FormControl size="small" sx={{ flex: 1, minWidth: { xs: 120, sm: 140 } }}>
           <InputLabel>时间范围</InputLabel>
           <Select
             value={filter.days}

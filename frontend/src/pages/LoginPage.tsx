@@ -99,8 +99,8 @@ const LoginPage: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Card sx={{ width: '100%', maxWidth: 400 }}>
-          <CardContent sx={{ p: 4 }}>
+        <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 420 } }}>
+          <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
             <Typography component="h1" variant="h4" align="center" gutterBottom>
               用户登录
             </Typography>

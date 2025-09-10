@@ -147,8 +147,8 @@ const RegisterPage: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Card sx={{ width: '100%', maxWidth: 500 }}>
-          <CardContent sx={{ p: 4 }}>
+        <Card sx={{ width: '100%', maxWidth: { xs: '100%', sm: 500 } }}>
+          <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
             <Typography component="h1" variant="h4" align="center" gutterBottom>
               用户注册
             </Typography>
