@@ -128,9 +128,9 @@ services:
       bash -c "
         echo '等待数据库准备...' &&
         echo '应用数据库迁移...' &&
-        poetry run alembic upgrade head &&
+        alembic upgrade head &&
         echo '启动生产服务器...' &&
-        poetry run gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile - --error-logfile -
+        gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile - --error-logfile -
       "
     networks:
       - prodNetWork
@@ -245,7 +245,7 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 15 &&
-        poetry run taskiq worker --fs-discover --tasks-pattern 'app/modules/tasks/workers/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
+        taskiq worker --fs-discover --tasks-pattern 'app/modules/tasks/workers/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
       "
     networks:
       - prodNetWork
@@ -291,7 +291,7 @@ services:
       bash -c "
         echo '等待依赖服务...' &&
         sleep 20 &&
-        poetry run taskiq scheduler app.broker:scheduler --log-level ${LOG_LEVEL:-WARNING}
+        taskiq scheduler app.broker:scheduler --log-level ${LOG_LEVEL:-WARNING}
       "
     networks:
       - prodNetWork
