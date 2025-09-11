@@ -23,6 +23,7 @@
 在 `backend/pyproject.toml` 的 `[tool.poetry.dependencies]` 中新增：
 
 ```toml
+openai = "^1.40.0"
 sentence-transformers = "^3.0.1"
 pgvector = "^0.2.5"
 nltk = "^3.9"
