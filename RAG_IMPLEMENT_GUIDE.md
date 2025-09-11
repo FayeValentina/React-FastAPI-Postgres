@@ -2,6 +2,8 @@
 
 > 目标：在已通过 `LLM_LOCAL_MODEL_GUIDE.md` 部署的本地大模型基础上，为后端服务增加检索增强生成能力，使 LLM 能够结合 PostgreSQL 中的私有知识库回答问题。
 
+在开始之前，请确保已完成 `LLM_LOCAL_MODEL_GUIDE.md` 中的所有步骤，包括 `docker-compose` 中新增的 LLM 服务及其网络配置，以下改动均在此基础上追加。
+
 ---
 
 ## 1) 架构与数据流
@@ -32,8 +34,8 @@ nltk = "^3.9"
 # 生成新的 lock 文件并安装
 poetry lock
 poetry install
-# 下载分词器数据（首次执行即可）
-poetry run python -m nltk.downloader punkt
+# 下载分词器数据（非交互式，首次执行即可）
+poetry run python -c "import nltk; nltk.download('punkt')"
 ```
 
 若在容器中开发，可使用：
@@ -41,7 +43,7 @@ poetry run python -m nltk.downloader punkt
 ```bash
 docker compose exec backend poetry lock && \
 docker compose exec backend poetry install && \
-docker compose exec backend poetry run python -m nltk.downloader punkt
+docker compose exec backend poetry run python -c "import nltk; nltk.download('punkt')"
 ```
 
 ### 环境变量
@@ -65,11 +67,13 @@ RAG_TOP_K=3
 
 ```yaml
 postgres:
-  image: pgvector/pgvector:pg17
+  image: pgvector/pgvector:pg16  # 使用稳定版 PG16
   # 其余配置保持不变
 ```
 
 `pgvector/pgvector` 镜像已预装 `pgvector` 扩展，无需手动编译。
+
+> **注意**：在修改 `docker-compose.*.yml` 时，请基于已完成 LLM 部署后的文件进行增量合并，保留 `llm_init`、`llama_server` 服务及 `dbNetWork` 网络配置。
 
 ### 后端环境变量透传
 在 `backend` 服务的 `environment` 中补充：
@@ -99,7 +103,7 @@ import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
 
 revision = 'xxxx'
-down_revision = 'prev'
+down_revision = '<previous_revision>'  # 该值由 Alembic 自动生成
 
 
 def upgrade() -> None:
