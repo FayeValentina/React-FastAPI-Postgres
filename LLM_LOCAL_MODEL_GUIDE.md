@@ -37,17 +37,19 @@ LLM_API_KEY=sk-local
 
 # 模型下载参数（按需调整）
 HF_TOKEN=xxx_your_hf_token_xxx
-HF_REPO_ID=google/gemma-3-4b-it-qat-q4_0-gguf
+HF_REPO_ID=google/gemma-3-4b-it-gguf  # 请以实际 Hugging Face 仓库 ID 为准
 HF_FILENAME=gemma-3-4b-it-q4_0.gguf
 HF_REVISION=main
 
-# llama_server 使用的模型名（通常用文件名；也可在启动时从 /v1/models 动态获取）
-LLM_MODEL=gemma-3-4b-it-q4_0.gguf
+# llama_server 使用的模型名（可省略，默认取 HF_FILENAME）
+ LLM_MODEL=
 ```
 
 说明：
 - `LLM_API_KEY` 会作为 llama.cpp server 的 `--api-key`，用于内部鉴权；后端请求需带 `Authorization: Bearer sk-local`。
 - `HF_*` 用于 `llm_init` 拉取权重；如更换模型，仅需修改并重新运行 `llm_init`。
+- 若未显式设置 `LLM_MODEL`，后端会默认读取 `HF_FILENAME`，避免变量不同步。
+- 请在 Hugging Face 网站核实 `HF_REPO_ID` 与 `HF_FILENAME` 是否匹配，否则模型将无法下载。
 
 ---
 
@@ -65,6 +67,8 @@ services:
   # 1) 预下载模型（一次性执行，完成即退出）
   llm_init:
     image: python:3.11-slim
+    networks:
+      - dbNetWork
     environment:
       - HF_TOKEN=${HF_TOKEN}
       - HF_REPO_ID=${HF_REPO_ID}
@@ -98,6 +102,8 @@ PY
   # 2) OpenAI 兼容的 llama.cpp 服务器
   llama_server:
     image: ghcr.io/ggerganov/llama.cpp:server
+    networks:
+      - dbNetWork
     depends_on:
       llm_init:
         condition: service_completed_successfully
@@ -143,7 +149,8 @@ PY
 要点：
 - 不对外暴露 `llama_server` 端口，仅通过服务名在 Compose 网络中访问。
 - `backend` 通过 `depends_on` 确保在 `llama_server` 可用后再启动（首次启动仍可能需等待模型加载）。
-- 首次部署前可先运行 `docker compose run --rm llm_init` 进行预下载，避免 `up` 时等待过长。
+- `llm_init` 与 `llama_server` 需加入现有的 `dbNetWork` 网络，以便 `backend` 能解析其服务名。
+- 首次部署前可先运行 `docker compose run --rm llm_init` 进行预下载，避免 `up` 时等待过长；首次推理时模型加载亦会有额外延迟属正常现象。
 
 ---
 
@@ -185,13 +192,15 @@ docker compose exec backend sh -lc "curl -s -H 'Content-Type: application/json' 
 1) 配置（示意）：
 ```python
 # app/core/settings.py（或项目中现有 Settings 定义处）
+import os
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     LLM_BASE_URL: str = "http://llama_server:8080/v1"
     LLM_API_KEY: str = "sk-local"
-    # llama.cpp server 要求的 model 名称，通常与 GGUF 文件名一致
-    LLM_MODEL: str = "gemma-3-4b-it-q4_0.gguf"
+    # 默认从 HF_FILENAME 读取，减少变量不同步
+    LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
 
 settings = Settings()
 ```
@@ -267,7 +276,7 @@ api_router.include_router(llm_ws.router)
 ## 7) 前端改造方案（新增 Chat 页面，WebSocket 直连后端）
 
 - 依赖：当前前端已用 Vite + React + TS，确保 `.env.*` 已配置 `VITE_API_URL` 指向后端（HTTP）。
-- WebSocket URL 通常为：`ws(s)://<backend_domain>/api/v1/ws/chat`（具体前缀以后端路由为准）。
+- WebSocket URL 通常为：`ws(s)://<backend_domain>/api/v1/ws/chat`（具体前缀以后端路由为准）。如部署在子路径或使用自定义端口，请确认 `VITE_API_URL` 拼装出的地址是否正确。
 
 示例组件（简化）：`frontend/src/pages/Chat.tsx`
 ```tsx
