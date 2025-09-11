@@ -41,14 +41,14 @@ HF_REPO_ID=google/gemma-3-4b-it-gguf  # 请以实际 Hugging Face 仓库 ID 为�
 HF_FILENAME=gemma-3-4b-it-q4_0.gguf
 HF_REVISION=main
 
-# llama_server 使用的模型名（可省略，默认取 HF_FILENAME）
- LLM_MODEL=
+# llama_server 使用的模型名（默认读取 HF_FILENAME）
+LLM_MODEL=${HF_FILENAME}
 ```
 
 说明：
 - `LLM_API_KEY` 会作为 llama.cpp server 的 `--api-key`，用于内部鉴权；后端请求需带 `Authorization: Bearer sk-local`。
 - `HF_*` 用于 `llm_init` 拉取权重；如更换模型，仅需修改并重新运行 `llm_init`。
-- 若未显式设置 `LLM_MODEL`，后端会默认读取 `HF_FILENAME`，避免变量不同步。
+- `LLM_MODEL` 默认读取 `HF_FILENAME`，避免变量不同步。
 - 请在 Hugging Face 网站核实 `HF_REPO_ID` 与 `HF_FILENAME` 是否匹配，否则模型将无法下载。
 
 ---
@@ -76,10 +76,9 @@ services:
       - HF_REVISION=${HF_REVISION:-main}
       - PIP_NO_CACHE_DIR=1
     command: >-
-      sh -lc "
-      set -euo pipefail;
-      python -m pip install -q 'huggingface_hub[hf_xet]';
-      python - <<'PY'
+      sh -lc "set -euo pipefail;\
+      python -m pip install -q 'huggingface_hub[hf_xet]';\
+      python - <<'PY'\
 from huggingface_hub import hf_hub_download
 import os, shutil
 repo=os.environ['HF_REPO_ID']
@@ -92,9 +91,8 @@ dst=f'/models/{fn}'
 if os.path.abspath(path)!=os.path.abspath(dst):
     shutil.copy2(path, dst)
 print('Downloaded:', dst)
-PY
-      ls -lh /models;
-      "
+PY\
+      ls -lh /models;"
     volumes:
       - models_data:/models
     restart: "no"
@@ -183,7 +181,7 @@ docker compose exec backend sh -lc "curl -s -H 'Content-Type: application/json' 
 
 建议新增一个专用模块（示例）：
 - `backend/app/modules/llm/`：封装客户端与业务逻辑
-- `backend/app/api/v1/routes/llm_ws.py`：WebSocket 端点
+- `backend/app/api/v1/endpoints/llm_ws.py`：WebSocket 端点
 - 在 Pydantic 配置中加入 `LLM_BASE_URL`、`LLM_API_KEY`
 - Poetry 依赖：`openai>=1.40.0`
 
@@ -216,7 +214,7 @@ client = OpenAI(base_url=settings.LLM_BASE_URL, api_key=settings.LLM_API_KEY)
 
 3) WebSocket 路由（流式发送 token）：
 ```python
-# app/api/v1/routes/llm_ws.py
+# app/api/v1/endpoints/llm_ws.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.modules.llm.client import client
 
@@ -266,7 +264,7 @@ async def ws_chat(ws: WebSocket):
 
 4) 路由纳入主应用：
 ```python
-# app/api/v1/routes/__init__.py 或 main 中 include_router
+# app/api/v1/endpoints/__init__.py 或 main 中 include_router
 from app.api.v1.routes import llm_ws
 api_router.include_router(llm_ws.router)
 ```
@@ -398,7 +396,7 @@ location /api/ {
 
 ## 12) 与现有仓库规范的对齐
 
-- FastAPI：将 WS 路由置于 `app/api/v1/routes/`，使用 `APIRouter(prefix="/ws", tags=["llm"])`。
+- FastAPI：将 WS 路由置于 `app/api/v1/endpoints/`，使用 `APIRouter(prefix="/ws", tags=["llm"])`。
 - 配置：通过 Pydantic Settings 读取 `LLM_BASE_URL` / `LLM_API_KEY`。
 - 前端：新增页面置于 `src/pages/` 或按你现有分层（如 `@components/`）。
 - 环境：仅在 `.env.*` 注入变量，不向前端暴露服务内部地址（前端只连后端 WS）。

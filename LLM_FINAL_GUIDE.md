@@ -174,7 +174,7 @@ import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
 
 revision = 'xxxx'
-down_revision = '上一版本号'
+down_revision = 'previous_revision_id'  # 该值由 Alembic 自动生成
 
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
