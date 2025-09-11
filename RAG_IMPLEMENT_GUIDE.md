@@ -154,17 +154,17 @@ docker compose exec backend alembic upgrade head
 
 ```python
 from sentence_transformers import SentenceTransformer
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from . import models
 
 model = SentenceTransformer(settings.EMBEDDING_MODEL)
 
-async def add_document_to_knowledge_base(db: Session, doc: schemas.DocumentCreate) -> int:
+async def add_document_to_knowledge_base(db: AsyncSession, doc: schemas.DocumentCreate) -> int:
     chunks = split_text(doc.content)          # 分块
     vectors = model.encode(chunks, normalize_embeddings=True)
     for content, embedding in zip(chunks, vectors):
         db.add(models.KnowledgeChunk(source=doc.source, content=content, embedding=embedding))
-    db.commit()
+    await db.commit()
     return len(chunks)
 ```
 
@@ -178,16 +178,17 @@ async def add_document_to_knowledge_base(db: Session, doc: schemas.DocumentCreat
 在同一 `service.py` 中实现：
 
 ```python
-from pgvector.sqlalchemy import L2Distance
+from sqlalchemy import select
 
-async def search_similar_chunks(db: Session, query: str, top_k: int) -> list[models.KnowledgeChunk]:
+async def search_similar_chunks(db: AsyncSession, query: str, top_k: int) -> list[models.KnowledgeChunk]:
     q_emb = model.encode([query], normalize_embeddings=True)[0]
-    return (
-        db.query(models.KnowledgeChunk)
-          .order_by(models.KnowledgeChunk.embedding.cosine_distance(q_emb))
-          .limit(top_k)
-          .all()
+    stmt = (
+        select(models.KnowledgeChunk)
+        .order_by(models.KnowledgeChunk.embedding.cosine_distance(q_emb))
+        .limit(top_k)
     )
+    result = await db.scalars(stmt)
+    return result.all()
 ```
 
 （`cosine_distance` 为 pgvector 提供的运算符，SQLAlchemy 0.2.5 起支持。）
@@ -210,14 +211,14 @@ class DocumentCreate(BaseModel):
 
 ```python
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.api import dependencies
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.knowledge_base import service, schemas
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 @router.post("/add-document", status_code=201)
-async def add_document(doc: schemas.DocumentCreate, db: Session = Depends(dependencies.get_db)):
+async def add_document(doc: schemas.DocumentCreate, db: AsyncSession = Depends(get_async_session)):
     count = await service.add_document_to_knowledge_base(db, doc)
     return {"message": f"文档已添加并切分为 {count} 块"}
 ```
