@@ -75,24 +75,26 @@ services:
       - HF_FILENAME=${HF_FILENAME}
       - HF_REVISION=${HF_REVISION:-main}
       - PIP_NO_CACHE_DIR=1
-    command: >-
-      sh -lc "set -euo pipefail;\
-      python -m pip install -q 'huggingface_hub[hf_xet]';\
-      python - <<'PY'\
+    command: |
+      sh -lc '
+        set -euo pipefail
+        python -m pip install -q "huggingface_hub[hf_xet]"
+        python - <<'"'"'PY'"'"'
 from huggingface_hub import hf_hub_download
 import os, shutil
-repo=os.environ['HF_REPO_ID']
-fn=os.environ['HF_FILENAME']
-rev=os.environ.get('HF_REVISION','main')
-token=os.environ.get('HF_TOKEN')
+repo = os.environ["HF_REPO_ID"]
+fn = os.environ["HF_FILENAME"]
+rev = os.environ.get("HF_REVISION", "main")
+token = os.environ.get("HF_TOKEN")
 path = hf_hub_download(repo_id=repo, filename=fn, revision=rev, token=token)
-os.makedirs('/models', exist_ok=True)
-dst=f'/models/{fn}'
-if os.path.abspath(path)!=os.path.abspath(dst):
+os.makedirs("/models", exist_ok=True)
+dst = f"/models/{fn}"
+if os.path.abspath(path) != os.path.abspath(dst):
     shutil.copy2(path, dst)
-print('Downloaded:', dst)
-PY\
-      ls -lh /models;"
+print("Downloaded:", dst)
+PY
+        ls -lh /models
+      '
     volumes:
       - models_data:/models
     restart: "no"
@@ -124,7 +126,7 @@ PY\
       - "2"
       - --api-key
       - ${LLM_API_KEY}
-      # 可选降噪：- --log-disable
+      # 可选：- --log-disable
     expose:
       - "8080"
     volumes:
@@ -135,7 +137,6 @@ PY\
   backend:
     # ... 你现有的镜像/构建配置 ...
     environment:
-      # 保留现有变量并新增：
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
     depends_on:
