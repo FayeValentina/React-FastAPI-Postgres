@@ -22,7 +22,7 @@ LLM_API_KEY=sk-local
 
 # Hugging Face 模型下载（确认仓库路径）
 HF_TOKEN=xxx_your_hf_token_xxx
-HF_REPO_ID=google/gemma-3-4b-it-qat-q4_0-gguf   # 请核实真实路径
+HF_REPO_ID=google/gemma-3-4b-it-gguf             # 请核实真实路径
 HF_FILENAME=gemma-3-4b-it-q4_0.gguf
 HF_REVISION=main
 
@@ -128,6 +128,7 @@ PY\
       - models_data:/models:ro
     networks:
       - dbNetWork
+    restart: unless-stopped
 ```
 
 ### PostgreSQL 替换为 pgvector 镜像
@@ -143,6 +144,8 @@ postgres:
 在 `backend` 服务中追加：
 
 ```yaml
+- LLM_BASE_URL=${LLM_BASE_URL}
+- LLM_API_KEY=${LLM_API_KEY}
 - EMBEDDING_MODEL=${EMBEDDING_MODEL}
 - RAG_TOP_K=${RAG_TOP_K:-3}
 ```
@@ -214,7 +217,7 @@ docker compose exec backend alembic upgrade head
 ---
 
 ## 8. 前端 Chat 页面
-- 通过 WebSocket 与后端交互：`const url = (import.meta.env.VITE_API_URL || '').replace(/^http/, 'ws') + '/ws/llm'`
+- 通过 WebSocket 与后端交互：`const url = (import.meta.env.VITE_API_URL || '').replace(/^http/, 'ws') + '/api/v1/ws/chat'`
 - 在复杂部署（子路径、端口）下请验证 URL 生成是否正确。
 - 首次请求可能因模型加载而等待较长时间，属于正常现象。
 
