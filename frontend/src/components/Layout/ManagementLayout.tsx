@@ -23,6 +23,7 @@ import {
   Dashboard as DashboardIcon,
   Settings as SettingsIcon,
   Menu as MenuIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 
@@ -46,6 +47,17 @@ const menuSections = [
         text: '系统监控',
         icon: <DashboardIcon />,
         path: '/management/monitoring',
+        implemented: true,
+      },
+    ],
+  },
+  {
+    title: '服务助手',
+    items: [
+      {
+        text: '聊天机器人',
+        icon: <ChatIcon />,
+        path: '/chat',
         implemented: true,
       },
     ],

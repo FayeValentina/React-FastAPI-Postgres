@@ -1,7 +1,7 @@
 import os
 from typing import Any, List, Optional, Union
 from dataclasses import dataclass
-from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, computed_field
+from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, field_validator, computed_field, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -346,6 +346,22 @@ class Settings(BaseSettings):
 
     # 数据库日志
     DB_ECHO_LOG: bool = True
+
+    # LLM / RAG 配置（简单直挂根 Settings，便于直接引用）
+    LLM_BASE_URL: str = "http://llama_server:8080/v1"
+    LLM_API_KEY: str = "sk-local"
+    # 默认从 HF_FILENAME 读取，避免变量不同步
+    LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
+    EMBEDDING_MODEL: str = Field(default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    RAG_TOP_K: int = Field(default=3)
+    # spaCy 模型配置（多语言）
+    # 按语言分别配置小模型与可选路径
+    SPACY_MODEL_ZH: str = Field(default="zh_core_web_sm")
+    SPACY_MODEL_EN: str = Field(default="en_core_web_sm")
+    SPACY_MODEL_JA: str = Field(default="ja_core_news_sm")
+    SPACY_MODEL_PATH_ZH: str | None = Field(default=None)
+    SPACY_MODEL_PATH_EN: str | None = Field(default=None)
+    SPACY_MODEL_PATH_JA: str | None = Field(default=None)
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

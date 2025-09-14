@@ -13,6 +13,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import TaskManagementPage from './pages/TaskManagementPage';
 import SystemMonitoringPage from './pages/SystemMonitoringPage';
+import ChatPage from './pages/ChatPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -71,6 +72,11 @@ const AppRoutes: React.FC = () => {
         <Route path="/demo" element={
           <ProtectedRoute>
             <DemoPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/chat" element={
+          <ProtectedRoute>
+            <ChatPage />
           </ProtectedRoute>
         } />
         

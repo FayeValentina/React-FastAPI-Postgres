@@ -34,6 +34,7 @@ from app.infrastructure.database.postgres_base import Base
 from app.modules.auth.models import User
 from app.modules.auth.models import PasswordReset
 from app.modules.content.models import RedditComment,RedditPost
+from app.modules.knowledge_base.models import KnowledgeChunk, KnowledgeDocument
 from app.modules.tasks.models import TaskConfig, TaskExecution
 from app.core.config import settings
 
