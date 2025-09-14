@@ -75,6 +75,8 @@ services:
       - LLM_API_KEY=${LLM_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - RAG_TOP_K=${RAG_TOP_K:-3}
+      - HF_HOME=/models/hf
+      - HF_HUB_OFFLINE=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +87,8 @@ services:
       llama_server:
         condition: service_healthy
       spacy_init:
+        condition: service_completed_successfully
+      embeddings_init:
         condition: service_completed_successfully
     command: >
       bash -c "
@@ -127,6 +131,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dbNetWork
+
+  # 预下载嵌入模型（一次性执行，完成即退出）
+  embeddings_init:
+    image: python:3.11-slim
+    env_file:
+      - .env.dev
+    environment:
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/models/hf
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - PIP_NO_CACHE_DIR=1
+    command: ["sh", "/entry-scripts/embeddings_init.sh"]
+    volumes:
+      - models_data:/models
+      - ./scripts:/entry-scripts:ro
+    restart: "no"
     networks:
       - dbNetWork
 
@@ -284,6 +307,7 @@ services:
       - .env.dev
     volumes:
       - ./backend:/app  # 添加卷挂载支持热重载
+      - models_data:/models:ro
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - POSTGRES_USER=${POSTGRES_USER}
@@ -297,6 +321,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - HF_HOME=/models/hf
+      - HF_HUB_OFFLINE=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -304,6 +330,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      embeddings_init:
+        condition: service_completed_successfully
     command: >
       bash -c "
         echo '等待依赖服务...' &&
@@ -325,6 +353,7 @@ services:
       - .env.dev
     volumes:
       - ./backend:/app  # 添加卷挂载支持热重载
+      - models_data:/models:ro
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - POSTGRES_USER=${POSTGRES_USER}
@@ -338,6 +367,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - HF_HOME=/models/hf
+      - HF_HUB_OFFLINE=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -347,6 +378,8 @@ services:
         condition: service_healthy
       taskiq_worker:
         condition: service_started
+      embeddings_init:
+        condition: service_completed_successfully
     command: >
       bash -c "
         echo '等待依赖服务...' &&
