@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 LLM service utilities: language-aware prompt construction and context wrapping.
 
@@ -8,7 +6,7 @@ Responsibilities:
 - Provide localized system_prompt
 - When RAG context is available, wrap the user_text with localized instruction and the retrieved context
 """
-
+from __future__ import annotations
 from typing import Iterable, Tuple
 
 try:

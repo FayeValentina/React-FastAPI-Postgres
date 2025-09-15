@@ -30,9 +30,9 @@ def get_spacy_nlp_for_lang(lang: str):
     """
     try:
         import spacy  # type: ignore
-        l = (lang or "").lower().strip()
-        if l not in {"zh", "en", "ja"}:
-            l = "en"
+        language = (lang or "").lower().strip()
+        if language not in {"zh", "en", "ja"}:
+            language = "en"
 
         # 读取路径优先
         path_map = {
@@ -46,10 +46,10 @@ def get_spacy_nlp_for_lang(lang: str):
             "ja": getattr(settings, "SPACY_MODEL_JA", None) or "ja_core_news_sm",
         }
 
-        path = path_map.get(l)
+        path = path_map.get(language)
         if path and os.path.exists(str(path)):
             return spacy.load(str(path))
-        return spacy.load(str(name_map[l]))
+        return spacy.load(str(name_map[language]))
     except Exception:
         return None
 
