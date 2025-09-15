@@ -132,7 +132,7 @@ services:
       redis:
         condition: service_healthy
       llama_server:
-        condition: service_healthy
+        condition: service_started
       spacy_init:
         condition: service_completed_successfully
       embeddings_init:
@@ -295,19 +295,20 @@ services:
 
   # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
   llama_server:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:light
     platform: "linux/arm64"
     env_file:
       - .env.prod
     depends_on:
       llm_init:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 15s
+    # 去掉不能保证的健康检查（如果镜像里没有 curl）
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 6
+    #   start_period: 15s
     command:
       - --model
       - /models/${HF_FILENAME}
@@ -323,11 +324,14 @@ services:
       - ${LLM_API_KEY}
     expose:
       - "8080"
+    ports:
+      - "8080:8080"
     volumes:
       - models_data:/models:ro
     restart: unless-stopped
     networks:
       - prodNetWork
+
 
   taskiq_worker:
     image: react-fastapi-postgres-backend:latest
