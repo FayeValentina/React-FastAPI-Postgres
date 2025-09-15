@@ -298,7 +298,7 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile.llama-curl
-    image: local/llama.cpp:2.2.1-curl
+    image: local/llama.cpp:3.2.1-curl
     platform: "linux/arm64"
     env_file:
       - .env.prod
