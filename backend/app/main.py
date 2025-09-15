@@ -6,7 +6,6 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse
 from app.api import router
 from app.core.config import settings
-from app.api.dependencies import request_context_dependency
 from app.api.middleware.logging import RequestResponseLoggingMiddleware
 from app.api.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
@@ -89,7 +88,6 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    dependencies=[Depends(request_context_dependency)],
     exception_handlers=create_exception_handlers(),  # 使用工厂函数创建异常处理器
     lifespan=lifespan  # 添加生命周期管理
 )

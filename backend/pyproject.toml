@@ -2,8 +2,14 @@
 name = "backend"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
+authors = ["Faye <FayeValentina@gmail.com>"]
 package-mode = false
+
+# +++ 新增内容：为 PyTorch 指定 CPU 版本的下载源 +++
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [tool.poetry.dependencies]
 python = "~3.11"
@@ -33,18 +39,34 @@ pillow = "^10.0.0"
 google-genai = "^0.3.0"
 twitter-text-parser = "^3.0.0"
 taskiq = "^0.11.8"
-
 taskiq-aio-pika = "^0.4.3"
 taskiq-redis = "^1.0.0"
 croniter = "^1.4.1"
 gunicorn = "^21.2.0"
 aiosmtplib = "^4.0.0"
+openai = "^1.107.0" # 已更新到较新稳定版
+sentence-transformers = "^3.0.1"
+pgvector = "^0.2.5"
+spacy = "^3.7.0"
+hf-transfer = "^0.1.6"
+langdetect = "^1.0.9"
+beautifulsoup4 = "^4.12.0"
+markdown = "^3.6"
+
+# --- NLTK 已被移除 ---
+# nltk = "^3.9" 
+
+# +++ 新增内容：明确要求安装 CPU 版本的 torch +++
+# sentence-transformers 会自动使用这个预先定义的、来自 CPU 源的 torch
+torch = {version = "^2.8.0", source = "pytorch-cpu"}
+
 
 [tool.poetry.group.dev.dependencies]
 taskiq = {extras = ["reload"], version = "^0.11.18"}
 ruff = "^0.6.2"
 pytest = "^8.3.2"
 pytest-cov = "^6.0.0"
+watchfiles = "^0.22.0"
 
 [tool.ruff]
 target-version = "py311"
@@ -58,8 +80,8 @@ exclude = [
 
 [tool.ruff.lint]
 select = [
-  "E",   # pycodestyle errors
-  "F",   # pyflakes
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
 ]
 ignore = [
   "E501",  # line length handled elsewhere to reduce noise

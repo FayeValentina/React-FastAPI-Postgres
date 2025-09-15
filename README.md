@@ -1,174 +1,104 @@
-# React-FastAPI-Postgres
+# Gemini: Full-Stack RAG Application
 
-Full-stack web application featuring a **FastAPI** backend and a **React** (Vite + TypeScript) frontend.
+This project is a sophisticated, full-stack Retrieval-Augmented Generation (RAG) application. It integrates multiple AI models to provide a powerful, language-aware chat experience backed by a dynamic knowledge base. The backend is built with Python (FastAPI) and the frontend with React (TypeScript).
 
-### Architecture Highlights
-- **JWT authentication** secures API endpoints and can be paired with **oauth2-proxy** for single sign-on.
-- **Redis caching** accelerates reads and, together with **RabbitMQ**, powers **TaskIQ** background jobs.
-- **PostgreSQL** stores persistent data.
-- **Nginx** reverse proxy routes requests between services.
+The application can ingest documents, process them into a vector knowledge base, and leverage both local and remote Large Language Models (LLMs) to answer questions based on the stored information.
 
-Docker Compose files are provided for both development and production environments.
+## Core Features
 
-## Project Structure
+- **Retrieval-Augmented Generation (RAG)**: The core of the application. It retrieves relevant information from a knowledge base to provide context-aware answers from LLMs.
+- **Multi-Model AI Integration**:
+    - **Embedding Models**: Uses `sentence-transformers` to generate vector embeddings for text.
+    - **LLMs**: Supports both local GGUF models (via a LlamaEdge-like API) and remote APIs like OpenAI and Google Gemini.
+    - **NLP Pre-processing**: Utilizes `spaCy` for text processing tasks.
+- **Vector Database**: Leverages PostgreSQL with the `pgvector` extension for efficient similarity search.
+- **Multi-Lingual Support**: Automatically detects user language (English, Chinese, Japanese) and adapts prompts for a localized experience.
+- **Asynchronous Task Processing**: Uses `TaskIQ` with RabbitMQ and Redis for handling background jobs like document ingestion and embedding generation.
+- **Web-Based Management UI**: A modern React interface (built with Material-UI) providing comprehensive control over the application:
+    - **Interactive Chat**: A WebSocket-powered chat interface for real-time interaction with the RAG system, featuring streaming, Markdown rendering, and parameter adjustment.
+    - **Knowledge Base Management**: A full CRUD interface to create, manage, and "ingest" text into documents that form the knowledge base. Includes a semantic search feature to test retrieval.
+    - **Task Management Center**: A powerful dashboard for managing the `TaskIQ` backend. Users can create, schedule, and monitor asynchronous jobs (e.g., document ingestion) directly from the UI.
 
-```
-.
-├── backend/                # FastAPI application, TaskIQ workers & scheduler
-├── frontend/               # React client built with Vite
-├── nginx/                  # Nginx templates and startup scripts
-├── docker-compose.dev.yml  # Development stack with hot reload
-├── docker-compose.prod.yml # Production stack with static build
-└── README.md
-```
+## Architecture Overview
 
-## Development with Docker
+The application follows a decoupled, service-oriented architecture:
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env.dev
-   ```
-2. Start the development stack:
-   ```bash
-   docker compose -f docker-compose.dev.yml up --build
-   ```
-3. Access the services:
-   - Frontend: <http://localhost>
-   - API docs: <http://localhost/api/docs>
-   - pgAdmin, RedisInsight and Portainer are also available in the dev stack.
+1.  **Data Ingestion**: Documents or text are ingested into the system.
+2.  **Knowledge Base Pipeline**:
+    - An asynchronous task is triggered.
+    - The text is processed and chunked using `spaCy`.
+    - Each chunk is converted into a vector embedding using a `sentence-transformers` model.
+    - The original text and its corresponding vector are stored in the `pgvector` database.
+3.  **RAG Chat Flow**:
+    - A user submits a question through the React UI.
+    - The backend API receives the question, vectorizes it, and performs a similarity search in `pgvector` to find relevant document chunks.
+    - The `llm.service` constructs a detailed prompt containing the user's question and the retrieved context, localized to the user's language.
+    - The prompt is sent via the `llm.client` to the configured LLM (local or remote).
+    - The LLM generates an answer based on the provided context, which is then streamed back to the user.
 
-## Production Deployment
+### Key Technologies
 
-1. Prepare production variables:
-   ```bash
-   cp .env.prod.example .env.prod
-   ```
-2. Build and run:
-   ```bash
-   docker compose -f docker-compose.prod.yml up -d --build
-   ```
-The production compose file builds the frontend, runs the FastAPI application, TaskIQ worker and scheduler,
-PostgreSQL, RabbitMQ and Redis behind an Nginx reverse proxy with optional `oauth2-proxy` for web SSO.
+- **Backend**: FastAPI, SQLAlchemy, Alembic, Pydantic, TaskIQ, `pgvector`
+- **Frontend**: React, TypeScript, Vite, Material-UI, Zustand, Axios
+- **AI**: `sentence-transformers`, `spacy`, `openai`, `google-genai`, `torch` (CPU)
+- **Database**: PostgreSQL, Redis
+- **Messaging**: RabbitMQ
+- **Infrastructure**: Docker, Docker Compose
 
-## Local Development Without Docker
+## Building and Running
 
-### Backend
-```bash
-cd backend
-poetry install
-poetry run uvicorn app.main:app --reload
-```
+The project is fully containerized and managed via Docker Compose.
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+### Prerequisites
 
-## Testing
-```bash
-cd backend && poetry run pytest
-cd frontend && npm test
-```
+- Docker
+- Docker Compose
 
-## Defining Tasks & Parameters
+### Running the Application
 
-This project exposes a single global task registry that auto-discovers workers and provides a typed description of each task to the frontend. Use typing metadata to make task parameters self-descriptive and renderable.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd React-FastAPI-Postgres
+    ```
 
-- Registry: `backend/app/infrastructure/tasks/task_registry_decorators.py`
-- Workers: `backend/app/modules/tasks/workers/*`
-- Introspection: `GET /api/v1/tasks/system/task-info`
+2.  **Set up environment variables:**
+    Create a `.env` file by copying the example. This file controls which AI models are downloaded and used.
+    ```bash
+    cp .env.example .env
+    ```
+    Update `.env` with your desired model configurations (e.g., `EMBEDDING_MODEL`, `HF_REPO_ID`, `HF_FILENAME`).
 
-### Core Rules
-- Use `@task("TASK_NAME", queue="…")` to register a task. Pair with TaskIQ's `@broker.task` as needed.
-- Define parameters with Python types and `typing.Annotated` to attach UI metadata.
-- Hide internal params from the UI:
-  - `config_id`: `Annotated[Optional[int], {"exclude_from_ui": True}] = None`
-  - `context`: `Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends()`
-- Enum-like values: prefer `Literal[...]` (or Python `Enum`). The registry auto-sets `ui_hint='select'` and supplies `choices`.
-- Complex structures (`dict`, `list`, nested types): annotate `{"ui_hint": "json"}` to render a JSON editor.
-- Numbers: use `int`/`float` and optionally set `min`/`max`/`step` in UI meta.
-- Email: either set `{"ui_hint": "email"}` or rely on name heuristic (`...email`).
+3.  **Start the application:**
+    ```bash
+    docker-compose up --build
+    ```
+    On the first run, the `*-init` services will download the specified AI models into a shared Docker volume (`/models`). This may take some time.
 
-Supported UI meta keys inside `Annotated[..., {…}]`:
-- `exclude_from_ui`: boolean
-- `ui_hint`: `select` | `number` | `text` | `email` | `boolean` | `json` | `password` | `textarea`
-- `choices`: list of values (used with `select`)
-- `example`: example value (e.g., JSON structure hint for dict/list)
-- Optional refinements: `label`, `description`, `placeholder`, `min`, `max`, `step`, `pattern`
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
 
-Type metadata returned by the API is `type_info` with `type` and nested `args` (no `raw`). Frontend primarily uses `parameters[].ui` to render.
+### Model Initialization
 
-### Examples
+The AI models are downloaded by initialization scripts in the `scripts/` directory:
+- `llm_init.sh`: Downloads a GGUF-formatted LLM from a Hugging Face repository.
+- `embeddings_init.sh`: Downloads a `sentence-transformers` model for embeddings.
+- `spacy_init.sh`: Downloads `spaCy` model wheels.
 
-1) Export data with format select and JSON date range
-```python
-from typing import Annotated, Optional, Dict
-from taskiq import Context, TaskiqDepends
+These scripts are run automatically by Docker Compose on startup.
 
-@task("DATA_EXPORT", queue="default")
-@broker.task(task_name="export_data", queue="default", retry_on_error=True, max_retries=3)
-@execution_handler
-async def export_data(
-    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
-    export_format: Annotated[str, {"ui_hint": "select", "choices": ["json", "csv", "excel"]}] = "json",
-    date_range: Annotated[Optional[Dict[str, str]], {"ui_hint": "json"}] = None,
-    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
-):
-    ...
-```
+### Development Commands
 
-2) Backup type using Literal choices
-```python
-from typing import Annotated, Optional, Literal
+**Backend**
 
-@task("DATA_BACKUP", queue="default")
-@broker.task(task_name="backup_data", queue="default", retry_on_error=True, max_retries=3)
-@execution_handler
-async def backup_data(
-    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
-    backup_type: Annotated[Literal["full", "incremental"], {"ui_hint": "select"}] = "full",
-    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
-):
-    ...
-```
+- **Run development server**: `cd backend && poetry run uvicorn app.main:app --reload`
+- **Create database migration**: `cd backend && poetry run alembic revision --autogenerate -m "description"`
+- **Apply migrations**: `cd backend && poetry run alembic upgrade head`
+- **Run tests**: `cd backend && poetry run pytest`
 
-3) Cleanup tasks with numeric constraints
-```python
-from typing import Annotated, Optional
+**Frontend**
 
-@task("CLEANUP_TOKENS", queue="cleanup")
-@broker.task(task_name="cleanup_expired_tokens", queue="cleanup", retry_on_error=True, max_retries=3)
-@execution_handler
-async def cleanup_expired_tokens(
-    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
-    days_old: Annotated[int, {"ui_hint": "number", "min": 1}] = 7,
-    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
-):
-    ...
-```
-
-4) Email task with required fields
-```python
-from typing import Annotated, Optional
-
-@task("SEND_EMAIL", queue="default")
-@broker.task(task_name="send_email", queue="default", retry_on_error=True, max_retries=3)
-@execution_handler
-async def send_email(
-    to_email: Annotated[str, {"ui_hint": "email"}],
-    subject: str,
-    config_id: Annotated[Optional[int], {"exclude_from_ui": True}] = None,
-    context: Annotated[Context, {"exclude_from_ui": True}] = TaskiqDepends(),
-):
-    ...
-```
-
-### Auto-Discovery & Introspection
-- Auto-discovery runs at startup: `app.main:lifespan` calls `auto_discover_tasks()`.
-- Inspect tasks and parameters at runtime: `GET /api/v1/tasks/system/task-info`.
-- Each parameter includes:
-  - `name`, `type`, `type_info` (structured), `default`, `required`, `kind`, `ui`.
-
-With these conventions, the frontend can render dynamic parameter forms reliably from the backend as the single source of truth.
+- **Run development server**: `cd frontend && npm run dev`
+- **Build for production**: `cd frontend && npm run build`
+- **Run linting**: `cd frontend && npm run lint`

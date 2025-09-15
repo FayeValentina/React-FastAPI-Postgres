@@ -87,6 +87,13 @@ http {
                     ${SUBDOMAIN_PGADMIN}.${DOMAIN_MAIN}
                     ${SUBDOMAIN_REDIS}.${DOMAIN_MAIN}
                     auth.${DOMAIN_MAIN};
+
+        # 将 WebSocket 明确重定向到 wss://
+        if ($http_upgrade = "websocket") {
+            return 301 wss://$server_name$request_uri;
+        }
+
+        # 其他 HTTP 请求统一重定向到 HTTPS
         return 301 https://$server_name$request_uri;
     }
 
