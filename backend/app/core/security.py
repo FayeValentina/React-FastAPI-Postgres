@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional, Tuple
 from uuid import uuid4
 
 from jose import jwt, JWTError # type: ignore
+from jose.exceptions import ExpiredSignatureError  # type: ignore
 from passlib.context import CryptContext # type: ignore
 from app.core.config import settings
 from app.infrastructure.utils.common import get_current_time   
@@ -106,7 +107,7 @@ def verify_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[s
           #  options={"verify_exp": True}  # 确保验证过期时间
         )
         return True, payload, None
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         # 特别处理过期情况
         return False, None, "expired"
     except JWTError:

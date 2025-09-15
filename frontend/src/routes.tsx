@@ -13,6 +13,9 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import TaskManagementPage from './pages/TaskManagementPage';
 import SystemMonitoringPage from './pages/SystemMonitoringPage';
+import ChatPage from './pages/ChatPage';
+import KnowledgeBasePage from './pages/KnowledgeBasePage';
+import KnowledgeDocumentDetailPage from './pages/KnowledgeDocumentDetailPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -73,6 +76,11 @@ const AppRoutes: React.FC = () => {
             <DemoPage />
           </ProtectedRoute>
         } />
+        <Route path="/chat" element={
+          <ProtectedRoute>
+            <ChatPage />
+          </ProtectedRoute>
+        } />
         
         {/* 综合管理路由 */}
         <Route path="/management" element={<Navigate to="/management/tasks" replace />} />
@@ -84,6 +92,16 @@ const AppRoutes: React.FC = () => {
         <Route path="/management/monitoring" element={
           <ProtectedRoute>
             <SystemMonitoringPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/management/knowledge" element={
+          <ProtectedRoute>
+            <KnowledgeBasePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/management/knowledge/:id" element={
+          <ProtectedRoute>
+            <KnowledgeDocumentDetailPage />
           </ProtectedRoute>
         } />
         

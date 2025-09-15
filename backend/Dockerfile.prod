@@ -13,13 +13,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry
+# Install Poetry and upgrade pip
+RUN python -m pip install --upgrade pip && pip install --no-cache-dir poetry
 
 # Copy dependency metadata and install
 COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.in-project true && \
     poetry install --no-root --no-interaction --no-ansi
+
+# Note: spaCy models are downloaded in a separate init container (spacy_init)
+# and mounted at runtime; avoid downloading large models in build.
 
 ## ===================================================================
 ## Stage 2: Final runtime image (slim)

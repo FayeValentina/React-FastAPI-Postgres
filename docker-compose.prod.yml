@@ -95,6 +95,7 @@ services:
       - prodNetWork
 
   backend:
+    image: react-fastapi-postgres-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
@@ -116,6 +117,12 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - RAG_TOP_K=${RAG_TOP_K:-3}
+      - HF_HOME=/models/hf
+      - HF_HUB_OFFLINE=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,8 +130,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      llama_server:
+        condition: service_healthy
+      spacy_init:
+        condition: service_completed_successfully
+      embeddings_init:
+        condition: service_completed_successfully
     command: >
       bash -c "
+        URLS=\"$${SPACY_MODEL_URLS:-$${SPACY_MODEL_URL}}\" &&
+        echo '安装本地 spaCy 模型...' &&
+        for U in $$(echo \"$${URLS}\" | tr ',' ' '); do \
+          F=$$(basename \"$${U}\"); \
+          echo \" - pip install /models/$${F}\"; \
+          pip install /models/$${F} || true; \
+        done &&
         echo '等待数据库准备...' &&
         echo '应用数据库迁移...' &&
         alembic upgrade head &&
@@ -133,6 +153,8 @@ services:
       "
     networks:
       - prodNetWork
+    volumes:
+      - models_data:/models:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -140,11 +162,11 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
-    mem_limit: 1G
-    mem_reservation: 512M
+    mem_limit: 3G
+    mem_reservation: 1536M
 
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg16
     env_file:
       - .env.prod
     expose:
@@ -214,10 +236,99 @@ services:
     mem_limit: 384M
     mem_reservation: 256M
 
+  # 预下载模型（一次性执行，完成即退出）
+  llm_init:
+    image: python:3.11-slim
+    env_file:
+      - .env.prod
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_REPO_ID=${HF_REPO_ID}
+      - HF_FILENAME=${HF_FILENAME}
+      - HF_REVISION=${HF_REVISION:-main}
+      - PIP_NO_CACHE_DIR=1
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+    command: ["sh", "/entry-scripts/llm_init.sh"]
+    volumes:
+      - models_data:/models
+      - ./scripts:/entry-scripts:ro
+    restart: "no"
+    networks:
+      - prodNetWork
+
+  # 预下载 spaCy 模型（一次性执行，完成即退出）
+  spacy_init:
+    image: python:3.11-slim
+    env_file:
+      - .env.prod
+    environment:
+      - SPACY_MODEL_URLS=${SPACY_MODEL_URLS}
+      - PIP_NO_CACHE_DIR=1
+      - PIP_DEFAULT_TIMEOUT=1200
+    command: ["sh", "/entry-scripts/spacy_init.sh"]
+    volumes:
+      - models_data:/models
+      - ./scripts:/entry-scripts:ro
+    restart: "no"
+    networks:
+      - prodNetWork
+
+  # 预下载嵌入模型（一次性执行，完成即退出）
+  embeddings_init:
+    image: python:3.11-slim
+    env_file:
+      - .env.prod
+    environment:
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/models/hf
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - PIP_NO_CACHE_DIR=1
+    command: ["sh", "/entry-scripts/embeddings_init.sh"]
+    volumes:
+      - models_data:/models
+      - ./scripts:/entry-scripts:ro
+    restart: "no"
+    networks:
+      - prodNetWork
+
+  # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
+  llama_server:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    env_file:
+      - .env.prod
+    depends_on:
+      llm_init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    command:
+      - --model
+      - /models/${HF_FILENAME}
+      - --port
+      - "8080"
+      - --host
+      - 0.0.0.0
+      - --ctx-size
+      - "8192"
+      - --parallel
+      - "2"
+      - --api-key
+      - ${LLM_API_KEY}
+    expose:
+      - "8080"
+    volumes:
+      - models_data:/models:ro
+    restart: unless-stopped
+    networks:
+      - prodNetWork
+
   taskiq_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: react-fastapi-postgres-backend:latest
     env_file:
       - .env.prod
     environment:
@@ -233,6 +344,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - HF_HOME=/models/hf
+      - HF_HUB_OFFLINE=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -240,6 +353,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      embeddings_init:
+        condition: service_completed_successfully
     command: >
       bash -c "
         echo '等待依赖服务...' &&
@@ -248,6 +363,8 @@ services:
       "
     networks:
       - prodNetWork
+    volumes:
+      - models_data:/models:ro
     healthcheck:
       test: ["CMD", "pgrep", "-f", "taskiq worker"]
       interval: 60s
@@ -259,9 +376,7 @@ services:
     mem_reservation: 256M
 
   taskiq_scheduler:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: react-fastapi-postgres-backend:latest
     env_file:
       - .env.prod
     environment:
@@ -277,6 +392,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - HF_HOME=/models/hf
+      - HF_HUB_OFFLINE=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -286,6 +403,8 @@ services:
         condition: service_healthy
       taskiq_worker:
         condition: service_started
+      embeddings_init:
+        condition: service_completed_successfully
     command: >
       bash -c "
         echo '等待依赖服务...' &&
@@ -294,6 +413,8 @@ services:
       "
     networks:
       - prodNetWork
+    volumes:
+      - models_data:/models:ro
     healthcheck:
       test: ["CMD", "pgrep", "-f", "taskiq scheduler"]
       interval: 60s
@@ -367,7 +488,7 @@ services:
       - prodNetWork
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/api/status || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/api/system/status || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -390,9 +511,10 @@ volumes:
     driver: local
   frontend_build:
     driver: local
+  models_data:
+    driver: local
+  
 
 networks:
   prodNetWork:
     driver: bridge
-
-  

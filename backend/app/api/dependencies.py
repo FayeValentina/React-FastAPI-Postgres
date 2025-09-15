@@ -1,5 +1,5 @@
-from typing import Annotated, Dict, Optional
-from fastapi import Depends, Request
+from typing import Annotated, Optional
+from fastapi import Depends, Request, WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -12,7 +12,7 @@ from app.core.exceptions import (
     InactiveUserError,
     InsufficientPermissionsError
 )
-from app.infrastructure.utils.common import get_current_time
+from app.core.security import verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -91,29 +91,61 @@ async def get_current_superuser(
         raise InsufficientPermissionsError("权限不足")
     return current_user 
 
-async def request_context_dependency(request: Request) -> Dict:
-    """
-    提供请求上下文信息的全局依赖项
-    
-    从请求状态中获取信息，避免重复处理已由日志中间件处理的信息。
-    
-    Args:
-        request: FastAPI 请求对象
 
-    Returns:
-        包含请求上下文信息的字典
+async def get_current_user_from_ws(
+    ws: WebSocket,
+    db: Annotated[AsyncSession, Depends(get_async_session)]
+) -> User:
     """
-    # 使用已经由logging中间件设置的请求ID
-    request_id = getattr(request.state, "request_id", None)
+    从 WebSocket 查询参数或 Authorization 头中获取并验证当前用户。
+
+    - 优先从查询参数 `?token=` 读取访问令牌
+    - 其次从 `Authorization: Bearer <token>` 读取
+    - 验证失败时关闭连接并抛出认证错误
+    """
+    # 获取 token
+    token: Optional[str] = None
+    try:
+        # query_params 在 Starlette 的 WebSocket 对象上可用
+        token = ws.query_params.get("token")  # type: ignore[attr-defined]
+    except Exception:
+        token = None
+
+    if not token:
+        auth_header = ws.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token = auth_header.split(None, 1)[1]
+
+    if not token:
+        try:
+            await ws.close(code=1008)
+        finally:
+            pass
+        raise AuthenticationError("未提供认证凭据")
+
+    is_valid, payload, _ = verify_token(token)
+    if not is_valid or payload is None or payload.get("type") != "access_token":
+        try:
+            await ws.close(code=1008)
+        finally:
+            pass
+        raise AuthenticationError("无效或过期的访问令牌")
+
+    user_id_str = payload.get("sub")
+    try:
+        user_id = int(user_id_str)
+    except (TypeError, ValueError):
+        await ws.close(code=1008)
+        raise AuthenticationError("无效的用户ID")
+
+    user = await crud_user.get(db, id=user_id)
+    if not user:
+        await ws.close(code=1008)
+        raise UserNotFoundError()
+    if not user.is_active:
+        await ws.close(code=1008)
+        raise InactiveUserError()
+
+    return user
+
     
-    # 获取用户信息（如果已认证）
-    user_payload = getattr(request.state, "user_payload", None)
-    username = user_payload.get("sub") if user_payload else None
-    
-    return {
-        "client_host": request.client.host if request.client else None,
-        "user_agent": request.headers.get("user-agent"),
-        "request_id": request_id,
-        "username": username,
-        "timestamp": get_current_time()
-    } 

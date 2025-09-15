@@ -83,8 +83,8 @@ nginx/htpasswd/
 # ssh key file
 ssh-key/
 
-# script
-scripts/
+# Local scripts
+local_script/
 
 # Alembic
 alembic/versions/__pycache__/

@@ -23,6 +23,8 @@ import {
   Dashboard as DashboardIcon,
   Settings as SettingsIcon,
   Menu as MenuIcon,
+  Chat as ChatIcon,
+  LibraryBooks as LibraryBooksIcon,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 
@@ -46,6 +48,28 @@ const menuSections = [
         text: '系统监控',
         icon: <DashboardIcon />,
         path: '/management/monitoring',
+        implemented: true,
+      },
+    ],
+  },
+  {
+    title: '知识库',
+    items: [
+      {
+        text: '知识库管理',
+        icon: <LibraryBooksIcon />,
+        path: '/management/knowledge',
+        implemented: true,
+      },
+    ],
+  },
+  {
+    title: '服务助手',
+    items: [
+      {
+        text: '聊天机器人',
+        icon: <ChatIcon />,
+        path: '/chat',
         implemented: true,
       },
     ],
