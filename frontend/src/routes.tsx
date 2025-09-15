@@ -14,6 +14,8 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import TaskManagementPage from './pages/TaskManagementPage';
 import SystemMonitoringPage from './pages/SystemMonitoringPage';
 import ChatPage from './pages/ChatPage';
+import KnowledgeBasePage from './pages/KnowledgeBasePage';
+import KnowledgeDocumentDetailPage from './pages/KnowledgeDocumentDetailPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -90,6 +92,16 @@ const AppRoutes: React.FC = () => {
         <Route path="/management/monitoring" element={
           <ProtectedRoute>
             <SystemMonitoringPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/management/knowledge" element={
+          <ProtectedRoute>
+            <KnowledgeBasePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/management/knowledge/:id" element={
+          <ProtectedRoute>
+            <KnowledgeDocumentDetailPage />
           </ProtectedRoute>
         } />
         

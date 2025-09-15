@@ -20,6 +20,7 @@ from app.modules.knowledge_base.service import (
     get_document_by_id,
     update_document_metadata,
     search_similar_chunks,
+    get_chunks_by_document_id,
 )
 
 
@@ -86,4 +87,14 @@ async def search_knowledge(
     db: AsyncSession = Depends(get_async_session),
 ):
     chunks = await search_similar_chunks(db, query=payload.query, top_k=payload.top_k)
+    return chunks
+
+
+@router.get("/documents/{document_id}/chunks", response_model=list[KnowledgeChunkRead])
+async def list_document_chunks(document_id: int, db: AsyncSession = Depends(get_async_session)):
+    # 确认文档存在
+    exist = await db.get(models.KnowledgeDocument, document_id)
+    if not exist:
+        raise HTTPException(status_code=404, detail="Document not found")
+    chunks = await get_chunks_by_document_id(db, document_id)
     return chunks

@@ -264,3 +264,14 @@ async def update_document_metadata(db: AsyncSession, document_id: int, updates: 
     await db.commit()
     await db.refresh(doc)
     return doc
+
+
+async def get_chunks_by_document_id(db: AsyncSession, document_id: int):
+    """获取指定文档的所有知识块，按块序排序。"""
+    stmt = (
+        select(models.KnowledgeChunk)
+        .where(models.KnowledgeChunk.document_id == document_id)
+        .order_by(models.KnowledgeChunk.chunk_index.asc(), models.KnowledgeChunk.id.asc())
+    )
+    result = await db.scalars(stmt)
+    return result.all()
