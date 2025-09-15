@@ -162,8 +162,8 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
-    mem_limit: 3G
-    mem_reservation: 1536M
+    mem_limit: 5G
+    mem_reservation: 2560M
 
   postgres:
     image: pgvector/pgvector:pg16
