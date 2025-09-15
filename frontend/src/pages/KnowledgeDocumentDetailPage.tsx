@@ -41,13 +41,10 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
     if (!docId) return;
     setLoading(true);
     try {
-      const [docRes, cksRes] = await Promise.all([
+      const [doc, cks] = await Promise.all([
         api.get<KnowledgeDocumentRead>(`/v1/knowledge/documents/${docId}`),
         api.get<KnowledgeChunkRead[]>(`/v1/knowledge/documents/${docId}/chunks`),
       ]);
-
-      const doc = docRes.data;
-      const cks = cksRes.data ?? [];
 
       setDocument(doc);
       setChunks(cks);
