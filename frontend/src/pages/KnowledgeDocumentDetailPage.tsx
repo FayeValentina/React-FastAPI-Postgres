@@ -41,19 +41,22 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
     if (!docId) return;
     setLoading(true);
     try {
-      const [doc, cks] = await Promise.all([
+      const [docRes, cksRes] = await Promise.all([
         api.get<KnowledgeDocumentRead>(`/v1/knowledge/documents/${docId}`),
         api.get<KnowledgeChunkRead[]>(`/v1/knowledge/documents/${docId}/chunks`),
       ]);
 
+      const doc = docRes.data;
+      const cks = cksRes.data ?? [];
+
       setDocument(doc);
-      setChunks(cks || []);
+      setChunks(cks);
 
       // init edit fields
-      setTitle(doc.title || '');
-      setTagsText((doc.tags || []).join(', '));
+      setTitle(doc?.title || '');
+      setTagsText((doc?.tags || []).join(', '));
       setMetaText(
-        doc.meta ? JSON.stringify(doc.meta, null, 2) : ''
+        doc?.meta ? JSON.stringify(doc.meta, null, 2) : ''
       );
     } catch (e) {
       error(extractErrorMessage(e as ApiError) || '加载文档详情失败');
