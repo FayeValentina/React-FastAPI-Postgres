@@ -5,6 +5,7 @@ from functools import lru_cache
 import os
 
 from sentence_transformers import SentenceTransformer
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 #from pgvector.sqlalchemy import cosine_distance
@@ -12,6 +13,8 @@ from sqlalchemy import select, delete
 from app.core.config import settings
 from . import models
 from .schemas import KnowledgeDocumentCreate
+from markdown import markdown
+from bs4 import BeautifulSoup
 
 
 # 嵌入模型（CPU 上加载，保持与 DB 维度一致）
@@ -119,6 +122,39 @@ def split_text(content: str, target: int = 300, overlap: int = 50) -> List[str]:
     return chunks or ([text] if text else [])
 
 
+def _strip_markdown(content: str) -> str:
+    """将 Markdown 文本转换为纯文本。
+
+    策略：先用 markdown 库转 HTML，再用 BeautifulSoup 提取纯文本；
+    移除脚本/样式、代码块、图片，并保留链接的可见文字。
+    """
+    if not content:
+        return ""
+    try:
+        html = markdown(content, output_format="html")
+    except Exception:
+        # 回退：若 markdown 渲染失败，直接使用原文
+        html = content
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # 移除无关或噪声节点
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    # 移除代码相关内容（块/行内）
+    for tag in soup(["pre", "code", "kbd", "samp"]):
+        tag.decompose()
+    # 移除图片
+    for img in soup.find_all("img"):
+        img.decompose()
+
+    # 提取文本并进行基本的空白规范化
+    text = soup.get_text(separator="\n")
+    lines = [ln.strip() for ln in text.splitlines()]
+    lines = [ln for ln in lines if ln]
+    return "\n".join(lines)
+
+
 async def create_document(db: AsyncSession, data: KnowledgeDocumentCreate) -> models.KnowledgeDocument:
     doc = models.KnowledgeDocument(
         source_type=data.source_type,
@@ -136,12 +172,28 @@ async def create_document(db: AsyncSession, data: KnowledgeDocumentCreate) -> mo
     return doc
 
 
-async def ingest_document_content(db: AsyncSession, document_id: int, content: str) -> int:
-    """将文本切分并写入指定文档的知识块，返回块数量。"""
-    chunks = split_text(content)
+async def ingest_document_content(db: AsyncSession, document_id: int, content: str, overwrite: bool = False) -> int:
+    """将文本切分并写入指定文档的知识块，返回块数量。
+
+    注意：split_text 与 _model.encode 为同步且可能耗时的 CPU 密集操作，
+    放入线程池以避免阻塞事件循环。
+    """
+    # 新增步骤：在所有操作之前，先清理传入的 content
+    plain_text_content = _strip_markdown(content)
+
+    # 根据覆盖标志，先删除旧分块，避免数据冗余
+    if overwrite:
+        await db.execute(delete(models.KnowledgeChunk).where(models.KnowledgeChunk.document_id == document_id))
+
+    # 在线程池中进行分句（使用清理后的纯文本）
+    chunks = await run_in_threadpool(split_text, plain_text_content)
     if not chunks:
+        # 若选择覆盖且新内容为空，确保删除提交
+        if overwrite:
+            await db.commit()
         return 0
-    vectors = _model.encode(chunks, normalize_embeddings=True)
+    # 在线程池中进行向量编码
+    vectors = await run_in_threadpool(_model.encode, chunks, normalize_embeddings=True)
     for idx, (c, v) in enumerate(zip(chunks, vectors)):
         db.add(models.KnowledgeChunk(document_id=document_id, chunk_index=idx, content=c, embedding=v))
     await db.commit()
@@ -156,8 +208,12 @@ async def delete_document(db: AsyncSession, document_id: int) -> None:
 
 
 async def search_similar_chunks(db: AsyncSession, query: str, top_k: int):
-    """按余弦距离检索最相似的知识块。"""
-    q_emb = _model.encode([query], normalize_embeddings=True)[0]
+    """按余弦距离检索最相似的知识块。
+
+    _model.encode 为同步且可能耗时，放入线程池执行。
+    """
+    # 在线程池中进行查询向量编码
+    q_emb = (await run_in_threadpool(_model.encode, [query], normalize_embeddings=True))[0]
     stmt = (
         select(models.KnowledgeChunk)
         .order_by(models.KnowledgeChunk.embedding.cosine_distance(q_emb))
@@ -165,3 +221,46 @@ async def search_similar_chunks(db: AsyncSession, query: str, top_k: int):
     )
     result = await db.scalars(stmt)
     return result.all()
+
+
+async def get_all_documents(db: AsyncSession, skip: int = 0, limit: int = 100):
+    """分页获取文档列表。"""
+    stmt = (
+        select(models.KnowledgeDocument)
+        .order_by(models.KnowledgeDocument.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.scalars(stmt)
+    return result.all()
+
+
+async def get_document_by_id(db: AsyncSession, document_id: int):
+    """根据 ID 获取单个文档。"""
+    return await db.get(models.KnowledgeDocument, document_id)
+
+
+async def update_document_metadata(db: AsyncSession, document_id: int, updates: dict):
+    """更新文档的元信息（部分字段）。"""
+    doc = await db.get(models.KnowledgeDocument, document_id)
+    if not doc:
+        return None
+
+    allowed_fields = {
+        "source_type",
+        "source_ref",
+        "title",
+        "language",
+        "mime",
+        "checksum",
+        "meta",
+        "tags",
+        "created_by",
+    }
+    for k, v in (updates or {}).items():
+        if k in allowed_fields:
+            setattr(doc, k, v)
+
+    await db.commit()
+    await db.refresh(doc)
+    return doc

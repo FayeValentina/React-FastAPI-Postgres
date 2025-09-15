@@ -31,8 +31,29 @@ class KnowledgeDocumentRead(KnowledgeDocumentBase):
 
 class KnowledgeDocumentIngestRequest(BaseModel):
     content: str = Field(..., description="要切分并入库的全文内容")
+    overwrite: bool = Field(False, description="是否覆盖已有分块（true 将先清空原分块）")
 
 
 class KnowledgeIngestResult(BaseModel):
     document_id: int
     chunks: int
+
+
+class KnowledgeDocumentUpdate(KnowledgeDocumentBase):
+    """文档元数据更新（全部字段可选）"""
+    pass
+
+
+class KnowledgeChunkRead(BaseModel):
+    id: int
+    document_id: Optional[int] = None
+    chunk_index: Optional[int] = None
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class KnowledgeSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="检索的查询文本")
+    top_k: int = Field(5, ge=1, le=50, description="返回最相似的结果数量（1-50）")
