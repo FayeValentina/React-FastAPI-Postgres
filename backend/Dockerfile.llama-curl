@@ -1,4 +1,4 @@
-FROM amperecomputingai/llama.cpp:2.2.1
+FROM amperecomputingai/llama.cpp:3.2.1
 USER root
 
 # Install curl for healthchecks; support common base images (Debian/Ubuntu, Alpine, RHEL/Fedora)
