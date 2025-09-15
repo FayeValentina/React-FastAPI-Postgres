@@ -294,10 +294,7 @@ services:
 
   # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
   llama_server:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile.llama-curl
-    image: local/llama.cpp:3.2.1-curl
+    image: amperecomputingai/llama.cpp:3.2.1
     platform: "linux/arm64"
     env_file:
       - .env.prod
@@ -324,12 +321,13 @@ services:
       interval: 15s
       timeout: 5s
       retries: 8
-      start_period: 90s
+      start_period: 120s
     volumes:
       - models_data:/models:ro
     restart: unless-stopped
     networks:
       - prodNetWork
+
 
   taskiq_worker:
     image: react-fastapi-postgres-backend:latest
