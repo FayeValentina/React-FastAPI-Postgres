@@ -57,9 +57,7 @@ async def ws_chat(
                 similar = []
 
             # 使用服务层根据语言构建 system_prompt 以及包裹后的 user_text
-            system_prompt, user_text = await run_in_threadpool(
-                prepare_system_and_user, user_text, similar
-            )
+            system_prompt, user_text = await run_in_threadpool(prepare_system_and_user, user_text, similar)
 
             history.append({"role": "user", "content": user_text})
             if len(history) > MAX_HISTORY_MESSAGES:
@@ -71,14 +69,18 @@ async def ws_chat(
                 messages=[{"role": "system", "content": system_prompt}] + history,
                 temperature=temperature,
             ) as stream:
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta
-                    token = getattr(delta, "content", None) or (
-                        delta.get("content") if isinstance(delta, dict) else None
-                    )
-                    if token:
-                        acc.append(token)
-                        await ws.send_json({"type": "delta", "content": token})
+                async for event in stream:
+                    # 1. 智能地解包，处理 ChunkEvent 包装器或原始 Chunk 对象
+                    chunk = getattr(event, "chunk", event)
+                    
+                    # 2. 安全且清晰地访问 token 内容
+                    # openai v1+ 保证了 chunk.choices 是一个列表
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        token = delta.content
+                        if token:
+                            acc.append(token)
+                            await ws.send_json({"type": "delta", "content": token})
 
             text = "".join(acc)
             history.append({"role": "assistant", "content": text})
