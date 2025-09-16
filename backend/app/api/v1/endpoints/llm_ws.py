@@ -64,48 +64,25 @@ async def ws_chat(
                 del history[:-MAX_HISTORY_MESSAGES]
 
             acc: list[str] = []
-            final_text: str | None = None
             async with client.chat.completions.stream(
                 model=settings.LLM_MODEL,
                 messages=[{"role": "system", "content": system_prompt}] + history,
                 temperature=temperature,
             ) as stream:
                 async for event in stream:
-                    event_type = getattr(event, "type", None)
-
-                    if event_type == "content.delta":
-                        token = getattr(event, "delta", None) or ""
-                        if token:
-                            acc.append(token)
-                            await ws.send_json({"type": "delta", "content": token})
-                        continue
-
-                    if event_type == "content.done":
-                        final_text = getattr(event, "content", None) or ""
-                        continue
-
-                    # Fallback for openai-python chat completion streams that yield ChatCompletionChunk
-                    if event_type is None:
-                        chunk = getattr(event, "chunk", event)
-                        choices = getattr(chunk, "choices", []) or []
-                        if not choices:
-                            continue
-
-                        first_choice = choices[0]
-                        delta = getattr(first_choice, "delta", None)
-                        if delta is None and isinstance(first_choice, dict):
-                            delta = first_choice.get("delta")
-                        if delta is None:
-                            continue
-
-                        token = getattr(delta, "content", None)
-                        if token is None and isinstance(delta, dict):
-                            token = delta.get("content")
+                    # 1. 智能地解包，处理 ChunkEvent 包装器或原始 Chunk 对象
+                    chunk = getattr(event, "chunk", event)
+                    
+                    # 2. 安全且清晰地访问 token 内容
+                    # openai v1+ 保证了 chunk.choices 是一个列表
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        token = delta.content
                         if token:
                             acc.append(token)
                             await ws.send_json({"type": "delta", "content": token})
 
-            text = final_text if final_text is not None else "".join(acc)
+            text = "".join(acc)
             history.append({"role": "assistant", "content": text})
             if len(history) > MAX_HISTORY_MESSAGES:
                 del history[:-MAX_HISTORY_MESSAGES]
