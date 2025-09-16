@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from typing import List, Sequence
 from functools import lru_cache
 from collections import OrderedDict
@@ -21,7 +22,6 @@ from bs4 import BeautifulSoup
 
 # 嵌入模型（CPU 上加载，保持与 DB 维度一致）
 _model = SentenceTransformer(settings.EMBEDDING_MODEL)
-
 
 # 查询向量缓存，避免重复计算导致的线程池阻塞
 _QUERY_EMBED_CACHE: "OrderedDict[str, tuple[float, ...]]" = OrderedDict()
@@ -53,6 +53,7 @@ def _store_cached_query_embedding(query: str, embedding: Sequence[float]) -> Non
         _QUERY_EMBED_CACHE.move_to_end(query)
         if len(_QUERY_EMBED_CACHE) > _QUERY_EMBED_CACHE_MAXSIZE:
             _QUERY_EMBED_CACHE.popitem(last=False)
+
 
 
 @lru_cache(maxsize=8)

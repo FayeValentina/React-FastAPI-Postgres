@@ -102,14 +102,16 @@ async def ws_chat(
             trim_history(history, HISTORY_MAX_TOKENS, settings.LLM_MODEL)
 
             # 使用服务层根据语言构建 system_prompt 以及包裹后的 user_text
-            system_prompt, final_user_text = await run_in_threadpool(
-                prepare_system_and_user, raw_user_text, similar
+            system_prompt, user_text = await run_in_threadpool(
+                prepare_system_and_user, user_text, similar
+
             )
 
             # 构造发送给 LLM 的消息：系统提示 + 截断后的历史 + 当前带上下文的问题
             messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
             messages.extend(history)
             messages.append({"role": "user", "content": final_user_text})
+
 
             acc: List[str] = []
             async with client.chat.completions.stream(
@@ -129,7 +131,6 @@ async def ws_chat(
                     if token:
                         acc.append(token)
                         await ws.send_json({"type": "delta", "content": token})
-
             text = "".join(acc)
             history.append({"role": "user", "content": raw_user_text})
             history.append({"role": "assistant", "content": text})
