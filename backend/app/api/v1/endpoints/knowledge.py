@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.postgres_base import get_async_session
@@ -15,6 +15,7 @@ from app.modules.knowledge_base import models
 from app.modules.knowledge_base.service import (
     create_document,
     ingest_document_content,
+    ingest_document_file,
     delete_document,
     get_all_documents,
     get_document_by_id,
@@ -42,6 +43,30 @@ async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest,
     if not exist:
         raise HTTPException(status_code=404, detail="Document not found")
     count = await ingest_document_content(db, document_id, body.content, overwrite=body.overwrite)
+    return {"document_id": document_id, "chunks": count}
+
+
+@router.post("/documents/{document_id}/ingest/upload", response_model=KnowledgeIngestResult, status_code=201)
+async def ingest_content_upload(
+    document_id: int,
+    file: UploadFile = File(...),
+    overwrite: bool = Form(False),
+    db: AsyncSession = Depends(get_async_session),
+):
+    exist = await db.get(models.KnowledgeDocument, document_id)
+    if not exist:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    try:
+        count = await ingest_document_file(db, document_id, file, overwrite=overwrite)
+    except ValueError as exc:
+        reason = str(exc)
+        if reason == "unsupported_file_type":
+            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload text-based files only.")
+        if reason == "missing_file":
+            raise HTTPException(status_code=400, detail="No file uploaded")
+        raise HTTPException(status_code=400, detail="Failed to process uploaded file") from exc
+
     return {"document_id": document_id, "chunks": count}
 
 

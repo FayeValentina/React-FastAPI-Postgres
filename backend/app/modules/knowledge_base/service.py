@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Iterable, List, Optional
 from functools import lru_cache
 import os
 
 from sentence_transformers import SentenceTransformer
 from fastapi.concurrency import run_in_threadpool
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 #from pgvector.sqlalchemy import cosine_distance
@@ -19,6 +20,54 @@ from bs4 import BeautifulSoup
 
 # 嵌入模型（CPU 上加载，保持与 DB 维度一致）
 _model = SentenceTransformer(settings.EMBEDDING_MODEL)
+
+
+TEXT_MIME_TYPES = {
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "text/tab-separated-values",
+    "application/json",
+    "application/xml",
+    "application/yaml",
+    "application/x-yaml",
+}
+
+TEXT_EXTENSIONS = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".tsv",
+    ".json",
+    ".yaml",
+    ".yml",
+}
+
+
+def _allowed_text_mime(content_type: Optional[str]) -> bool:
+    if not content_type:
+        return False
+    ctype = content_type.split(";", 1)[0].strip().lower()
+    return ctype in TEXT_MIME_TYPES or ctype.startswith("text/")
+
+
+def _allowed_text_suffix(filename: Optional[str]) -> bool:
+    if not filename:
+        return False
+    suffix = os.path.splitext(filename)[1].lower()
+    return suffix in TEXT_EXTENSIONS
+
+
+def _decode_bytes_to_text(raw: bytes, encodings: Iterable[str] = ("utf-8", "utf-8-sig", "gbk")) -> str:
+    if not raw:
+        return ""
+    for encoding in encodings:
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="ignore")
 
 
 @lru_cache(maxsize=8)
@@ -181,6 +230,31 @@ async def create_document(db: AsyncSession, data: KnowledgeDocumentCreate) -> mo
     db.add(doc)
     await db.flush()  # 分配 ID
     return doc
+
+
+async def ingest_document_file(
+    db: AsyncSession,
+    document_id: int,
+    upload: UploadFile,
+    overwrite: bool = False,
+) -> int:
+    """读取上传的纯文本/Markdown 文件并复用文本注入逻辑。"""
+    if upload is None:
+        raise ValueError("missing_file")
+
+    if not (_allowed_text_mime(upload.content_type) or _allowed_text_suffix(upload.filename)):
+        raise ValueError("unsupported_file_type")
+
+    raw = await upload.read()
+    # 尝试以常见编码解码为字符串
+    content = _decode_bytes_to_text(raw)
+
+    return await ingest_document_content(
+        db,
+        document_id,
+        content,
+        overwrite=overwrite,
+    )
 
 
 async def ingest_document_content(db: AsyncSession, document_id: int, content: str, overwrite: bool = False) -> int:
