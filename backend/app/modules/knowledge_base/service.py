@@ -8,12 +8,12 @@ from sentence_transformers import SentenceTransformer
 from fastapi.concurrency import run_in_threadpool
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select
 #from pgvector.sqlalchemy import cosine_distance
 
 from app.core.config import settings
 from . import models
-from .schemas import KnowledgeDocumentCreate
+from . import repository
 from markdown import markdown
 from bs4 import BeautifulSoup
 
@@ -215,23 +215,6 @@ async def _strip_markdown(content: str) -> str:
     return await run_in_threadpool(_strip_markdown_sync, content)
 
 
-async def create_document(db: AsyncSession, data: KnowledgeDocumentCreate) -> models.KnowledgeDocument:
-    doc = models.KnowledgeDocument(
-        source_type=data.source_type,
-        source_ref=data.source_ref,
-        title=data.title,
-        language=data.language,
-        mime=data.mime,
-        checksum=data.checksum,
-        meta=data.meta,
-        tags=data.tags,
-        created_by=data.created_by,
-    )
-    db.add(doc)
-    await db.flush()  # 分配 ID
-    return doc
-
-
 async def ingest_document_file(
     db: AsyncSession,
     document_id: int,
@@ -267,7 +250,7 @@ async def ingest_document_content(db: AsyncSession, document_id: int, content: s
 
     # 根据覆盖标志，先删除旧分块，避免数据冗余
     if overwrite:
-        await db.execute(delete(models.KnowledgeChunk).where(models.KnowledgeChunk.document_id == document_id))
+        await repository.delete_chunks_by_document_id(db, document_id)
 
     # 在线程池中进行分句（使用清理后的纯文本）
     chunks = await split_text(plain_text_content)
@@ -284,11 +267,53 @@ async def ingest_document_content(db: AsyncSession, document_id: int, content: s
     return len(chunks)
 
 
-async def delete_document(db: AsyncSession, document_id: int) -> None:
-    """删除文档（级联删除知识块）。"""
-    # 直接删除 Document，依赖外键和 ORM 级联清理 chunks
-    await db.execute(delete(models.KnowledgeDocument).where(models.KnowledgeDocument.id == document_id))
-    await db.commit()
+async def update_chunk(
+    db: AsyncSession,
+    chunk_id: int,
+    updates: dict,
+) -> models.KnowledgeChunk | None:
+    """更新指定知识块内容或排序，并在内容变化时重计算向量。"""
+    chunk = await repository.get_chunk_by_id(db, chunk_id)
+    if not chunk:
+        return None
+
+    content_changed = False
+
+    if "content" in updates:
+        new_content = updates.get("content")
+        if new_content is not None and new_content != chunk.content:
+            chunk.content = new_content
+            content_changed = True
+        elif new_content is None and chunk.content is not None:
+            # 允许显式清空内容
+            chunk.content = ""
+            content_changed = True
+
+    if "chunk_index" in updates:
+        chunk.chunk_index = updates.get("chunk_index")
+
+    needs_persist = content_changed or ("chunk_index" in updates)
+
+    if content_changed:
+        vector = (
+            await run_in_threadpool(_model.encode, [chunk.content], normalize_embeddings=True)
+        )[0]
+        chunk.embedding = vector
+
+    if needs_persist:
+        await repository.persist_chunk(db, chunk)
+
+    return chunk
+
+
+async def delete_chunk(db: AsyncSession, chunk_id: int) -> bool:
+    """删除指定知识块。"""
+    chunk = await repository.get_chunk_by_id(db, chunk_id)
+    if not chunk:
+        return False
+
+    await repository.delete_chunk(db, chunk)
+    return True
 
 
 async def search_similar_chunks(db: AsyncSession, query: str, top_k: int):
@@ -302,60 +327,6 @@ async def search_similar_chunks(db: AsyncSession, query: str, top_k: int):
         select(models.KnowledgeChunk)
         .order_by(models.KnowledgeChunk.embedding.cosine_distance(q_emb))
         .limit(top_k)
-    )
-    result = await db.scalars(stmt)
-    return result.all()
-
-
-async def get_all_documents(db: AsyncSession, skip: int = 0, limit: int = 100):
-    """分页获取文档列表。"""
-    stmt = (
-        select(models.KnowledgeDocument)
-        .order_by(models.KnowledgeDocument.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    result = await db.scalars(stmt)
-    return result.all()
-
-
-async def get_document_by_id(db: AsyncSession, document_id: int):
-    """根据 ID 获取单个文档。"""
-    return await db.get(models.KnowledgeDocument, document_id)
-
-
-async def update_document_metadata(db: AsyncSession, document_id: int, updates: dict):
-    """更新文档的元信息（部分字段）。"""
-    doc = await db.get(models.KnowledgeDocument, document_id)
-    if not doc:
-        return None
-
-    allowed_fields = {
-        "source_type",
-        "source_ref",
-        "title",
-        "language",
-        "mime",
-        "checksum",
-        "meta",
-        "tags",
-        "created_by",
-    }
-    for k, v in (updates or {}).items():
-        if k in allowed_fields:
-            setattr(doc, k, v)
-
-    await db.commit()
-    await db.refresh(doc)
-    return doc
-
-
-async def get_chunks_by_document_id(db: AsyncSession, document_id: int):
-    """获取指定文档的所有知识块，按块序排序。"""
-    stmt = (
-        select(models.KnowledgeChunk)
-        .where(models.KnowledgeChunk.document_id == document_id)
-        .order_by(models.KnowledgeChunk.chunk_index.asc(), models.KnowledgeChunk.id.asc())
     )
     result = await db.scalars(stmt)
     return result.all()

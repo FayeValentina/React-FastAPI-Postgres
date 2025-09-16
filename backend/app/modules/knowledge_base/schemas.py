@@ -54,6 +54,13 @@ class KnowledgeChunkRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class KnowledgeChunkUpdate(BaseModel):
+    content: Optional[str] = Field(None, description="更新后的文本内容")
+    chunk_index: Optional[int] = Field(
+        None, description="文档内块序，允许为空表示未指定"
+    )
+
+
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="检索的查询文本")
     top_k: int = Field(5, ge=1, le=50, description="返回最相似的结果数量（1-50）")

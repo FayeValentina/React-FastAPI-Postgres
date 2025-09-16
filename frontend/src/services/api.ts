@@ -1,4 +1,8 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosRequestHeaders,
+} from 'axios';
 import { setupInterceptors } from './interceptors';
 
 // Create the underlying Axios instance
@@ -24,7 +28,7 @@ const api: ApiClient = {
   post: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) => {
     let finalConfig = config;
     if (typeof FormData !== 'undefined' && data instanceof FormData) {
-      const headers = { ...(config?.headers ?? {}) } as Record<string, unknown>;
+      const headers = { ...(config?.headers ?? {}) } as AxiosRequestHeaders;
       delete headers['Content-Type'];
       delete headers['content-type'];
       finalConfig = { ...(config ?? {}), headers };
