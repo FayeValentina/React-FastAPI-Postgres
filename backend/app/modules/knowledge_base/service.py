@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 from functools import lru_cache
 import os
 
@@ -22,12 +22,8 @@ _model = SentenceTransformer(settings.EMBEDDING_MODEL)
 
 
 @lru_cache(maxsize=8)
-def get_spacy_nlp_for_lang(lang: str):
-    """按语言惰性加载 spaCy 模型，失败返回 None。
-
-    优先使用对应语言的 PATH 变量，其次按模型名称加载；
-    不支持的语言回退为中文配置。
-    """
+def _get_spacy_nlp_for_lang(lang: str):
+    """按语言惰性加载 spaCy 模型，失败返回 None。"""
     try:
         import spacy  # type: ignore
         language = (lang or "").lower().strip()
@@ -54,7 +50,12 @@ def get_spacy_nlp_for_lang(lang: str):
         return None
 
 
-def split_text(content: str, target: int = 300, overlap: int = 50) -> List[str]:
+async def get_spacy_nlp_for_lang(lang: str):
+    """在线程池中加载 spaCy 模型以避免阻塞事件循环。"""
+    return await run_in_threadpool(_get_spacy_nlp_for_lang, lang)
+
+
+def _split_text_sync(content: str, target: int = 300, overlap: int = 50) -> List[str]:
     """按句分块（自动检测语言，优先使用对应 spaCy 模型分句）。
 
     - target: 目标块大小（约字符数）
@@ -82,7 +83,7 @@ def split_text(content: str, target: int = 300, overlap: int = 50) -> List[str]:
         lang = "en"
 
     sentences: List[str]
-    nlp = get_spacy_nlp_for_lang(lang)
+    nlp = _get_spacy_nlp_for_lang(lang)
     if nlp is not None and text:
         try:
             doc = nlp(text)
@@ -122,7 +123,12 @@ def split_text(content: str, target: int = 300, overlap: int = 50) -> List[str]:
     return chunks or ([text] if text else [])
 
 
-def _strip_markdown(content: str) -> str:
+async def split_text(content: str, target: int = 300, overlap: int = 50) -> List[str]:
+    """在线程池中执行分句逻辑，避免阻塞事件循环。"""
+    return await run_in_threadpool(_split_text_sync, content, target, overlap)
+
+
+def _strip_markdown_sync(content: str) -> str:
     """将 Markdown 文本转换为纯文本。
 
     策略：先用 markdown 库转 HTML，再用 BeautifulSoup 提取纯文本；
@@ -155,6 +161,11 @@ def _strip_markdown(content: str) -> str:
     return "\n".join(lines)
 
 
+async def _strip_markdown(content: str) -> str:
+    """在线程池中清洗 Markdown 内容，避免阻塞事件循环。"""
+    return await run_in_threadpool(_strip_markdown_sync, content)
+
+
 async def create_document(db: AsyncSession, data: KnowledgeDocumentCreate) -> models.KnowledgeDocument:
     doc = models.KnowledgeDocument(
         source_type=data.source_type,
@@ -175,18 +186,17 @@ async def create_document(db: AsyncSession, data: KnowledgeDocumentCreate) -> mo
 async def ingest_document_content(db: AsyncSession, document_id: int, content: str, overwrite: bool = False) -> int:
     """将文本切分并写入指定文档的知识块，返回块数量。
 
-    注意：split_text 与 _model.encode 为同步且可能耗时的 CPU 密集操作，
-    放入线程池以避免阻塞事件循环。
+    注意：文本清洗、分句与向量编码均在线程池中执行，以避免阻塞事件循环。
     """
     # 新增步骤：在所有操作之前，先清理传入的 content
-    plain_text_content = _strip_markdown(content)
+    plain_text_content = await _strip_markdown(content)
 
     # 根据覆盖标志，先删除旧分块，避免数据冗余
     if overwrite:
         await db.execute(delete(models.KnowledgeChunk).where(models.KnowledgeChunk.document_id == document_id))
 
     # 在线程池中进行分句（使用清理后的纯文本）
-    chunks = await run_in_threadpool(split_text, plain_text_content)
+    chunks = await split_text(plain_text_content)
     if not chunks:
         # 若选择覆盖且新内容为空，确保删除提交
         if overwrite:

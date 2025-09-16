@@ -1,4 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -53,11 +54,13 @@ async def ws_chat(
                 similar = []
 
             # 使用服务层根据语言构建 system_prompt 以及包裹后的 user_text
-            system_prompt, user_text = prepare_system_and_user(user_text, similar)
+            system_prompt, user_text = await run_in_threadpool(
+                prepare_system_and_user, user_text, similar
+            )
 
             history.append({"role": "user", "content": user_text})
 
-            stream = client.chat.completions.create(
+            stream = await client.chat.completions.create(
                 model=settings.LLM_MODEL,
                 messages=[{"role": "system", "content": system_prompt}] + history,
                 stream=True,
@@ -65,7 +68,7 @@ async def ws_chat(
             )
 
             acc: list[str] = []
-            for chunk in stream:
+            async for chunk in stream:
                 delta = chunk.choices[0].delta
                 token = getattr(delta, "content", None) or (delta.get("content") if isinstance(delta, dict) else None)
                 if token:
