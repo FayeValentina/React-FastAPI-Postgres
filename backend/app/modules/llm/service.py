@@ -8,7 +8,7 @@ Responsibilities:
 """
 from __future__ import annotations
 from typing import Iterable, Tuple
-
+from fastapi.concurrency import run_in_threadpool
 try:
     from langdetect import detect  # type: ignore
 except Exception:  # pragma: no cover - graceful fallback if not available
@@ -76,7 +76,9 @@ def _localized_prompts(lang: str) -> Tuple[str, str]:
     )
 
 
-def prepare_system_and_user(user_text: str, similar: Iterable[object]) -> Tuple[str, str]:
+def _prepare_system_and_user(
+    user_text: str, similar: Iterable[object]
+) -> Tuple[str, str]:
     """Build a localized system prompt and possibly wrapped user_text based on language.
 
     - Detect language from the original user_text.
@@ -91,3 +93,9 @@ def prepare_system_and_user(user_text: str, similar: Iterable[object]) -> Tuple[
     )
     return system_prompt, final_user
 
+
+async def prepare_system_and_user(
+    user_text: str, similar: Iterable[object]
+) -> Tuple[str, str]:
+    """Async wrapper for `_prepare_system_and_user` for compatibility with async call sites."""
+    return await run_in_threadpool(_prepare_system_and_user, user_text, similar)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.postgres_base import get_async_session
@@ -10,17 +10,23 @@ from app.modules.knowledge_base.schemas import (
     KnowledgeDocumentUpdate,
     KnowledgeChunkRead,
     KnowledgeSearchRequest,
+    KnowledgeChunkUpdate,
 )
 from app.modules.knowledge_base import models
-from app.modules.knowledge_base.service import (
+from app.modules.knowledge_base.repository import (
     create_document,
-    ingest_document_content,
     delete_document,
     get_all_documents,
     get_document_by_id,
     update_document_metadata,
-    search_similar_chunks,
     get_chunks_by_document_id,
+)
+from app.modules.knowledge_base.service import (
+    ingest_document_content,
+    ingest_document_file,
+    search_similar_chunks,
+    update_chunk,
+    delete_chunk,
 )
 
 
@@ -42,6 +48,30 @@ async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest,
     if not exist:
         raise HTTPException(status_code=404, detail="Document not found")
     count = await ingest_document_content(db, document_id, body.content, overwrite=body.overwrite)
+    return {"document_id": document_id, "chunks": count}
+
+
+@router.post("/documents/{document_id}/ingest/upload", response_model=KnowledgeIngestResult, status_code=201)
+async def ingest_content_upload(
+    document_id: int,
+    file: UploadFile = File(...),
+    overwrite: bool = Form(False),
+    db: AsyncSession = Depends(get_async_session),
+):
+    exist = await db.get(models.KnowledgeDocument, document_id)
+    if not exist:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    try:
+        count = await ingest_document_file(db, document_id, file, overwrite=overwrite)
+    except ValueError as exc:
+        reason = str(exc)
+        if reason == "unsupported_file_type":
+            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload text-based files only.")
+        if reason == "missing_file":
+            raise HTTPException(status_code=400, detail="No file uploaded")
+        raise HTTPException(status_code=400, detail="Failed to process uploaded file") from exc
+
     return {"document_id": document_id, "chunks": count}
 
 
@@ -98,3 +128,33 @@ async def list_document_chunks(document_id: int, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=404, detail="Document not found")
     chunks = await get_chunks_by_document_id(db, document_id)
     return chunks
+
+
+@router.patch("/chunks/{chunk_id}", response_model=KnowledgeChunkRead)
+async def patch_chunk(
+    chunk_id: int,
+    payload: KnowledgeChunkUpdate,
+    db: AsyncSession = Depends(get_async_session),
+):
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        chunk = await db.get(models.KnowledgeChunk, chunk_id)
+        if not chunk:
+            raise HTTPException(status_code=404, detail="Chunk not found")
+        return chunk
+
+    chunk = await update_chunk(db, chunk_id, updates)
+    if not chunk:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+    return chunk
+
+
+@router.delete("/chunks/{chunk_id}", status_code=204)
+async def remove_chunk(
+    chunk_id: int,
+    db: AsyncSession = Depends(get_async_session),
+):
+    deleted = await delete_chunk(db, chunk_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+    return None

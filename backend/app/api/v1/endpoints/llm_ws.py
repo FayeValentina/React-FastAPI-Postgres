@@ -1,5 +1,4 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -55,8 +54,8 @@ async def ws_chat(
                 similar = []
 
             # 由服务层生成 system_prompt，并对 user_text 做包装（语言/模板等）
-            system_prompt, wrapped_user_text = await run_in_threadpool(
-                prepare_system_and_user, user_text, similar
+            system_prompt, wrapped_user_text = await prepare_system_and_user(
+                user_text, similar
             )
 
             # 追加到历史（只保留最近 N 条）

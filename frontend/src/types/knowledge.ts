@@ -39,6 +39,11 @@ export interface KnowledgeChunkRead {
   created_at: string; // ISO datetime
 }
 
+export interface KnowledgeChunkUpdate {
+  content?: string | null;
+  chunk_index?: number | null;
+}
+
 export interface KnowledgeSearchRequest {
   query: string;
   top_k?: number; // default 5 on backend

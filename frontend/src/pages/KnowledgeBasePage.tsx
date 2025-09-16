@@ -85,13 +85,24 @@ const KnowledgeBasePage: React.FC = () => {
     setIngestOpen(true);
   };
 
-  const handleIngest = async (content: string, overwrite: boolean) => {
+  const handleIngest = async ({ content, file, overwrite }: { content: string; file: File | null; overwrite: boolean }) => {
     if (!ingestTarget) return;
     try {
-      const data = await api.post<KnowledgeIngestResult>(`${docsUrl}/${ingestTarget.id}/ingest`, {
-        content,
-        overwrite,
-      });
+      let data: KnowledgeIngestResult;
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('overwrite', overwrite ? 'true' : 'false');
+        data = await api.post<KnowledgeIngestResult>(
+          `${docsUrl}/${ingestTarget.id}/ingest/upload`,
+          formData
+        );
+      } else {
+        data = await api.post<KnowledgeIngestResult>(`${docsUrl}/${ingestTarget.id}/ingest`, {
+          content,
+          overwrite,
+        });
+      }
       success(`注入成功，生成 ${data.chunks} 个分块`);
       setIngestOpen(false);
     } catch (e) {
