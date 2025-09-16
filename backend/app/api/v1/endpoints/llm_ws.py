@@ -14,6 +14,9 @@ from app.modules.auth.models import User
 router = APIRouter(prefix="/ws", tags=["llm"])
 
 
+MAX_HISTORY_MESSAGES = 15
+
+
 @router.websocket("/chat")
 async def ws_chat(
     ws: WebSocket,
@@ -59,24 +62,28 @@ async def ws_chat(
             )
 
             history.append({"role": "user", "content": user_text})
-
-            stream = await client.chat.completions.create(
-                model=settings.LLM_MODEL,
-                messages=[{"role": "system", "content": system_prompt}] + history,
-                stream=True,
-                temperature=temperature,
-            )
+            if len(history) > MAX_HISTORY_MESSAGES:
+                del history[:-MAX_HISTORY_MESSAGES]
 
             acc: list[str] = []
-            async for chunk in stream:
-                delta = chunk.choices[0].delta
-                token = getattr(delta, "content", None) or (delta.get("content") if isinstance(delta, dict) else None)
-                if token:
-                    acc.append(token)
-                    await ws.send_json({"type": "delta", "content": token})
+            async with client.chat.completions.stream(
+                model=settings.LLM_MODEL,
+                messages=[{"role": "system", "content": system_prompt}] + history,
+                temperature=temperature,
+            ) as stream:
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta
+                    token = getattr(delta, "content", None) or (
+                        delta.get("content") if isinstance(delta, dict) else None
+                    )
+                    if token:
+                        acc.append(token)
+                        await ws.send_json({"type": "delta", "content": token})
 
             text = "".join(acc)
             history.append({"role": "assistant", "content": text})
+            if len(history) > MAX_HISTORY_MESSAGES:
+                del history[:-MAX_HISTORY_MESSAGES]
             await ws.send_json({"type": "done"})
 
     except WebSocketDisconnect:
