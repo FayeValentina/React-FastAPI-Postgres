@@ -84,17 +84,26 @@ async def ws_chat(
                         final_text = getattr(event, "content", None) or ""
                         continue
 
-                    # Fallback for older openai-python versions that yield ChatCompletionChunk
-                    if event_type is None and hasattr(event, "choices"):
-                        choices = getattr(event, "choices", [])
-                        if choices:
-                            delta = choices[0].delta
-                            token = getattr(delta, "content", None) or (
-                                delta.get("content") if isinstance(delta, dict) else None
-                            )
-                            if token:
-                                acc.append(token)
-                                await ws.send_json({"type": "delta", "content": token})
+                    # Fallback for openai-python chat completion streams that yield ChatCompletionChunk
+                    if event_type is None:
+                        chunk = getattr(event, "chunk", event)
+                        choices = getattr(chunk, "choices", []) or []
+                        if not choices:
+                            continue
+
+                        first_choice = choices[0]
+                        delta = getattr(first_choice, "delta", None)
+                        if delta is None and isinstance(first_choice, dict):
+                            delta = first_choice.get("delta")
+                        if delta is None:
+                            continue
+
+                        token = getattr(delta, "content", None)
+                        if token is None and isinstance(delta, dict):
+                            token = delta.get("content")
+                        if token:
+                            acc.append(token)
+                            await ws.send_json({"type": "delta", "content": token})
 
             text = final_text if final_text is not None else "".join(acc)
             history.append({"role": "assistant", "content": text})
