@@ -57,30 +57,46 @@ async def ws_chat(
                 similar = []
 
             # 使用服务层根据语言构建 system_prompt 以及包裹后的 user_text
-            system_prompt, user_text = await run_in_threadpool(
-                prepare_system_and_user, user_text, similar
-            )
+            system_prompt, user_text = await run_in_threadpool(prepare_system_and_user, user_text, similar)
 
             history.append({"role": "user", "content": user_text})
             if len(history) > MAX_HISTORY_MESSAGES:
                 del history[:-MAX_HISTORY_MESSAGES]
 
             acc: list[str] = []
+            final_text: str | None = None
             async with client.chat.completions.stream(
                 model=settings.LLM_MODEL,
                 messages=[{"role": "system", "content": system_prompt}] + history,
                 temperature=temperature,
             ) as stream:
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta
-                    token = getattr(delta, "content", None) or (
-                        delta.get("content") if isinstance(delta, dict) else None
-                    )
-                    if token:
-                        acc.append(token)
-                        await ws.send_json({"type": "delta", "content": token})
+                async for event in stream:
+                    event_type = getattr(event, "type", None)
 
-            text = "".join(acc)
+                    if event_type == "content.delta":
+                        token = getattr(event, "delta", None) or ""
+                        if token:
+                            acc.append(token)
+                            await ws.send_json({"type": "delta", "content": token})
+                        continue
+
+                    if event_type == "content.done":
+                        final_text = getattr(event, "content", None) or ""
+                        continue
+
+                    # Fallback for older openai-python versions that yield ChatCompletionChunk
+                    if event_type is None and hasattr(event, "choices"):
+                        choices = getattr(event, "choices", [])
+                        if choices:
+                            delta = choices[0].delta
+                            token = getattr(delta, "content", None) or (
+                                delta.get("content") if isinstance(delta, dict) else None
+                            )
+                            if token:
+                                acc.append(token)
+                                await ws.send_json({"type": "delta", "content": token})
+
+            text = final_text if final_text is not None else "".join(acc)
             history.append({"role": "assistant", "content": text})
             if len(history) > MAX_HISTORY_MESSAGES:
                 del history[:-MAX_HISTORY_MESSAGES]
