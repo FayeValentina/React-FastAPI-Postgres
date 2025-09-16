@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Box, Button, Paper, Slider, Stack, TextField, Typography } from '@mui/material'
 import { useAuthStore } from '../stores/auth-store'
 import ManagementLayout from '../components/Layout/ManagementLayout'
 import { renderMarkdownToHtml } from '../utils/markdown'
@@ -9,7 +10,6 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [temperature, setTemperature] = useState<number>(0.2)
-  const listRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const accessToken = useAuthStore((s) => s.accessToken)
 
@@ -55,105 +55,156 @@ export default function ChatPage() {
 
   return (
     <ManagementLayout>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h2 style={{ margin: 0 }}>Local LLM Chat</h2>
+      <Box
+        sx={{
+          maxWidth: 920,
+          mx: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2.5,
+          py: { xs: 1.5, md: 3 },
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            fontSize: { xs: 20, sm: 24, md: 28 },
+            fontWeight: 600,
+          }}
+        >
+          Local LLM Chat
+        </Typography>
 
         {/* Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label htmlFor="temperature" style={{ fontSize: 14, color: '#555' }}>Temperature</label>
-            <input
-              id="temperature"
-              type="range"
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 1.5, sm: 2 },
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 1.5, md: 3 },
+            alignItems: { xs: 'stretch', md: 'center' },
+            justifyContent: 'space-between',
+          }}
+        >
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={{ xs: 1, sm: 2 }}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+            sx={{ flex: 1, minWidth: 0 }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Temperature
+            </Typography>
+            <Slider
+              value={temperature}
               min={0}
               max={2}
               step={0.05}
-              value={temperature}
-              onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              style={{ width: 200 }}
+              onChange={(_, value) => setTemperature(Array.isArray(value) ? value[0] : value)}
+              sx={{
+                flex: 1,
+                minWidth: { xs: '100%', sm: 160 },
+                maxWidth: { xs: '100%', md: 260 },
+              }}
             />
-            <span style={{ width: 40, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{temperature.toFixed(2)}</span>
-          </div>
-          <button
+            <Typography
+              variant="body2"
+              sx={{
+                fontVariantNumeric: 'tabular-nums',
+                textAlign: { xs: 'left', sm: 'right' },
+                width: { sm: 48 },
+              }}
+            >
+              {temperature.toFixed(2)}
+            </Typography>
+          </Stack>
+          <Button
+            variant="outlined"
             onClick={() => {
               setMessages([])
               wsRef.current?.send(JSON.stringify({ type: 'reset' }))
             }}
-            style={{ padding: '6px 10px' }}
+            sx={{ alignSelf: { xs: 'stretch', md: 'center' } }}
           >
             Reset
-          </button>
-        </div>
+          </Button>
+        </Paper>
 
         {/* Messages */}
-        <div
-          ref={listRef}
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 12,
-            padding: 12,
-            minHeight: 420,
-            maxHeight: '60vh',
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 1.5, sm: 2 },
+            minHeight: { xs: 320, md: 420 },
+            maxHeight: { xs: '60vh', md: '65vh' },
             overflowY: 'auto',
-            background: '#fafafa',
+            bgcolor: 'grey.50',
           }}
         >
           {messages.map((m, i) => {
             const isUser = m.role === 'user'
             return (
-              <div
+              <Box
                 key={i}
-                style={{
+                sx={{
                   display: 'flex',
                   justifyContent: isUser ? 'flex-end' : 'flex-start',
-                  margin: '8px 0',
+                  my: 1,
                 }}
               >
-                <div
-                  style={{
-                    maxWidth: '76%',
-                    padding: '10px 12px',
-                    borderRadius: 12,
+                <Box
+                  sx={{
+                    maxWidth: { xs: '88%', sm: '76%' },
+                    px: 1.5,
+                    py: 1.25,
+                    borderRadius: 2,
+                    bgcolor: isUser ? 'primary.light' : 'background.paper',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                     whiteSpace: 'pre-wrap',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    background: isUser ? '#dbeafe' : '#ffffff',
-                    border: '1px solid #e5e7eb',
+                    fontSize: 14,
                   }}
                 >
                   {isUser ? (
                     m.content
                   ) : (
-                    <div
+                    <Box
+                      component="div"
+                      sx={{ '& p': { my: 1 }, '& pre': { whiteSpace: 'pre-wrap' } }}
                       dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(m.content) }}
                     />
                   )}
-                </div>
-              </div>
+                </Box>
+              </Box>
             )
           })}
           {loading && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '8px 0' }}>
-              <div
-                style={{
-                  maxWidth: '76%',
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  background: '#ffffff',
-                  border: '1px solid #e5e7eb',
-                  color: '#6b7280',
+            <Box sx={{ display: 'flex', justifyContent: 'flex-start', my: 1 }}>
+              <Box
+                sx={{
+                  maxWidth: { xs: '88%', sm: '76%' },
+                  px: 1.5,
+                  py: 1.25,
+                  borderRadius: 2,
+                  bgcolor: 'background.paper',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  color: 'text.secondary',
                   fontSize: 14,
                 }}
               >
                 Assistant is typing…
-              </div>
-            </div>
+              </Box>
+            </Box>
           )}
-          <div ref={bottomRef} />
-        </div>
+          <Box ref={bottomRef} />
+        </Paper>
 
         {/* Composer */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+          <TextField
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -163,11 +214,24 @@ export default function ChatPage() {
               }
             }}
             placeholder="Type a message and press Enter..."
-            style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb' }}
+            fullWidth
+            size="medium"
+            autoComplete="off"
           />
-          <button onClick={send} disabled={loading || !input.trim()} style={{ padding: '10px 14px' }}>Send</button>
-        </div>
-      </div>
+          <Button
+            variant="contained"
+            onClick={send}
+            disabled={loading || !input.trim()}
+            sx={{
+              px: { xs: 2, sm: 3 },
+              py: { xs: 1.25, sm: 1 },
+              fontWeight: 600,
+            }}
+          >
+            Send
+          </Button>
+        </Stack>
+      </Box>
     </ManagementLayout>
   )
 }

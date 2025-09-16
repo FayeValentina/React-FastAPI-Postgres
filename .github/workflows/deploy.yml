@@ -33,6 +33,7 @@ jobs:
           host: ${{ secrets.OCI_SSH_HOST }}
           username: ${{ secrets.OCI_SSH_USER }}
           key: ${{ secrets.OCI_SSH_KEY }}
+          command_timeout: 300m
           script: |
             set -euo pipefail
 
@@ -59,8 +60,8 @@ jobs:
             echo "Starting new services..."
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --pull always
 
-            echo "Waiting for services to be ready..."
-            timeout 120s bash -c ' \
+            echo "Waiting for services to be ready (up to 10 minutes)..."
+            timeout 600s bash -c ' \
               until curl -fsS http://localhost/api/health > /dev/null; do \
                 echo "Service not ready yet, retrying in 5 seconds..."; \
                 sleep 5; \

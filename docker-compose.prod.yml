@@ -86,8 +86,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        - NODE_ENV=production
-        - VITE_API_URL=${FRONTEND_URL}/api
+        - VITE_API_URL=/api
     env_file:
       - .env.prod
     volumes:
@@ -163,8 +162,8 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
-    mem_limit: 3G
-    mem_reservation: 1536M
+    mem_limit: 5G
+    mem_reservation: 2560M
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -295,18 +294,13 @@ services:
 
   # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
   llama_server:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: amperecomputingai/llama.cpp:3.2.1
+    platform: "linux/arm64"
     env_file:
       - .env.prod
     depends_on:
       llm_init:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 15s
     command:
       - --model
       - /models/${HF_FILENAME}
@@ -322,11 +316,18 @@ services:
       - ${LLM_API_KEY}
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/slots >/dev/null || curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 120s
     volumes:
       - models_data:/models:ro
     restart: unless-stopped
     networks:
       - prodNetWork
+
 
   taskiq_worker:
     image: react-fastapi-postgres-backend:latest

@@ -45,7 +45,7 @@ const KnowledgeBasePage: React.FC = () => {
   const loadDocuments = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get<KnowledgeDocumentRead[]>(docsUrl);
+      const data = await api.get<KnowledgeDocumentRead[]>(docsUrl);
       setDocuments(data ?? []);
     } catch (e) {
       error(extractErrorMessage(e as ApiError) || '获取文档列表失败');
@@ -85,13 +85,24 @@ const KnowledgeBasePage: React.FC = () => {
     setIngestOpen(true);
   };
 
-  const handleIngest = async (content: string, overwrite: boolean) => {
+  const handleIngest = async ({ content, file, overwrite }: { content: string; file: File | null; overwrite: boolean }) => {
     if (!ingestTarget) return;
     try {
-      const { data } = await api.post<KnowledgeIngestResult>(`${docsUrl}/${ingestTarget.id}/ingest`, {
-        content,
-        overwrite,
-      });
+      let data: KnowledgeIngestResult;
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('overwrite', overwrite ? 'true' : 'false');
+        data = await api.post<KnowledgeIngestResult>(
+          `${docsUrl}/${ingestTarget.id}/ingest/upload`,
+          formData
+        );
+      } else {
+        data = await api.post<KnowledgeIngestResult>(`${docsUrl}/${ingestTarget.id}/ingest`, {
+          content,
+          overwrite,
+        });
+      }
       success(`注入成功，生成 ${data.chunks} 个分块`);
       setIngestOpen(false);
     } catch (e) {
@@ -102,7 +113,7 @@ const KnowledgeBasePage: React.FC = () => {
   const handleSearch = async (query: string, topK: number) => {
     setLoading(true);
     try {
-      const { data } = await api.post<KnowledgeChunkRead[]>('/v1/knowledge/search', { query, top_k: topK });
+      const data = await api.post<KnowledgeChunkRead[]>('/v1/knowledge/search', { query, top_k: topK });
       setSearchResults(data ?? []);
     } catch (e) {
       error(extractErrorMessage(e as ApiError) || '搜索失败');
