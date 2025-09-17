@@ -24,16 +24,18 @@ class RedisConnectionManager:
     _config: RedisPoolConfig = settings.redis_pool
     _last_health_check: Optional[datetime] = None
     _is_healthy: bool = True
-    _health_check_lock: asyncio.Lock = asyncio.Lock()
-    
+    _health_check_lock: Optional[asyncio.Lock] = None
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._health_check_lock = asyncio.Lock()
         return cls._instance
-    
+
     async def initialize(self, config: Optional[RedisPoolConfig] = None) -> None:
         """初始化连接池"""
+        if self._health_check_lock is None:
+            self._health_check_lock = asyncio.Lock()
+
         if config:
             self._config = config
             
@@ -116,14 +118,18 @@ class RedisConnectionManager:
     async def _periodic_health_check(self) -> None:
         """定期健康检查"""
         now = datetime.utcnow()
-        
+
         # 如果距离上次检查超过间隔时间，执行检查
-        if (self._last_health_check is None or 
+        if (self._last_health_check is None or
             now - self._last_health_check > timedelta(seconds=self._config.health_check_interval)):
-            
-            async with self._health_check_lock:
+            if self._health_check_lock is None:
+                self._health_check_lock = asyncio.Lock()
+
+            lock = self._health_check_lock
+            assert lock is not None
+            async with lock:
                 # 双重检查，避免并发重复检查
-                if (self._last_health_check is None or 
+                if (self._last_health_check is None or
                     now - self._last_health_check > timedelta(seconds=self._config.health_check_interval)):
                     await self._health_check()
     

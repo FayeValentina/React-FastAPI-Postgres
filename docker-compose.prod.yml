@@ -317,7 +317,7 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/slots >/dev/null || curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS -H \"Authorization: Bearer ${LLM_API_KEY}\" http://127.0.0.1:8080/slots >/dev/null || curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 8
