@@ -3,18 +3,16 @@ set -eu
 # Best-effort enable pipefail if supported by the shell
 set -o pipefail 2>/dev/null || true
 
-# This script downloads one or more spaCy model wheels to /models if not present.
+# This script downloads a spaCy model wheel to /models if not present.
 # Env vars supported (provided by compose):
-# - SPACY_MODEL_URLS: comma-separated list of wheel URLs (preferred)
-# - SPACY_MODEL_URL: single wheel URL (backward-compatible)
+# - SPACY_MODEL_URL: wheel URL to fetch (required)
 
 echo "[spacy_init] starting..."
 
-URLS="${SPACY_MODEL_URLS:-}"
-SINGLE_URL="${SPACY_MODEL_URL:-}"
+MODEL_URL="${SPACY_MODEL_URL:-}"
 
-if [ -z "$URLS" ] && [ -z "$SINGLE_URL" ]; then
-  echo "[spacy_init] Neither SPACY_MODEL_URLS nor SPACY_MODEL_URL is set." >&2
+if [ -z "$MODEL_URL" ]; then
+  echo "[spacy_init] SPACY_MODEL_URL is not set." >&2
   exit 1
 fi
 
@@ -29,18 +27,8 @@ fi
 mkdir -p /models
 
 echo "[spacy_init] Preparing cleanup list ..."
-KEEPS=""
-if [ -n "$URLS" ]; then
-  IFS=','
-  for u in $URLS; do
-    u_trim="$(echo "$u" | xargs)"
-    [ -n "$u_trim" ] && KEEPS="$KEEPS $(basename "$u_trim")"
-  done
-  unset IFS
-fi
-if [ -n "$SINGLE_URL" ]; then
-  KEEPS="$KEEPS $(basename "$SINGLE_URL")"
-fi
+MODEL_FILE="$(basename "$MODEL_URL")"
+KEEPS=" $MODEL_FILE "
 
 # Cleanup: remove old spaCy wheels not in keep list, and any leftover .part* files
 echo "[spacy_init] Cleaning up stale spaCy wheels and .part files in /models ..."
@@ -90,18 +78,7 @@ download_one() {
 }
 
 ok=0
-if [ -n "$URLS" ]; then
-  # Split comma-separated URLs
-  IFS=','
-  for u in $URLS; do
-    # trim spaces
-    u_trim="$(echo "$u" | xargs)"
-    download_one "$u_trim" || ok=1
-  done
-  unset IFS
-else
-  download_one "$SINGLE_URL" || ok=1
-fi
+download_one "$MODEL_URL" || ok=1
 
 ls -lh /models || true
 if [ "$ok" -ne 0 ]; then

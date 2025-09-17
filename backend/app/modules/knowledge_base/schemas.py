@@ -49,6 +49,7 @@ class KnowledgeChunkRead(BaseModel):
     document_id: Optional[int] = None
     chunk_index: Optional[int] = None
     content: str
+    language: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -59,6 +60,7 @@ class KnowledgeChunkUpdate(BaseModel):
     chunk_index: Optional[int] = Field(
         None, description="文档内块序，允许为空表示未指定"
     )
+    language: Optional[str] = Field(None, description="块语言，通常自动推断")
 
 
 class KnowledgeSearchRequest(BaseModel):

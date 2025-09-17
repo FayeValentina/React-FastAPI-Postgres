@@ -92,13 +92,11 @@ services:
         condition: service_completed_successfully
     command: >
       bash -c "
-        URLS=\"$${SPACY_MODEL_URLS:-$${SPACY_MODEL_URL}}\" &&
+        MODEL_URL=\"$${SPACY_MODEL_URL}\" &&
+        MODEL_FILE=$$(basename \"$${MODEL_URL}\") &&
         echo '安装本地 spaCy 模型...' &&
-        for U in $$(echo \"$${URLS}\" | tr ',' ' '); do \
-          F=$$(basename \"$${U}\"); \
-          echo \" - pip install /models/$${F}\"; \
-          poetry run pip install /models/$${F} || true; \
-        done &&
+        echo \" - pip install /models/$${MODEL_FILE}\" &&
+        poetry run pip install /models/$${MODEL_FILE} || true &&
         echo '等待数据库准备...' &&
         echo '应用数据库迁移...' &&
         poetry run alembic upgrade head &&
@@ -255,7 +253,7 @@ services:
     env_file:
       - .env.dev
     environment:
-      - SPACY_MODEL_URLS=${SPACY_MODEL_URLS}
+      - SPACY_MODEL_URL=${SPACY_MODEL_URL}
       - PIP_NO_CACHE_DIR=1
       - PIP_DEFAULT_TIMEOUT=1200
     command: ["sh", "/entry-scripts/spacy_init.sh"]

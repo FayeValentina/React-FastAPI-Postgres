@@ -354,14 +354,24 @@ class Settings(BaseSettings):
     LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     RAG_TOP_K: int = Field(default=3)
-    # spaCy 模型配置（多语言）
-    # 按语言分别配置小模型与可选路径
-    SPACY_MODEL_ZH: str = Field(default="zh_core_web_sm")
+    RAG_MIN_SIM: float = Field(default=0.4)
+    RAG_MMR_LAMBDA: float = Field(default=0.6)
+    RAG_PER_DOC_LIMIT: int = Field(default=1)
+    RAG_OVERSAMPLE: int = Field(default=5)
+    RAG_MAX_CANDIDATES: int = Field(default=100)
+    RAG_SAME_LANG_BONUS: float = Field(default=0.12)
+    RAG_CONTEXT_TOKEN_BUDGET: int = Field(default=2000)
+    RAG_CONTEXT_MAX_EVIDENCE: int = Field(default=12)
+    RAG_CHUNK_TARGET_TOKENS_EN: int = Field(default=260)
+    RAG_CHUNK_TARGET_TOKENS_CJK: int = Field(default=420)
+    RAG_CHUNK_TARGET_TOKENS_DEFAULT: int = Field(default=320)
+    RAG_CHUNK_OVERLAP_RATIO: float = Field(default=0.15)
+    RAG_CODE_CHUNK_MAX_LINES: int = Field(default=40)
+    RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
+    RAG_IVFFLAT_PROBES: int = Field(default=10)
+    # spaCy 英文模型配置（保留轻量模型路径以便自定义）
     SPACY_MODEL_EN: str = Field(default="en_core_web_sm")
-    SPACY_MODEL_JA: str = Field(default="ja_core_news_sm")
-    SPACY_MODEL_PATH_ZH: str | None = Field(default=None)
     SPACY_MODEL_PATH_EN: str | None = Field(default=None)
-    SPACY_MODEL_PATH_JA: str | None = Field(default=None)
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

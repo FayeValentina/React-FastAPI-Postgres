@@ -31,6 +31,11 @@ function renderInline(md: string): string {
     const label = text
     return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
   })
+  // citations [CITEx]
+  s = s.replace(/\[CITE(\d+)\]/g, (_m, idx) => {
+    const key = `CITE${idx}`
+    return `<sup data-cite-key="${key}">[${key}]</sup>`
+  })
   return s
 }
 

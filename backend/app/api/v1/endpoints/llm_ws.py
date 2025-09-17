@@ -18,7 +18,7 @@ def _clamp_temperature(raw) -> float:
     try:
         t = float(raw)
     except (TypeError, ValueError):
-        return 0.2
+        return 0.5
     return max(0.0, min(2.0, t))
 
 @router.websocket("/chat")
@@ -52,6 +52,30 @@ async def ws_chat(
                 similar = await search_similar_chunks(db, user_text, settings.RAG_TOP_K)
             except Exception:
                 similar = []
+
+            payload: list[dict] = []
+            for idx, item in enumerate(similar or [], start=1):
+                chunk = item.chunk
+                doc = getattr(chunk, "document", None)
+                content = (chunk.content or "").strip()
+                snippet = content[:500]
+                if len(content) > len(snippet):
+                    snippet = snippet.rstrip() + "…"
+
+                payload.append(
+                    {
+                        "key": f"CITE{idx}",
+                        "chunk_id": chunk.id,
+                        "document_id": chunk.document_id,
+                        "chunk_index": chunk.chunk_index,
+                        "title": getattr(doc, "title", None),
+                        "source_ref": getattr(doc, "source_ref", None),
+                        "similarity": round(float(item.similarity), 4),
+                        "content": snippet,
+                    }
+                )
+
+            await ws.send_json({"type": "citations", "items": payload})
 
             # 由服务层生成 system_prompt，并对 user_text 做包装（语言/模板等）
             system_prompt, wrapped_user_text = await prepare_system_and_user(
