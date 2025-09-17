@@ -2,24 +2,71 @@ from __future__ import annotations
 
 from typing import Iterable, List, Optional
 from functools import lru_cache
+from dataclasses import dataclass
 import os
+import math
+import re
+from collections import defaultdict
+
+import numpy as np
 
 from sentence_transformers import SentenceTransformer
 from fastapi.concurrency import run_in_threadpool
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-#from pgvector.sqlalchemy import cosine_distance
 
 from app.core.config import settings
 from . import models
-from . import repository
+from .repository import crud_knowledge_base
 from markdown import markdown
 from bs4 import BeautifulSoup
 
 
 # 嵌入模型（CPU 上加载，保持与 DB 维度一致）
 _model = SentenceTransformer(settings.EMBEDDING_MODEL)
+
+
+@dataclass(slots=True)
+class SplitChunk:
+    content: str
+    language: str | None
+    is_code: bool = False
+
+
+@dataclass(slots=True)
+class RetrievedChunk:
+    chunk: "models.KnowledgeChunk"
+    distance: float
+    similarity: float
+    score: float
+    embedding: np.ndarray
+    mmr_score: float = 0.0
+
+
+try:
+    from langdetect import detect as _langdetect_detect  # type: ignore
+except Exception:  # pragma: no cover - best effort language detection
+    _langdetect_detect = None  # type: ignore
+
+
+def _detect_language(text: str, default: str = "en") -> str:
+    """Best-effort language detection normalized to zh/en/ja fallback en."""
+    if not text or not text.strip():
+        return default
+    try:
+        if _langdetect_detect is None:
+            return default
+        raw = (_langdetect_detect(text) or "").lower()
+    except Exception:
+        return default
+
+    if raw.startswith("zh"):
+        return "zh"
+    if raw.startswith("ja"):
+        return "ja"
+    if raw.startswith("en"):
+        return "en"
+    return default
 
 
 TEXT_MIME_TYPES = {
@@ -70,31 +117,256 @@ def _decode_bytes_to_text(raw: bytes, encodings: Iterable[str] = ("utf-8", "utf-
     return raw.decode("utf-8", errors="ignore")
 
 
+def _mmr_select(
+    candidates: List[RetrievedChunk],
+    top_k: int,
+    mmr_lambda: float,
+    per_doc_limit: int,
+) -> List[RetrievedChunk]:
+    if top_k <= 0:
+        return []
+    selected: List[RetrievedChunk] = []
+    remaining = candidates.copy()
+    doc_counts: defaultdict[int | None, int] = defaultdict(int)
+
+    while remaining and len(selected) < top_k:
+        best_index = None
+        best_score = float("-inf")
+        for idx, candidate in enumerate(remaining):
+            doc_id = candidate.chunk.document_id
+            if doc_id is not None and per_doc_limit > 0 and doc_counts[doc_id] >= per_doc_limit:
+                continue
+
+            if not selected:
+                mmr_score = candidate.score
+            else:
+                redundancy = max(
+                    float(np.dot(candidate.embedding, chosen.embedding))
+                    for chosen in selected
+                )
+                mmr_score = mmr_lambda * candidate.score - (1 - mmr_lambda) * redundancy
+
+            if mmr_score > best_score:
+                best_score = mmr_score
+                best_index = idx
+
+        if best_index is None:
+            break
+
+        chosen = remaining.pop(best_index)
+        chosen.mmr_score = best_score
+        selected.append(chosen)
+        doc_id = chosen.chunk.document_id
+        if doc_id is not None and per_doc_limit > 0:
+            doc_counts[doc_id] += 1
+
+    return selected
+
+
+def _estimate_tokens(text: str, lang: str | None, is_code: bool = False) -> int:
+    if not text:
+        return 0
+    if is_code:
+        return max(1, len(text.splitlines()) * 3)
+    lang = (lang or "en").lower()
+    stripped = text.strip()
+    if not stripped:
+        return 0
+    if lang == "en":
+        return max(1, len(stripped.split()))
+    if lang in {"zh", "ja"}:
+        return max(1, len(stripped))
+    return max(1, math.ceil(len(stripped) / 4))
+
+
+def _chunk_target_tokens_for_lang(lang: str | None) -> int:
+    lang = (lang or "en").lower()
+    if lang == "en":
+        return settings.RAG_CHUNK_TARGET_TOKENS_EN
+    if lang in {"zh", "ja"}:
+        return settings.RAG_CHUNK_TARGET_TOKENS_CJK
+    return settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT
+
+
+def _segment_sentences(text: str, lang: str) -> List[str]:
+    if not text:
+        return []
+    lang = (lang or "en").lower()
+    if lang == "en":
+        nlp = _get_spacy_nlp_for_lang("en")
+        if nlp is not None:
+            try:
+                doc = nlp(text)
+                sentences = [s.text.strip() for s in getattr(doc, "sents", []) if s.text.strip()]
+                if sentences:
+                    return sentences
+            except Exception:
+                sentences = []
+        # fallback: punctuation splitting
+        sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+        return [s.strip() for s in sentences if s and s.strip()]
+
+    if lang in {"zh", "ja"}:
+        sentences = re.split(r"[。！？!?]+|\n+", text)
+        return [s.strip() for s in sentences if s and s.strip()]
+
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+    return [s.strip() for s in sentences if s and s.strip()]
+
+
+def _join_sentences(sentences: List[str], lang: str) -> str:
+    if not sentences:
+        return ""
+    lang = (lang or "en").lower()
+    if lang == "en":
+        return " ".join(sentences).strip()
+    if lang in {"zh", "ja"}:
+        return "".join(sentences).strip()
+    return "\n".join(sentences).strip()
+
+
+def _pack_sentences(sentences: List[str], lang: str, target_tokens: int, overlap_tokens: int) -> List[str]:
+    if not sentences:
+        return []
+    chunks: List[str] = []
+    current: List[str] = []
+    current_tokens = 0
+    for sentence in sentences:
+        sent_tokens = _estimate_tokens(sentence, lang)
+        if current and current_tokens + sent_tokens > target_tokens:
+            chunk_text = _join_sentences(current, lang)
+            if chunk_text:
+                chunks.append(chunk_text)
+            if overlap_tokens > 0 and current:
+                overlap_acc = 0
+                overlap_sentences: List[str] = []
+                for s in reversed(current):
+                    overlap_acc += _estimate_tokens(s, lang)
+                    overlap_sentences.insert(0, s)
+                    if overlap_acc >= overlap_tokens:
+                        break
+                current = overlap_sentences.copy()
+                current_tokens = sum(_estimate_tokens(s, lang) for s in current)
+            else:
+                current = []
+                current_tokens = 0
+        current.append(sentence)
+        current_tokens += sent_tokens
+
+    chunk_text = _join_sentences(current, lang)
+    if chunk_text:
+        chunks.append(chunk_text)
+    return chunks
+
+
+def _split_code_block(block: str, max_lines: int, overlap_lines: int) -> List[str]:
+    normalized = block.strip("\n")
+    if not normalized:
+        return []
+    lines = normalized.splitlines()
+    if not lines:
+        return []
+
+    fence_line = lines[0].strip()
+    fence = "```"
+    lang_hint = ""
+    if fence_line.startswith("```") or fence_line.startswith("~~~"):
+        fence = fence_line[:3]
+        lang_hint = fence_line[3:].strip()
+        lines = lines[1:]
+
+    if lines and lines[-1].strip().startswith(fence):
+        lines = lines[:-1]
+
+    if max_lines <= 0:
+        max_lines = len(lines)
+    if overlap_lines < 0:
+        overlap_lines = 0
+
+    chunks: List[str] = []
+    start = 0
+    total = len(lines)
+    while start < total:
+        end = min(total, start + max_lines)
+        body = "\n".join(lines[start:end]).rstrip()
+        header = f"{fence}{(' ' + lang_hint) if lang_hint else ''}"
+        chunk = f"{header}\n{body}\n{fence}"
+        chunks.append(chunk.strip("\n"))
+        if end >= total:
+            break
+        if overlap_lines > 0:
+            start = max(end - overlap_lines, start + 1)
+        else:
+            start = end
+    return chunks or [normalized]
+
+
+def _extract_segments(text: str) -> List[tuple[str, str]]:
+    segments: List[tuple[str, str]] = []
+    if not text:
+        return segments
+    lines = text.splitlines()
+    buffer: List[str] = []
+    code_buffer: List[str] = []
+    in_code = False
+    fence = ""
+
+    for line in lines:
+        stripped = line.strip()
+        if not in_code and (stripped.startswith("```") or stripped.startswith("~~~")):
+            if buffer:
+                segments.append(("text", "\n".join(buffer).strip("\n")))
+                buffer = []
+            in_code = True
+            fence = stripped[:3]
+            code_buffer = [line]
+            continue
+        if in_code:
+            code_buffer.append(line)
+            if stripped.startswith(fence):
+                segments.append(("code", "\n".join(code_buffer).strip("\n")))
+                in_code = False
+                fence = ""
+                code_buffer = []
+            continue
+        buffer.append(line)
+
+    if code_buffer:
+        segments.append(("code", "\n".join(code_buffer).strip("\n")))
+    if buffer:
+        segments.append(("text", "\n".join(buffer).strip("\n")))
+    return [segment for segment in segments if segment[1]]
+
+
 @lru_cache(maxsize=8)
 def _get_spacy_nlp_for_lang(lang: str):
-    """按语言惰性加载 spaCy 模型，失败返回 None。"""
+    """Load a lightweight spaCy pipeline for sentence splitting (en only)."""
+    language = (lang or "").lower().strip() or "en"
     try:
         import spacy  # type: ignore
-        language = (lang or "").lower().strip()
-        if language not in {"zh", "en", "ja"}:
-            language = "en"
+    except Exception:
+        return None
 
-        # 读取路径优先
-        path_map = {
-            "zh": getattr(settings, "SPACY_MODEL_PATH_ZH", None) or os.getenv("SPACY_MODEL_PATH_ZH"),
-            "en": getattr(settings, "SPACY_MODEL_PATH_EN", None) or os.getenv("SPACY_MODEL_PATH_EN"),
-            "ja": getattr(settings, "SPACY_MODEL_PATH_JA", None) or os.getenv("SPACY_MODEL_PATH_JA"),
-        }
-        name_map = {
-            "zh": getattr(settings, "SPACY_MODEL_ZH", None) or "zh_core_web_sm",
-            "en": getattr(settings, "SPACY_MODEL_EN", None) or "en_core_web_sm",
-            "ja": getattr(settings, "SPACY_MODEL_JA", None) or "ja_core_news_sm",
-        }
+    if language == "en":
+        try:
+            nlp = spacy.blank("en")
+            if "sentencizer" not in nlp.pipe_names:
+                nlp.add_pipe("sentencizer")
+            return nlp
+        except Exception:
+            return None
 
-        path = path_map.get(language)
+    # For zh/ja and other languages we fall back to regex-based splitting
+    if language in {"zh", "ja"}:
+        return None
+
+    # Allow advanced users to plug custom models via environment if desired
+    path = getattr(settings, "SPACY_MODEL_PATH_EN", None) or os.getenv("SPACY_MODEL_PATH_EN")
+    name = getattr(settings, "SPACY_MODEL_EN", None) or "en_core_web_sm"
+    try:
         if path and os.path.exists(str(path)):
             return spacy.load(str(path))
-        return spacy.load(str(name_map[language]))
+        return spacy.load(str(name))
     except Exception:
         return None
 
@@ -104,84 +376,67 @@ async def get_spacy_nlp_for_lang(lang: str):
     return await run_in_threadpool(_get_spacy_nlp_for_lang, lang)
 
 
-def _split_text_sync(content: str, target: int = 300, overlap: int = 50) -> List[str]:
-    """按句分块（自动检测语言，优先使用对应 spaCy 模型分句）。
+def _split_text_sync(
+    content: str,
+    target: int | None = None,
+    overlap: int | None = None,
+    doc_language: str | None = None,
+) -> List[SplitChunk]:
+    text = (content or "").strip()
+    if not text:
+        return []
 
-    - target: 目标块大小（约字符数）
-    - overlap: 相邻块重叠字符数
-    - 英文句子合并时在句子间插入空格，中文/日文不插入空格
-    """
-    text = content or ""
+    primary_lang = (doc_language or _detect_language(text)).lower()
+    segments = _extract_segments(text)
+    if not segments:
+        segments = [("text", text)]
 
-    # 语言检测（失败则回退 en）
-    lang = "en"
-    try:
-        from langdetect import detect
-        if text.strip():
-            detected = detect(text)
-            # 规范化
-            if detected.startswith("zh"):
-                lang = "zh"
-            elif detected.startswith("en"):
-                lang = "en"
-            elif detected.startswith("ja"):
-                lang = "ja"
-            else:
-                lang = "en"
-    except Exception:
-        lang = "en"
-
-    sentences: List[str]
-    nlp = _get_spacy_nlp_for_lang(lang)
-    if nlp is not None and text:
-        try:
-            doc = nlp(text)
-            sentences = [s.text.strip() for s in getattr(doc, "sents", []) if s.text and s.text.strip()]
-        except Exception:
-            sentences = []
-    else:
-        sentences = []
-
-    if not sentences:
-        # 回退：中文/日文标点 + 英文常见终止符 + 换行
-        import re
-        sentences = [s.strip() for s in re.split(r"[。！？.!?\n]+", text) if s.strip()]
-
-    # 若仍为空，直接以原文返回（避免空入库）
-    if not sentences:
-        return [text] if text else []
-
-    chunks: List[str] = []
-    cur = ""
-    sep = " " if lang == "en" else ""
-    for s in sentences:
-        if not s:
+    chunks: List[SplitChunk] = []
+    for kind, segment_text in segments:
+        if not segment_text or not segment_text.strip():
             continue
-        if not cur:
-            cur = s
+        if kind == "code":
+            code_chunks = _split_code_block(
+                segment_text,
+                settings.RAG_CODE_CHUNK_MAX_LINES,
+                settings.RAG_CODE_CHUNK_OVERLAP_LINES,
+            )
+            for piece in code_chunks:
+                if piece.strip():
+                    chunks.append(SplitChunk(content=piece.strip(), language="code", is_code=True))
             continue
-        if len(cur) + len(sep) + len(s) <= target:
-            cur = f"{cur}{sep}{s}"
-        else:
-            chunks.append(cur)
-            # 下一块以 overlap 个字符作为前缀
-            prefix = cur[-overlap:] if overlap > 0 and len(cur) > overlap else ""
-            cur = f"{prefix}{s}" if prefix else s
-    if cur:
-        chunks.append(cur)
-    return chunks or ([text] if text else [])
+
+        seg_lang = _detect_language(segment_text, primary_lang)
+        target_tokens = target or _chunk_target_tokens_for_lang(seg_lang)
+        overlap_tokens = overlap or max(1, int(target_tokens * settings.RAG_CHUNK_OVERLAP_RATIO))
+        sentences = _segment_sentences(segment_text, seg_lang)
+        if not sentences:
+            sentences = [segment_text.strip()]
+        text_chunks = _pack_sentences(sentences, seg_lang, target_tokens, overlap_tokens)
+        for piece in text_chunks:
+            if piece.strip():
+                chunks.append(SplitChunk(content=piece.strip(), language=seg_lang, is_code=False))
+
+    if not chunks:
+        return [SplitChunk(content=text, language=primary_lang, is_code=False)]
+    return chunks
 
 
-async def split_text(content: str, target: int = 300, overlap: int = 50) -> List[str]:
+async def split_text(
+    content: str,
+    target: int | None = None,
+    overlap: int | None = None,
+    doc_language: str | None = None,
+) -> List[SplitChunk]:
     """在线程池中执行分句逻辑，避免阻塞事件循环。"""
-    return await run_in_threadpool(_split_text_sync, content, target, overlap)
+    return await run_in_threadpool(_split_text_sync, content, target, overlap, doc_language)
 
 
 def _strip_markdown_sync(content: str) -> str:
     """将 Markdown 文本转换为纯文本。
 
     策略：先用 markdown 库转 HTML，再用 BeautifulSoup 提取纯文本；
-    移除脚本/样式、代码块、图片，并保留链接的可见文字。
+    移除脚本/样式、图片，并保持代码块为 ``` 包裹文本。
     """
     if not content:
         return ""
@@ -196,14 +451,34 @@ def _strip_markdown_sync(content: str) -> str:
     # 移除无关或噪声节点
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
-    # 移除代码相关内容（块/行内）
-    for tag in soup(["pre", "code", "kbd", "samp"]):
-        tag.decompose()
-    # 移除图片
-    for img in soup.find_all("img"):
-        img.decompose()
 
-    # 提取文本并进行基本的空白规范化
+    # 处理代码块：保留并显式包裹为 ```lang ... ```
+    for pre in soup.find_all("pre"):
+        code = pre.find("code")
+        code_text = code.get_text("\n") if code else pre.get_text("\n")
+        language = ""
+        if code and code.has_attr("class"):
+            for cls in code["class"]:
+                if cls.startswith("language-"):
+                    language = cls.replace("language-", "").strip()
+                    break
+        replacement = soup.new_string(
+            f"\n```{language}\n{code_text.strip()}\n```\n"
+        )
+        pre.replace_with(replacement)
+
+    # 将行内 code 转换为反引号包裹
+    for code in soup.find_all("code"):
+        if code.parent and code.parent.name == "pre":
+            continue
+        replacement = soup.new_string(f"`{code.get_text().strip()}`")
+        code.replace_with(replacement)
+
+    # 移除图片但保留 alt 文本
+    for img in soup.find_all("img"):
+        alt_text = img.get("alt") or ""
+        img.replace_with(soup.new_string(alt_text))
+
     text = soup.get_text(separator="\n")
     lines = [ln.strip() for ln in text.splitlines()]
     lines = [ln for ln in lines if ln]
@@ -220,6 +495,7 @@ async def ingest_document_file(
     document_id: int,
     upload: UploadFile,
     overwrite: bool = False,
+    document: models.KnowledgeDocument | None = None,
 ) -> int:
     """读取上传的纯文本/Markdown 文件并复用文本注入逻辑。"""
     if upload is None:
@@ -237,10 +513,17 @@ async def ingest_document_file(
         document_id,
         content,
         overwrite=overwrite,
+        document=document,
     )
 
 
-async def ingest_document_content(db: AsyncSession, document_id: int, content: str, overwrite: bool = False) -> int:
+async def ingest_document_content(
+    db: AsyncSession,
+    document_id: int,
+    content: str,
+    overwrite: bool = False,
+    document: models.KnowledgeDocument | None = None,
+) -> int:
     """将文本切分并写入指定文档的知识块，返回块数量。
 
     注意：文本清洗、分句与向量编码均在线程池中执行，以避免阻塞事件循环。
@@ -248,23 +531,36 @@ async def ingest_document_content(db: AsyncSession, document_id: int, content: s
     # 新增步骤：在所有操作之前，先清理传入的 content
     plain_text_content = await _strip_markdown(content)
 
-    # 根据覆盖标志，先删除旧分块，避免数据冗余
-    if overwrite:
-        await repository.delete_chunks_by_document_id(db, document_id)
+    if document is None:
+        document = await crud_knowledge_base.get_document_by_id(db, document_id)
 
+    # 根据覆盖标志，先删除旧分块，避免数据冗余
     # 在线程池中进行分句（使用清理后的纯文本）
-    chunks = await split_text(plain_text_content)
-    if not chunks:
+    doc_lang = document.language if document and document.language else None
+    split_chunks = await split_text(plain_text_content, doc_language=doc_lang)
+    if not split_chunks:
         # 若选择覆盖且新内容为空，确保删除提交
         if overwrite:
-            await db.commit()
+            await crud_knowledge_base.delete_chunks_by_document_id(db, document_id, commit=True)
         return 0
+    if overwrite:
+        await crud_knowledge_base.delete_chunks_by_document_id(db, document_id, commit=False)
     # 在线程池中进行向量编码
-    vectors = await run_in_threadpool(_model.encode, chunks, normalize_embeddings=True)
-    for idx, (c, v) in enumerate(zip(chunks, vectors)):
-        db.add(models.KnowledgeChunk(document_id=document_id, chunk_index=idx, content=c, embedding=v))
-    await db.commit()
-    return len(chunks)
+    texts = [chunk.content for chunk in split_chunks]
+    vectors = await run_in_threadpool(_model.encode, texts, normalize_embeddings=True)
+    payloads = [
+        (idx, chunk_info.content, vector, chunk_info.language)
+        for idx, (chunk_info, vector) in enumerate(zip(split_chunks, vectors))
+    ]
+
+    await crud_knowledge_base.bulk_create_document_chunks(
+        db,
+        document_id,
+        payloads,
+        commit=True,
+    )
+
+    return len(payloads)
 
 
 async def update_chunk(
@@ -273,7 +569,7 @@ async def update_chunk(
     updates: dict,
 ) -> models.KnowledgeChunk | None:
     """更新指定知识块内容或排序，并在内容变化时重计算向量。"""
-    chunk = await repository.get_chunk_by_id(db, chunk_id)
+    chunk = await crud_knowledge_base.get_chunk_by_id(db, chunk_id)
     if not chunk:
         return None
 
@@ -292,41 +588,92 @@ async def update_chunk(
     if "chunk_index" in updates:
         chunk.chunk_index = updates.get("chunk_index")
 
-    needs_persist = content_changed or ("chunk_index" in updates)
+    language_changed = False
+    if "language" in updates:
+        chunk.language = updates.get("language")
+        language_changed = True
+
+    needs_persist = content_changed or ("chunk_index" in updates) or language_changed
 
     if content_changed:
         vector = (
             await run_in_threadpool(_model.encode, [chunk.content], normalize_embeddings=True)
         )[0]
         chunk.embedding = vector
+        stripped = chunk.content.strip()
+        if stripped.startswith("```"):
+            chunk.language = "code"
+        else:
+            chunk.language = _detect_language(stripped or "")
 
     if needs_persist:
-        await repository.persist_chunk(db, chunk)
+        await crud_knowledge_base.persist_chunk(db, chunk)
 
     return chunk
 
 
 async def delete_chunk(db: AsyncSession, chunk_id: int) -> bool:
     """删除指定知识块。"""
-    chunk = await repository.get_chunk_by_id(db, chunk_id)
+    chunk = await crud_knowledge_base.get_chunk_by_id(db, chunk_id)
     if not chunk:
         return False
 
-    await repository.delete_chunk(db, chunk)
+    await crud_knowledge_base.delete_chunk(db, chunk)
     return True
 
 
-async def search_similar_chunks(db: AsyncSession, query: str, top_k: int):
-    """按余弦距离检索最相似的知识块。
+async def search_similar_chunks(db: AsyncSession, query: str, top_k: int) -> List[RetrievedChunk]:
+    """检索最相似的知识块，带最小相似度阈值、语言偏置与 MMR 去冗。"""
 
-    _model.encode 为同步且可能耗时，放入线程池执行。
-    """
-    # 在线程池中进行查询向量编码
+    if top_k <= 0:
+        return []
+
+    q_lang = _detect_language(query)
     q_emb = (await run_in_threadpool(_model.encode, [query], normalize_embeddings=True))[0]
-    stmt = (
-        select(models.KnowledgeChunk)
-        .order_by(models.KnowledgeChunk.embedding.cosine_distance(q_emb))
-        .limit(top_k)
+
+    oversample = max(top_k * settings.RAG_OVERSAMPLE, top_k)
+    limit = min(settings.RAG_MAX_CANDIDATES, max(oversample, top_k))
+
+    candidates: List[RetrievedChunk] = []
+    language_bonus = settings.RAG_SAME_LANG_BONUS
+    min_sim = settings.RAG_MIN_SIM
+
+    rows = await crud_knowledge_base.fetch_chunk_candidates_by_embedding(db, q_emb, limit)
+
+    for chunk, distance in rows:
+        distance_val = float(distance)
+        similarity = max(0.0, 1.0 - distance_val)
+        score = similarity
+        chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
+        if q_lang and chunk_lang and chunk_lang == q_lang:
+            score += language_bonus
+        embedding_vector = np.array(chunk.embedding, dtype=np.float32)
+        candidates.append(
+            RetrievedChunk(
+                chunk=chunk,
+                distance=distance_val,
+                similarity=similarity,
+                score=score,
+                embedding=embedding_vector,
+            )
+        )
+
+    filtered = [item for item in candidates if item.similarity >= min_sim]
+    if not filtered:
+        return []
+
+    # 预排序提升 MMR 起点
+    filtered.sort(key=lambda item: item.score, reverse=True)
+
+    selected = _mmr_select(
+        filtered,
+        top_k,
+        settings.RAG_MMR_LAMBDA,
+        settings.RAG_PER_DOC_LIMIT,
     )
-    result = await db.scalars(stmt)
-    return result.all()
+
+    if not selected:
+        return []
+
+    selected.sort(key=lambda item: (item.score, item.similarity), reverse=True)
+    return selected

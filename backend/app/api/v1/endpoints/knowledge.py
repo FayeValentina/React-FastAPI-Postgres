@@ -13,14 +13,7 @@ from app.modules.knowledge_base.schemas import (
     KnowledgeChunkUpdate,
 )
 from app.modules.knowledge_base import models
-from app.modules.knowledge_base.repository import (
-    create_document,
-    delete_document,
-    get_all_documents,
-    get_document_by_id,
-    update_document_metadata,
-    get_chunks_by_document_id,
-)
+from app.modules.knowledge_base.repository import crud_knowledge_base
 from app.modules.knowledge_base.service import (
     ingest_document_content,
     ingest_document_file,
@@ -35,7 +28,7 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 @router.post("/documents", response_model=KnowledgeDocumentRead, status_code=201)
 async def create_knowledge_document(payload: KnowledgeDocumentCreate, db: AsyncSession = Depends(get_async_session)):
-    doc = await create_document(db, payload)
+    doc = await crud_knowledge_base.create_document(db, payload)
     # refresh to include created_at
     await db.refresh(doc)
     return doc
@@ -47,7 +40,13 @@ async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest,
     exist = await db.get(models.KnowledgeDocument, document_id)
     if not exist:
         raise HTTPException(status_code=404, detail="Document not found")
-    count = await ingest_document_content(db, document_id, body.content, overwrite=body.overwrite)
+    count = await ingest_document_content(
+        db,
+        document_id,
+        body.content,
+        overwrite=body.overwrite,
+        document=exist,
+    )
     return {"document_id": document_id, "chunks": count}
 
 
@@ -63,7 +62,13 @@ async def ingest_content_upload(
         raise HTTPException(status_code=404, detail="Document not found")
 
     try:
-        count = await ingest_document_file(db, document_id, file, overwrite=overwrite)
+        count = await ingest_document_file(
+            db,
+            document_id,
+            file,
+            overwrite=overwrite,
+            document=exist,
+        )
     except ValueError as exc:
         reason = str(exc)
         if reason == "unsupported_file_type":
@@ -77,7 +82,7 @@ async def ingest_content_upload(
 
 @router.delete("/documents/{document_id}", status_code=204)
 async def remove_document(document_id: int, db: AsyncSession = Depends(get_async_session)):
-    await delete_document(db, document_id)
+    await crud_knowledge_base.delete_document(db, document_id)
     return None
 
 
@@ -87,13 +92,13 @@ async def list_documents(
     limit: int = Query(100, ge=1, le=200, description="返回的最大记录数"),
     db: AsyncSession = Depends(get_async_session),
 ):
-    docs = await get_all_documents(db, skip=skip, limit=limit)
+    docs = await crud_knowledge_base.get_all_documents(db, skip=skip, limit=limit)
     return docs
 
 
 @router.get("/documents/{document_id}", response_model=KnowledgeDocumentRead)
 async def get_document(document_id: int, db: AsyncSession = Depends(get_async_session)):
-    doc = await get_document_by_id(db, document_id)
+    doc = await crud_knowledge_base.get_document_by_id(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
@@ -105,7 +110,9 @@ async def patch_document(
     payload: KnowledgeDocumentUpdate,
     db: AsyncSession = Depends(get_async_session),
 ):
-    doc = await update_document_metadata(db, document_id, payload.model_dump(exclude_unset=True))
+    doc = await crud_knowledge_base.update_document_metadata(
+        db, document_id, payload.model_dump(exclude_unset=True)
+    )
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
@@ -116,8 +123,8 @@ async def search_knowledge(
     payload: KnowledgeSearchRequest,
     db: AsyncSession = Depends(get_async_session),
 ):
-    chunks = await search_similar_chunks(db, query=payload.query, top_k=payload.top_k)
-    return chunks
+    results = await search_similar_chunks(db, query=payload.query, top_k=payload.top_k)
+    return [item.chunk for item in results]
 
 
 @router.get("/documents/{document_id}/chunks", response_model=list[KnowledgeChunkRead])
@@ -126,7 +133,7 @@ async def list_document_chunks(document_id: int, db: AsyncSession = Depends(get_
     exist = await db.get(models.KnowledgeDocument, document_id)
     if not exist:
         raise HTTPException(status_code=404, detail="Document not found")
-    chunks = await get_chunks_by_document_id(db, document_id)
+    chunks = await crud_knowledge_base.get_chunks_by_document_id(db, document_id)
     return chunks
 
 

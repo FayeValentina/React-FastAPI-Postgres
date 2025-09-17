@@ -47,6 +47,7 @@ class KnowledgeChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="文本内容")
     # 384 维向量，需与所选嵌入模型维度一致
     embedding: Mapped[List[float]] = mapped_column(Vector(dim=384), nullable=False, comment="向量表示")
+    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, comment="块语言/类型")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     document: Mapped[Optional[KnowledgeDocument]] = relationship(back_populates="chunks")

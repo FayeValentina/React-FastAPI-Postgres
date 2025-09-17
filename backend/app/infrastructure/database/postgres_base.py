@@ -1,5 +1,6 @@
 from typing import AsyncGenerator, Any
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import event
 
 from app.core.config import settings
 from sqlalchemy.orm import DeclarativeBase
@@ -25,6 +26,16 @@ engine = create_async_engine(
     future=True,
     pool_pre_ping=True,
 )
+
+# Ensure pgvector uses ivfflat index probes tuned from settings for every connection
+@event.listens_for(engine.sync_engine, "connect", once=False)
+def _configure_pgvector(connection, _):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f"SET ivfflat.probes = {settings.RAG_IVFFLAT_PROBES}")
+    except Exception:
+        # Intentionally swallow to avoid breaking app startup if the command fails
+        return
 
 # 主应用的会话工厂
 AsyncSessionLocal = async_sessionmaker(

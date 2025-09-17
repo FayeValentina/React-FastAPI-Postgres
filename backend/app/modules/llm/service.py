@@ -7,8 +7,12 @@ Responsibilities:
 - When RAG context is available, wrap the user_text with localized instruction and the retrieved context
 """
 from __future__ import annotations
-from typing import Iterable, Tuple
+from dataclasses import dataclass
+from typing import Iterable, List, Tuple
+
 from fastapi.concurrency import run_in_threadpool
+from app.core.config import settings
+from app.modules.knowledge_base.service import RetrievedChunk
 try:
     from langdetect import detect  # type: ignore
 except Exception:  # pragma: no cover - graceful fallback if not available
@@ -16,6 +20,13 @@ except Exception:  # pragma: no cover - graceful fallback if not available
 
 
 SUPPORTED = {"en", "zh", "ja"}
+
+
+@dataclass(frozen=True)
+class PromptBundle:
+    system: str
+    context_template: str
+    missing_template: str
 
 
 def _normalize_lang(text: str) -> str:
@@ -40,62 +51,138 @@ def _normalize_lang(text: str) -> str:
     return lang
 
 
-def _format_context(similar: Iterable[object]) -> str:
-    """Join retrieved chunks into a single context block.
+def _estimate_context_tokens(text: str, lang: str | None) -> int:
+    if not text:
+        return 0
+    lang = (lang or "en").lower()
+    stripped = text.strip()
+    if not stripped:
+        return 0
+    if lang == "code":
+        return max(1, len(stripped.splitlines()) * 5)
+    if lang == "en":
+        return max(1, len(stripped.split()))
+    if lang in {"zh", "ja"}:
+        return max(1, len(stripped))
+    return max(1, len(stripped) // 4 + 1)
 
-    Each item is expected to have a 'content' attribute; otherwise str(item) is used.
-    """
-    parts = []
-    for c in similar or []:
-        try:
-            parts.append(getattr(c, "content", str(c)))
-        except Exception:
+
+def _build_context(similar: Iterable[RetrievedChunk], lang: str) -> str:
+    max_items = max(1, settings.RAG_CONTEXT_MAX_EVIDENCE)
+    budget = max(200, settings.RAG_CONTEXT_TOKEN_BUDGET)
+    tokens_used = 0
+    entries: List[str] = []
+
+    for idx, item in enumerate(similar or [], start=1):
+        if idx > max_items:
+            break
+        chunk = item.chunk
+        content = (chunk.content or "").strip()
+        if not content:
             continue
-    return "\n---\n".join([p for p in parts if p])
+        chunk_lang = (chunk.language or lang).lower() if getattr(chunk, "language", None) else lang
+
+        meta_parts: List[str] = []
+        doc = getattr(chunk, "document", None)
+        if doc and getattr(doc, "title", None):
+            meta_parts.append(str(doc.title))
+        if doc and getattr(doc, "source_ref", None):
+            meta_parts.append(str(doc.source_ref))
+        if chunk.chunk_index is not None:
+            meta_parts.append(f"chunk #{chunk.chunk_index}")
+        meta_parts.append(f"sim={item.similarity:.2f}")
+        header = " | ".join(meta_parts)
+        cite_key = f"CITE{idx}"
+        entry = f"[{cite_key}] {header}\n{content}"
+
+        entry_tokens = _estimate_context_tokens(header, chunk_lang) + _estimate_context_tokens(content, chunk_lang)
+        if entries and tokens_used + entry_tokens > budget:
+            break
+
+        entries.append(entry)
+        tokens_used += entry_tokens
+
+    return "\n\n".join(entries)
 
 
-def _localized_prompts(lang: str) -> Tuple[str, str]:
-    """Return (system_prompt, wrapper_template) for the language.
-
-    wrapper_template expects two placeholders: {context} and {user_text}.
-    """
+def _localized_prompts(lang: str) -> PromptBundle:
     if lang == "zh":
-        return (
-            "你是一个乐于助人的助手。",
-            "请参考以下资料回答问题，若资料不足请说明：\n{context}\n问题：{user_text}",
+        return PromptBundle(
+            system=(
+                "你是一个严谨的助理。仅使用提供的证据回答问题，引用时使用 [CITEx] 形式。"
+                "如果没有证据，请说明无法回答并请求补充信息，绝不能编造来源。"
+            ),
+            context_template=(
+                "证据：\n{context}\n\n任务：\n"
+                "1. 先给出 1-2 句总结。\n"
+                "2. 使用条目列出关键步骤，并引用如 [CITE1]。\n"
+                "3. 若证据不足，请明确指出不足之处。\n\n"
+                "用户问题：\n{user_text}"
+            ),
+            missing_template=(
+                "未检索到相关证据：\n{user_text}\n"
+                "请告知用户当前没有匹配资料，并邀请其补充信息。"
+            ),
         )
     if lang == "ja":
-        return (
-            "あなたは役に立つアシスタントです。",
-            "以下の情報を参考に質問に答えてください。不十分な場合はその旨を述べてください：\n{context}\n質問：{user_text}",
+        return PromptBundle(
+            system=(
+                "あなたは精度を重視するアシスタントです。提供された証拠だけを使い、引用は [CITEx] の形式で行ってください。"
+                "証拠がない場合は回答できないことを伝え、追加情報をお願いしてください。"
+            ),
+            context_template=(
+                "証拠:\n{context}\n\nタスク:\n"
+                "1. まず1〜2文で要約してください。\n"
+                "2. 箇条書きで根拠を示し、[CITE1]のように引用してください。\n"
+                "3. 証拠が不足している場合は、その旨を伝えてください。\n\n"
+                "ユーザーの質問:\n{user_text}"
+            ),
+            missing_template=(
+                "関連する証拠が見つかりませんでした:\n{user_text}\n"
+                "その旨を説明し、追加情報を尋ねてください。"
+            ),
         )
-    # default en
-    return (
-        "You are a helpful assistant.",
-        "Please refer to the following information to answer the question. If the information is insufficient, please state so:\n{context}\nQuestion: {user_text}",
+
+    return PromptBundle(
+        system=(
+            "You are a thorough assistant. Use ONLY the evidence provided. Cite supporting snippets using [CITEx]. "
+            "If no evidence is available, explain that and ask the user for more information. Never fabricate sources."
+        ),
+        context_template=(
+            "Evidence:\n{context}\n\nTask:\n"
+            "1. Start with a concise 1-2 sentence summary.\n"
+            "2. Provide bullet points with supporting details, citing like [CITE1].\n"
+            "3. If the evidence is insufficient, clearly state what is missing.\n\n"
+            "User Question:\n{user_text}"
+        ),
+        missing_template=(
+            "No relevant evidence was found for the question below:\n{user_text}\n"
+            "Let the user know you cannot answer with confidence and request clarification or more details."
+        ),
     )
 
 
 def _prepare_system_and_user(
-    user_text: str, similar: Iterable[object]
+    user_text: str,
+    similar: Iterable[RetrievedChunk],
 ) -> Tuple[str, str]:
-    """Build a localized system prompt and possibly wrapped user_text based on language.
+    """Build localized prompts together with formatted evidence and fallbacks."""
 
-    - Detect language from the original user_text.
-    - If there is non-empty RAG context, wrap user_text with a localized instruction containing the context.
-    - Return (system_prompt, final_user_text)
-    """
     lang = _normalize_lang(user_text)
-    system_prompt, template = _localized_prompts(lang)
-    context = _format_context(similar)
-    final_user = (
-        template.format(context=context, user_text=user_text) if context else user_text
-    )
-    return system_prompt, final_user
+    bundle = _localized_prompts(lang)
+    evidence_list = list(similar or [])
+    context = _build_context(evidence_list, lang) if evidence_list else ""
+
+    if context:
+        final_user = bundle.context_template.format(context=context, user_text=user_text)
+    else:
+        final_user = bundle.missing_template.format(user_text=user_text)
+
+    return bundle.system, final_user
 
 
 async def prepare_system_and_user(
-    user_text: str, similar: Iterable[object]
+    user_text: str, similar: Iterable[RetrievedChunk]
 ) -> Tuple[str, str]:
     """Async wrapper for `_prepare_system_and_user` for compatibility with async call sites."""
     return await run_in_threadpool(_prepare_system_and_user, user_text, similar)
