@@ -5,6 +5,10 @@ from app.core.config import settings
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.llm.client import client
 from app.modules.llm.service import prepare_system_and_user
+from app.infrastructure.dynamic_settings import (
+    DynamicSettingsService,
+    get_dynamic_settings_service,
+)
 from app.modules.knowledge_base.service import search_similar_chunks
 from app.api.dependencies import get_current_user_from_ws
 from app.modules.auth.models import User
@@ -26,6 +30,7 @@ async def ws_chat(
     ws: WebSocket,
     current_user: User = Depends(get_current_user_from_ws),
     db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     await ws.accept()
     history: list[dict] = []
@@ -49,7 +54,25 @@ async def ws_chat(
 
             # RAG: 检索相似上下文（失败时回退为空）
             try:
-                similar = await search_similar_chunks(db, user_text, settings.RAG_TOP_K)
+                config = await dynamic_settings_service.get_all()
+            except Exception:
+                config = settings.dynamic_settings_defaults()
+
+            raw_top_k = config.get("RAG_TOP_K", settings.RAG_TOP_K)
+            try:
+                top_k_value = int(raw_top_k)
+            except (TypeError, ValueError):
+                top_k_value = settings.RAG_TOP_K
+            top_k_value = max(1, top_k_value)
+
+            try:
+                similar = await search_similar_chunks(
+                    db,
+                    user_text,
+                    top_k_value,
+                    dynamic_settings_service=dynamic_settings_service,
+                    config=config,
+                )
             except Exception:
                 similar = []
 

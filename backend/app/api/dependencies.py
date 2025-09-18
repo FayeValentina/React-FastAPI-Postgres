@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import Depends, Request, WebSocket
+from fastapi import Depends, Header, HTTPException, Request, WebSocket, status
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -13,6 +13,7 @@ from app.core.exceptions import (
     InsufficientPermissionsError
 )
 from app.core.security import verify_token
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -149,3 +150,15 @@ async def get_current_user_from_ws(
     return user
 
     
+async def verify_internal_access(
+    x_internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+) -> None:
+    """Ensure the request presents the expected internal API secret header."""
+    expected = getattr(settings, "INTERNAL_API_SECRET", "")
+
+    if not expected:
+        logger.warning("INTERNAL_API_SECRET is not configured; denying internal access request")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Internal access required")
+
+    if not x_internal_secret or x_internal_secret != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Internal access required")

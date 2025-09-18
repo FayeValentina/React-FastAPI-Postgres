@@ -327,6 +327,9 @@ class Settings(BaseSettings):
     # 服务配置
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_PORT: int = 8000
+
+    # Internal API
+    INTERNAL_API_SECRET: str = Field(default="")
     
     # 子配置
     postgres: PostgresSettings = PostgresSettings()
@@ -382,5 +385,25 @@ class Settings(BaseSettings):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    def dynamic_settings_defaults(self) -> dict[str, Any]:
+        """Return the default dynamic settings that can be overridden via Redis."""
+        return {
+            "RAG_TOP_K": self.RAG_TOP_K,
+            "RAG_MIN_SIM": self.RAG_MIN_SIM,
+            "RAG_MMR_LAMBDA": self.RAG_MMR_LAMBDA,
+            "RAG_PER_DOC_LIMIT": self.RAG_PER_DOC_LIMIT,
+            "RAG_OVERSAMPLE": self.RAG_OVERSAMPLE,
+            "RAG_MAX_CANDIDATES": self.RAG_MAX_CANDIDATES,
+            "RAG_SAME_LANG_BONUS": self.RAG_SAME_LANG_BONUS,
+            "RAG_CONTEXT_TOKEN_BUDGET": self.RAG_CONTEXT_TOKEN_BUDGET,
+            "RAG_CONTEXT_MAX_EVIDENCE": self.RAG_CONTEXT_MAX_EVIDENCE,
+            "RAG_CHUNK_TARGET_TOKENS_EN": self.RAG_CHUNK_TARGET_TOKENS_EN,
+            "RAG_CHUNK_TARGET_TOKENS_CJK": self.RAG_CHUNK_TARGET_TOKENS_CJK,
+            "RAG_CHUNK_TARGET_TOKENS_DEFAULT": self.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
+            "RAG_CHUNK_OVERLAP_RATIO": self.RAG_CHUNK_OVERLAP_RATIO,
+            "RAG_CODE_CHUNK_MAX_LINES": self.RAG_CODE_CHUNK_MAX_LINES,
+            "RAG_CODE_CHUNK_OVERLAP_LINES": self.RAG_CODE_CHUNK_OVERLAP_LINES,
+        }
 
 settings = Settings()

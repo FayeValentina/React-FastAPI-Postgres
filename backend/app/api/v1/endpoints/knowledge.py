@@ -14,6 +14,10 @@ from app.modules.knowledge_base.schemas import (
 )
 from app.modules.knowledge_base import models
 from app.modules.knowledge_base.repository import crud_knowledge_base
+from app.infrastructure.dynamic_settings import (
+    DynamicSettingsService,
+    get_dynamic_settings_service,
+)
 from app.modules.knowledge_base.service import (
     ingest_document_content,
     ingest_document_file,
@@ -35,7 +39,12 @@ async def create_knowledge_document(payload: KnowledgeDocumentCreate, db: AsyncS
 
 
 @router.post("/documents/{document_id}/ingest", response_model=KnowledgeIngestResult, status_code=201)
-async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest, db: AsyncSession = Depends(get_async_session)):
+async def ingest_content(
+    document_id: int,
+    body: KnowledgeDocumentIngestRequest,
+    db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
+):
     # 简单校验文档存在
     exist = await db.get(models.KnowledgeDocument, document_id)
     if not exist:
@@ -46,6 +55,7 @@ async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest,
         body.content,
         overwrite=body.overwrite,
         document=exist,
+        dynamic_settings_service=dynamic_settings_service,
     )
     return {"document_id": document_id, "chunks": count}
 
@@ -56,6 +66,7 @@ async def ingest_content_upload(
     file: UploadFile = File(...),
     overwrite: bool = Form(False),
     db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     exist = await db.get(models.KnowledgeDocument, document_id)
     if not exist:
@@ -68,6 +79,7 @@ async def ingest_content_upload(
             file,
             overwrite=overwrite,
             document=exist,
+            dynamic_settings_service=dynamic_settings_service,
         )
     except ValueError as exc:
         reason = str(exc)
@@ -122,8 +134,14 @@ async def patch_document(
 async def search_knowledge(
     payload: KnowledgeSearchRequest,
     db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
-    results = await search_similar_chunks(db, query=payload.query, top_k=payload.top_k)
+    results = await search_similar_chunks(
+        db,
+        query=payload.query,
+        top_k=payload.top_k,
+        dynamic_settings_service=dynamic_settings_service,
+    )
     return [item.chunk for item in results]
 
 

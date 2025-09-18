@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Any, Callable, Iterable, List, Mapping, Optional, TypeVar
 from functools import lru_cache
 from dataclasses import dataclass
 import os
 import math
 import re
+import logging
 from collections import defaultdict
 
 import numpy as np
@@ -16,6 +17,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.infrastructure.dynamic_settings import DynamicSettingsService
 from . import models
 from .repository import crud_knowledge_base
 from markdown import markdown
@@ -41,6 +43,40 @@ class RetrievedChunk:
     score: float
     embedding: np.ndarray
     mmr_score: float = 0.0
+
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+DynamicSettingsMapping = Mapping[str, Any]
+
+
+def _coerce_config_value(
+    config: DynamicSettingsMapping | None,
+    key: str,
+    default: T,
+    caster: Callable[[Any], T],
+) -> T:
+    """Retrieve a config value and coerce it to the expected type with fallback."""
+    source = default if config is None else config.get(key, default)
+    try:
+        return caster(source)
+    except (TypeError, ValueError):
+        return caster(default)
+
+
+async def _resolve_dynamic_settings(
+    service: DynamicSettingsService | None,
+) -> dict[str, Any]:
+    """Fetch dynamic settings via the service or fall back to static defaults."""
+    if service is None:
+        return settings.dynamic_settings_defaults()
+
+    payload = await service.get_all()
+    if not isinstance(payload, dict):  # defensive guard
+        logger.warning("Dynamic settings service returned non-dict payload; using defaults")
+        return settings.dynamic_settings_defaults()
+    return payload
 
 
 try:
@@ -179,13 +215,31 @@ def _estimate_tokens(text: str, lang: str | None, is_code: bool = False) -> int:
     return max(1, math.ceil(len(stripped) / 4))
 
 
-def _chunk_target_tokens_for_lang(lang: str | None) -> int:
-    lang = (lang or "en").lower()
-    if lang == "en":
-        return settings.RAG_CHUNK_TARGET_TOKENS_EN
-    if lang in {"zh", "ja"}:
-        return settings.RAG_CHUNK_TARGET_TOKENS_CJK
-    return settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT
+def _chunk_target_tokens_for_lang(
+    lang: str | None,
+    config: DynamicSettingsMapping | None,
+) -> int:
+    lang_code = (lang or "en").lower()
+    if lang_code == "en":
+        return _coerce_config_value(
+            config,
+            "RAG_CHUNK_TARGET_TOKENS_EN",
+            settings.RAG_CHUNK_TARGET_TOKENS_EN,
+            int,
+        )
+    if lang_code in {"zh", "ja"}:
+        return _coerce_config_value(
+            config,
+            "RAG_CHUNK_TARGET_TOKENS_CJK",
+            settings.RAG_CHUNK_TARGET_TOKENS_CJK,
+            int,
+        )
+    return _coerce_config_value(
+        config,
+        "RAG_CHUNK_TARGET_TOKENS_DEFAULT",
+        settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
+        int,
+    )
 
 
 def _segment_sentences(text: str, lang: str) -> List[str]:
@@ -381,6 +435,7 @@ def _split_text_sync(
     target: int | None = None,
     overlap: int | None = None,
     doc_language: str | None = None,
+    config: DynamicSettingsMapping | None = None,
 ) -> List[SplitChunk]:
     text = (content or "").strip()
     if not text:
@@ -392,14 +447,32 @@ def _split_text_sync(
         segments = [("text", text)]
 
     chunks: List[SplitChunk] = []
+    code_max_lines = _coerce_config_value(
+        config,
+        "RAG_CODE_CHUNK_MAX_LINES",
+        settings.RAG_CODE_CHUNK_MAX_LINES,
+        int,
+    )
+    code_overlap_lines = _coerce_config_value(
+        config,
+        "RAG_CODE_CHUNK_OVERLAP_LINES",
+        settings.RAG_CODE_CHUNK_OVERLAP_LINES,
+        int,
+    )
+    overlap_ratio = _coerce_config_value(
+        config,
+        "RAG_CHUNK_OVERLAP_RATIO",
+        settings.RAG_CHUNK_OVERLAP_RATIO,
+        float,
+    )
     for kind, segment_text in segments:
         if not segment_text or not segment_text.strip():
             continue
         if kind == "code":
             code_chunks = _split_code_block(
                 segment_text,
-                settings.RAG_CODE_CHUNK_MAX_LINES,
-                settings.RAG_CODE_CHUNK_OVERLAP_LINES,
+                code_max_lines,
+                code_overlap_lines,
             )
             for piece in code_chunks:
                 if piece.strip():
@@ -407,8 +480,8 @@ def _split_text_sync(
             continue
 
         seg_lang = _detect_language(segment_text, primary_lang)
-        target_tokens = target or _chunk_target_tokens_for_lang(seg_lang)
-        overlap_tokens = overlap or max(1, int(target_tokens * settings.RAG_CHUNK_OVERLAP_RATIO))
+        target_tokens = target or _chunk_target_tokens_for_lang(seg_lang, config)
+        overlap_tokens = overlap or max(1, int(target_tokens * overlap_ratio))
         sentences = _segment_sentences(segment_text, seg_lang)
         if not sentences:
             sentences = [segment_text.strip()]
@@ -427,9 +500,17 @@ async def split_text(
     target: int | None = None,
     overlap: int | None = None,
     doc_language: str | None = None,
+    config: DynamicSettingsMapping | None = None,
 ) -> List[SplitChunk]:
     """在线程池中执行分句逻辑，避免阻塞事件循环。"""
-    return await run_in_threadpool(_split_text_sync, content, target, overlap, doc_language)
+    return await run_in_threadpool(
+        _split_text_sync,
+        content,
+        target,
+        overlap,
+        doc_language,
+        config,
+    )
 
 
 def _strip_markdown_sync(content: str) -> str:
@@ -496,6 +577,7 @@ async def ingest_document_file(
     upload: UploadFile,
     overwrite: bool = False,
     document: models.KnowledgeDocument | None = None,
+    dynamic_settings_service: DynamicSettingsService | None = None,
 ) -> int:
     """读取上传的纯文本/Markdown 文件并复用文本注入逻辑。"""
     if upload is None:
@@ -514,6 +596,7 @@ async def ingest_document_file(
         content,
         overwrite=overwrite,
         document=document,
+        dynamic_settings_service=dynamic_settings_service,
     )
 
 
@@ -523,6 +606,7 @@ async def ingest_document_content(
     content: str,
     overwrite: bool = False,
     document: models.KnowledgeDocument | None = None,
+    dynamic_settings_service: DynamicSettingsService | None = None,
 ) -> int:
     """将文本切分并写入指定文档的知识块，返回块数量。
 
@@ -537,7 +621,8 @@ async def ingest_document_content(
     # 根据覆盖标志，先删除旧分块，避免数据冗余
     # 在线程池中进行分句（使用清理后的纯文本）
     doc_lang = document.language if document and document.language else None
-    split_chunks = await split_text(plain_text_content, doc_language=doc_lang)
+    config = await _resolve_dynamic_settings(dynamic_settings_service)
+    split_chunks = await split_text(plain_text_content, doc_language=doc_lang, config=config)
     if not split_chunks:
         # 若选择覆盖且新内容为空，确保删除提交
         if overwrite:
@@ -622,21 +707,46 @@ async def delete_chunk(db: AsyncSession, chunk_id: int) -> bool:
     return True
 
 
-async def search_similar_chunks(db: AsyncSession, query: str, top_k: int) -> List[RetrievedChunk]:
+async def search_similar_chunks(
+    db: AsyncSession,
+    query: str,
+    top_k: int,
+    dynamic_settings_service: DynamicSettingsService | None = None,
+    config: DynamicSettingsMapping | None = None,
+) -> List[RetrievedChunk]:
     """检索最相似的知识块，带最小相似度阈值、语言偏置与 MMR 去冗。"""
 
     if top_k <= 0:
         return []
 
+    config_map = config if config is not None else await _resolve_dynamic_settings(dynamic_settings_service)
+    oversample_factor = max(
+        1,
+        _coerce_config_value(config_map, "RAG_OVERSAMPLE", settings.RAG_OVERSAMPLE, int),
+    )
+    limit_cap = max(
+        top_k,
+        _coerce_config_value(config_map, "RAG_MAX_CANDIDATES", settings.RAG_MAX_CANDIDATES, int),
+    )
+    language_bonus = _coerce_config_value(
+        config_map, "RAG_SAME_LANG_BONUS", settings.RAG_SAME_LANG_BONUS, float
+    )
+    min_sim = _coerce_config_value(config_map, "RAG_MIN_SIM", settings.RAG_MIN_SIM, float)
+    min_sim = max(0.0, min(1.0, min_sim))
+    mmr_lambda = _coerce_config_value(
+        config_map, "RAG_MMR_LAMBDA", settings.RAG_MMR_LAMBDA, float
+    )
+    per_doc_limit = _coerce_config_value(
+        config_map, "RAG_PER_DOC_LIMIT", settings.RAG_PER_DOC_LIMIT, int
+    )
+
     q_lang = _detect_language(query)
     q_emb = (await run_in_threadpool(_model.encode, [query], normalize_embeddings=True))[0]
 
-    oversample = max(top_k * settings.RAG_OVERSAMPLE, top_k)
-    limit = min(settings.RAG_MAX_CANDIDATES, max(oversample, top_k))
+    oversample = max(top_k * oversample_factor, top_k)
+    limit = min(limit_cap, oversample)
 
     candidates: List[RetrievedChunk] = []
-    language_bonus = settings.RAG_SAME_LANG_BONUS
-    min_sim = settings.RAG_MIN_SIM
 
     rows = await crud_knowledge_base.fetch_chunk_candidates_by_embedding(db, q_emb, limit)
 
@@ -665,12 +775,7 @@ async def search_similar_chunks(db: AsyncSession, query: str, top_k: int) -> Lis
     # 预排序提升 MMR 起点
     filtered.sort(key=lambda item: item.score, reverse=True)
 
-    selected = _mmr_select(
-        filtered,
-        top_k,
-        settings.RAG_MMR_LAMBDA,
-        settings.RAG_PER_DOC_LIMIT,
-    )
+    selected = _mmr_select(filtered, top_k, mmr_lambda, per_doc_limit)
 
     if not selected:
         return []
