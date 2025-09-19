@@ -34,3 +34,4 @@ class AdminSettingsUpdate(BaseModel):
     RAG_CHUNK_OVERLAP_RATIO: float | None = Field(None, ge=0.0, le=1.0)
     RAG_CODE_CHUNK_MAX_LINES: int | None = Field(None, ge=1)
     RAG_CODE_CHUNK_OVERLAP_LINES: int | None = Field(None, ge=0)
+    RAG_IVFFLAT_PROBES: int | None = Field(None, ge=1)

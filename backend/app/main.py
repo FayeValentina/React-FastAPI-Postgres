@@ -39,7 +39,16 @@ async def lifespan(app: FastAPI):
         await redis_connection_manager.initialize()
         await scheduler_service.initialize()
         logger.info("Redis连接池和调度器初始化成功")
-        
+
+        try:
+            from app.infrastructure.dynamic_settings import get_dynamic_settings_service
+
+            dynamic_settings_service = get_dynamic_settings_service()
+            await dynamic_settings_service.refresh()
+            logger.info("动态配置缓存预热成功")
+        except Exception as exc:
+            logger.warning(f"动态配置缓存预热失败: {exc}")
+
         # 运行启动时维护流程：清理遗留、清理孤儿、确保默认实例
         try:
             legacy = await scheduler_service.cleanup_legacy_artifacts()
