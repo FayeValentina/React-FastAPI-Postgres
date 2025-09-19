@@ -398,11 +398,11 @@ services:
     env_file:
       - .env.dev
     ports:
-      - "127.0.0.1:${REDISINSIGHT_PORT:-5540}:5540"
+      - "5540:5540"
     volumes:
       - dev_redisinsight_data:/db
     environment:
-      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-5540}
+      - RITRUSTEDORIGINS=http://localhost:5540
     depends_on:
       redis:
         condition: service_healthy

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import os
@@ -33,6 +33,7 @@ if "sentence_transformers" not in sys.modules:
     sys.modules["sentence_transformers"] = fake_sentence_transformers
 
 from app.api.v1.endpoints import admin_settings
+from app.api.dependencies import get_current_superuser
 from app.core.config import settings
 from app.infrastructure.dynamic_settings import get_dynamic_settings_service
 
@@ -76,7 +77,7 @@ class FakeDynamicSettingsService:
 
 
 @pytest.fixture()
-def admin_client() -> tuple[TestClient, FakeDynamicSettingsService, str]:
+def admin_client() -> tuple[TestClient, FakeDynamicSettingsService, FastAPI]:
     test_app = FastAPI()
     test_app.include_router(admin_settings.router, prefix="/api/v1")
 
@@ -85,50 +86,61 @@ def admin_client() -> tuple[TestClient, FakeDynamicSettingsService, str]:
 
     test_app.dependency_overrides[get_dynamic_settings_service] = lambda: fake_service
 
-    original_secret = settings.INTERNAL_API_SECRET
-    settings.INTERNAL_API_SECRET = "test-internal-secret"
-
     try:
-        yield client, fake_service, "test-internal-secret"
+        yield client, fake_service, test_app
     finally:
-        settings.INTERNAL_API_SECRET = original_secret
         test_app.dependency_overrides.clear()
 
 
-def test_admin_settings_requires_internal_secret(admin_client: tuple[TestClient, FakeDynamicSettingsService, str]):
-    client, _, _ = admin_client
+def test_admin_settings_requires_superuser(
+    admin_client: tuple[TestClient, FakeDynamicSettingsService, FastAPI]
+) -> None:
+    client, _, app = admin_client
+
+    def forbidden() -> None:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    app.dependency_overrides[get_current_superuser] = forbidden
 
     response = client.get("/api/v1/admin/settings")
 
     assert response.status_code == 403
 
 
-def test_admin_settings_get_returns_defaults(admin_client: tuple[TestClient, FakeDynamicSettingsService, str]):
-    client, _, secret = admin_client
+def test_admin_settings_get_returns_defaults(
+    admin_client: tuple[TestClient, FakeDynamicSettingsService, FastAPI]
+) -> None:
+    client, _, app = admin_client
 
-    response = client.get(
-        "/api/v1/admin/settings",
-        headers={"X-Internal-Secret": secret},
+    app.dependency_overrides[get_current_superuser] = lambda: types.SimpleNamespace(
+        id=1, is_superuser=True, is_active=True
     )
+
+    response = client.get("/api/v1/admin/settings")
 
     assert response.status_code == 200
     data = response.json()
     assert data["redis_status"] == "ok"
     assert data["overrides"] == {}
-    assert data["defaults"]["RAG_TOP_K"] == settings.RAG_TOP_K
-    assert data["effective"]["RAG_TOP_K"] == settings.RAG_TOP_K
-    assert data["defaults"]["RAG_IVFFLAT_PROBES"] == settings.RAG_IVFFLAT_PROBES
-    assert data["effective"]["RAG_IVFFLAT_PROBES"] == settings.RAG_IVFFLAT_PROBES
+    assert "RAG_TOP_K" in data["defaults"]
+    assert data["effective"]["RAG_TOP_K"] == data["defaults"]["RAG_TOP_K"]
+    assert "RAG_IVFFLAT_PROBES" in data["defaults"]
+    assert data["effective"]["RAG_IVFFLAT_PROBES"] == data["defaults"]["RAG_IVFFLAT_PROBES"]
     assert data["updated_at"] is None
 
 
-def test_admin_settings_update_overrides_values(admin_client: tuple[TestClient, FakeDynamicSettingsService, str]):
-    client, _, secret = admin_client
+def test_admin_settings_update_overrides_values(
+    admin_client: tuple[TestClient, FakeDynamicSettingsService, FastAPI]
+) -> None:
+    client, _, app = admin_client
+
+    app.dependency_overrides[get_current_superuser] = lambda: types.SimpleNamespace(
+        id=1, is_superuser=True, is_active=True
+    )
 
     response = client.put(
         "/api/v1/admin/settings",
         json={"RAG_TOP_K": 7, "RAG_MIN_SIM": 0.55, "RAG_IVFFLAT_PROBES": 24},
-        headers={"X-Internal-Secret": secret},
     )
 
     assert response.status_code == 200

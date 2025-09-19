@@ -16,6 +16,7 @@ import SystemMonitoringPage from './pages/SystemMonitoringPage';
 import ChatPage from './pages/ChatPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import KnowledgeDocumentDetailPage from './pages/KnowledgeDocumentDetailPage';
+import AdminSettingsPage from './pages/AdminSettingsPage';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -102,6 +103,11 @@ const AppRoutes: React.FC = () => {
         <Route path="/management/knowledge/:id" element={
           <ProtectedRoute>
             <KnowledgeDocumentDetailPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/management/settings" element={
+          <ProtectedRoute>
+            <AdminSettingsPage />
           </ProtectedRoute>
         } />
         

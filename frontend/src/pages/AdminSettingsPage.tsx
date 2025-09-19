@@ -1,0 +1,237 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Snackbar,
+  Stack,
+  Typography,
+} from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+
+import ManagementLayout from '../components/Layout/ManagementLayout';
+import { useAuthStore } from '../stores/auth-store';
+import { useApiStore } from '../stores/api-store';
+import {
+  SettingsTable,
+  SettingsEditDialog,
+  ADMIN_SETTING_DEFINITION_MAP,
+} from '../components/AdminSettings';
+import {
+  AdminSettingKey,
+  AdminSettingValue,
+  AdminSettingsResponse,
+} from '../types/adminSettings';
+
+const SETTINGS_URL = '/v1/admin/settings';
+
+type SnackbarState = {
+  open: boolean;
+  message: string;
+  severity: 'success' | 'error';
+};
+
+const initialSnackbar: SnackbarState = {
+  open: false,
+  message: '',
+  severity: 'success',
+};
+
+const ensureNumber = (value: AdminSettingValue | undefined): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  return null;
+};
+
+const AdminSettingsPage: React.FC = () => {
+  const { user } = useAuthStore();
+  const { fetchData, putData, getApiState, setError } = useApiStore();
+
+  const [selectedKey, setSelectedKey] = useState<AdminSettingKey | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [snackbar, setSnackbar] = useState<SnackbarState>(initialSnackbar);
+
+  const apiState = getApiState(SETTINGS_URL) as {
+    data: AdminSettingsResponse | null;
+    loading: boolean;
+    error: Error | null;
+  };
+
+  const { data: settings, loading, error } = apiState;
+
+  const loadSettings = useCallback(async () => {
+    try {
+      await fetchData<AdminSettingsResponse>(SETTINGS_URL);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '加载失败，请稍后重试';
+      setSnackbar({ open: true, message, severity: 'error' });
+    }
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (user?.is_superuser) {
+      void loadSettings();
+    }
+  }, [user?.is_superuser, loadSettings]);
+
+  const selectedDefinition = useMemo(() => {
+    if (!selectedKey) {
+      return null;
+    }
+    return ADMIN_SETTING_DEFINITION_MAP[selectedKey];
+  }, [selectedKey]);
+
+  const currentValue = useMemo(() => {
+    if (!selectedKey || !settings) {
+      return null;
+    }
+    return ensureNumber(settings.effective?.[selectedKey]);
+  }, [selectedKey, settings]);
+
+  const defaultValue = useMemo(() => {
+    if (!selectedKey || !settings) {
+      return null;
+    }
+    return ensureNumber(settings.defaults?.[selectedKey]);
+  }, [selectedKey, settings]);
+
+  const handleEdit = (key: AdminSettingKey) => {
+    setSelectedKey(key);
+    setError(SETTINGS_URL, null);
+  };
+
+  const handleCloseDialog = () => {
+    if (saving) {
+      return;
+    }
+    setSelectedKey(null);
+  };
+
+  const applyUpdate = async (key: AdminSettingKey, value: number) => {
+    setSaving(true);
+    try {
+      const response = await putData<AdminSettingsResponse>(SETTINGS_URL, { [key]: value });
+      setSnackbar({ open: true, message: '设置已更新', severity: 'success' });
+      setSelectedKey(null);
+      return response;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '更新失败，请稍后重试';
+      setSnackbar({ open: true, message, severity: 'error' });
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmit = async (value: number) => {
+    if (!selectedKey) {
+      return;
+    }
+    await applyUpdate(selectedKey, value);
+  };
+
+  const handleResetToDefault = async (defaultValueParam: number) => {
+    if (!selectedKey) {
+      return;
+    }
+    await applyUpdate(selectedKey, defaultValueParam);
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(initialSnackbar);
+  };
+
+  if (!user?.is_superuser) {
+    return (
+      <ManagementLayout>
+        <Alert severity="error" sx={{ mt: 4 }}>
+          您没有权限访问系统设置。需要超级管理员权限。
+        </Alert>
+      </ManagementLayout>
+    );
+  }
+
+  return (
+    <ManagementLayout>
+      <Stack spacing={3}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+          <Box>
+            <Typography variant="h4" sx={{ fontSize: { xs: 20, sm: 24, md: 28 } }}>
+              系统设置管理
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              管理动态检索参数，实时调优 RAG 服务表现。
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => void loadSettings()}
+            disabled={loading}
+          >
+            刷新
+          </Button>
+        </Stack>
+
+        {loading && !settings && (
+          <Stack alignItems="center" sx={{ my: 6 }}>
+            <CircularProgress />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              正在加载当前配置…
+            </Typography>
+          </Stack>
+        )}
+
+        {error && (
+          <Alert severity="error">
+            {error.message || '加载失败，请稍后重试'}
+          </Alert>
+        )}
+
+        {settings && settings.redis_status === 'unavailable' && (
+          <Alert severity="warning">
+            无法连接 Redis，已回退到默认配置。请检查缓存服务状态。
+          </Alert>
+        )}
+
+        {settings && settings.updated_at && (
+          <Alert severity="info" icon={false}>
+            上次更新时间：{new Date(settings.updated_at).toLocaleString()}
+          </Alert>
+        )}
+
+        <SettingsTable
+          settings={settings ?? null}
+          loading={loading || saving}
+          onEdit={handleEdit}
+        />
+      </Stack>
+
+      <SettingsEditDialog
+        open={Boolean(selectedKey && selectedDefinition)}
+        definition={selectedDefinition}
+        currentValue={currentValue}
+        defaultValue={defaultValue}
+        onClose={handleCloseDialog}
+        onSubmit={handleSubmit}
+        onResetToDefault={handleResetToDefault}
+        saving={saving}
+      />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </ManagementLayout>
+  );
+};
+
+export default AdminSettingsPage;

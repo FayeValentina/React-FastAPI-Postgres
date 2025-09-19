@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.dependencies import verify_internal_access
+from app.api.dependencies import get_current_superuser
 from app.infrastructure.dynamic_settings import (
     DynamicSettingsService,
     get_dynamic_settings_service,
@@ -17,7 +17,7 @@ from app.modules.admin_settings.service import admin_settings_service
 router = APIRouter(
     prefix="/admin/settings",
     tags=["admin-settings"],
-    dependencies=[Depends(verify_internal_access)],
+    dependencies=[Depends(get_current_superuser)],
 )
 
 
@@ -34,4 +34,3 @@ async def update_admin_settings(
     dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ) -> AdminSettingsResponse:
     return await admin_settings_service.update_settings(payload, dynamic_settings_service)
-

@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 def get_env_file() -> str:
     """动态选择环境文件"""
-    environment = os.getenv("ENVIRONMENT", "dev")
-    if environment == "prod":
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production":
         return ".env.prod"
     else:
         return ".env.dev"
@@ -94,27 +94,6 @@ class SecuritySettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
-        env_file=[ENV_FILE],
-        env_file_encoding="utf-8",
-        extra="allow"
-    )
-
-
-class CORSSettings(BaseSettings):
-    """CORS 配置"""
-    ORIGINS: List[AnyHttpUrl] = []
-
-    @field_validator("ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
-
-    model_config = SettingsConfigDict(
-        env_prefix="BACKEND_CORS_",
         env_file=[ENV_FILE],
         env_file_encoding="utf-8",
         extra="allow"
@@ -297,15 +276,8 @@ class RedisPoolConfig:
 
 class TaskIQSettings(BaseSettings):
     """TaskIQ 配置"""
-    # TaskIQ 基本配置
-    TIMEZONE: str = "UTC"
-    TASK_DEFAULT_RETRY_DELAY: int = 60
-    TASK_MAX_RETRIES: int = 3
-    TASK_TIME_LIMIT: int = 30 * 60  # 30分钟
-    
     # Worker设置
     WORKER_CONCURRENCY: int = 2
-    
     # 结果存储设置
     RESULT_EX_TIME: int = 3600  # 结果过期时间（秒）
     
@@ -321,7 +293,6 @@ class Settings(BaseSettings):
     # 基本配置
     PROJECT_NAME: str = "FastAPI Backend"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/v1"
     ENVIRONMENT: str = "development"
     
     # 服务配置
@@ -335,7 +306,6 @@ class Settings(BaseSettings):
     postgres: PostgresSettings = PostgresSettings()
     pgadmin: PgAdminSettings = PgAdminSettings()
     security: SecuritySettings = SecuritySettings()
-    cors: CORSSettings = CORSSettings()
     logging: LoggingSettings = LoggingSettings()
     reddit: RedditSettings = RedditSettings()
     twitter: TwitterSettings = TwitterSettings()
