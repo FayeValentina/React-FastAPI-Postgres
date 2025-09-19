@@ -117,3 +117,19 @@ def test_update_falls_back_when_redis_write_fails():
     assert result["RAG_TOP_K"] == 5  # returns previous snapshot
     assert fake.store[service.redis_key]["RAG_TOP_K"] == 5  # persisted value unchanged
     assert fake.set_calls[0][0] == service.redis_key
+
+
+def test_cached_value_tracks_refresh_and_updates():
+    fake = FakeRedis(initial={"RAG_IVFFLAT_PROBES": 17})
+    service = DynamicSettingsService(fake, settings)
+
+    assert service.cached_value("RAG_IVFFLAT_PROBES", None) == settings.RAG_IVFFLAT_PROBES
+
+    refreshed = _run(service.get_all())
+
+    assert refreshed["RAG_IVFFLAT_PROBES"] == 17
+    assert service.cached_value("RAG_IVFFLAT_PROBES") == 17
+
+    _run(service.update({"RAG_IVFFLAT_PROBES": 33}))
+
+    assert service.cached_value("RAG_IVFFLAT_PROBES") == 33

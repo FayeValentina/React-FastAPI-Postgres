@@ -46,6 +46,14 @@ class FakeDynamicSettingsService:
     def defaults(self) -> Dict[str, Any]:
         return dict(self._defaults)
 
+    def cached_effective(self) -> Dict[str, Any]:
+        merged = dict(self._defaults)
+        merged.update(self._overrides)
+        return merged
+
+    def cached_value(self, key: str, default: Any | None = None) -> Any:
+        return self.cached_effective().get(key, default)
+
     async def get_all(self) -> Dict[str, Any]:
         merged = dict(self._defaults)
         merged.update(self._overrides)
@@ -109,6 +117,8 @@ def test_admin_settings_get_returns_defaults(admin_client: tuple[TestClient, Fak
     assert data["overrides"] == {}
     assert data["defaults"]["RAG_TOP_K"] == settings.RAG_TOP_K
     assert data["effective"]["RAG_TOP_K"] == settings.RAG_TOP_K
+    assert data["defaults"]["RAG_IVFFLAT_PROBES"] == settings.RAG_IVFFLAT_PROBES
+    assert data["effective"]["RAG_IVFFLAT_PROBES"] == settings.RAG_IVFFLAT_PROBES
     assert data["updated_at"] is None
 
 
@@ -117,7 +127,7 @@ def test_admin_settings_update_overrides_values(admin_client: tuple[TestClient, 
 
     response = client.put(
         "/api/v1/admin/settings",
-        json={"RAG_TOP_K": 7, "RAG_MIN_SIM": 0.55},
+        json={"RAG_TOP_K": 7, "RAG_MIN_SIM": 0.55, "RAG_IVFFLAT_PROBES": 24},
         headers={"X-Internal-Secret": secret},
     )
 
@@ -127,5 +137,7 @@ def test_admin_settings_update_overrides_values(admin_client: tuple[TestClient, 
     assert data["overrides"]["RAG_TOP_K"] == 7
     assert data["effective"]["RAG_TOP_K"] == 7
     assert data["effective"]["RAG_MIN_SIM"] == pytest.approx(0.55)
+    assert data["effective"]["RAG_IVFFLAT_PROBES"] == 24
+    assert data["overrides"]["RAG_IVFFLAT_PROBES"] == 24
     assert data["redis_status"] == "ok"
     assert data["updated_at"] is not None

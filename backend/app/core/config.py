@@ -404,6 +404,7 @@ class Settings(BaseSettings):
             "RAG_CHUNK_OVERLAP_RATIO": self.RAG_CHUNK_OVERLAP_RATIO,
             "RAG_CODE_CHUNK_MAX_LINES": self.RAG_CODE_CHUNK_MAX_LINES,
             "RAG_CODE_CHUNK_OVERLAP_LINES": self.RAG_CODE_CHUNK_OVERLAP_LINES,
+            "RAG_IVFFLAT_PROBES": self.RAG_IVFFLAT_PROBES,
         }
 
 settings = Settings()
