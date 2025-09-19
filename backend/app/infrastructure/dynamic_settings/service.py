@@ -14,9 +14,6 @@ from app.infrastructure.redis.redis_base import RedisBase
 
 logger = logging.getLogger(__name__)
 
-DYNAMIC_SETTINGS_KEY = redis_keys.app.dynamic_settings()
-DYNAMIC_SETTINGS_META_KEY = redis_keys.app.dynamic_settings_metadata()
-
 
 class DynamicSettingsService:
     """Load and persist dynamic settings stored in Redis with safe fallbacks."""
