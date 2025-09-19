@@ -1,14 +1,9 @@
-"""
-LLM service utilities: language-aware prompt construction and context wrapping.
+"""Prompt preparation utilities for the chat LLM endpoint."""
 
-Responsibilities:
-- Detect input language (zh/en/ja; fallback en)
-- Provide localized system_prompt
-- When RAG context is available, wrap the user_text with localized instruction and the retrieved context
-"""
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
+from typing import Any, Callable, Iterable, List, Mapping, Tuple, TypeVar
 
 from fastapi.concurrency import run_in_threadpool
 from app.core.config import settings
@@ -20,6 +15,26 @@ except Exception:  # pragma: no cover - graceful fallback if not available
 
 
 SUPPORTED = {"en", "zh", "ja"}
+
+T = TypeVar("T")
+
+
+def _coerce_setting(
+    config: Mapping[str, Any] | None,
+    key: str,
+    default: T,
+    caster: Callable[[Any], T],
+) -> T:
+    """Fetch a dynamic configuration value with type coercion and fallbacks."""
+
+    if not isinstance(config, Mapping):
+        return default
+
+    candidate = config.get(key, default)
+    try:
+        return caster(candidate)
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass(frozen=True)
@@ -67,9 +82,27 @@ def _estimate_context_tokens(text: str, lang: str | None) -> int:
     return max(1, len(stripped) // 4 + 1)
 
 
-def _build_context(similar: Iterable[RetrievedChunk], lang: str) -> str:
-    max_items = max(1, settings.RAG_CONTEXT_MAX_EVIDENCE)
-    budget = max(200, settings.RAG_CONTEXT_TOKEN_BUDGET)
+def _build_context(
+    similar: Iterable[RetrievedChunk],
+    lang: str,
+    config: Mapping[str, Any] | None,
+) -> str:
+    max_items = max(
+        1,
+        _coerce_setting(
+            config,
+            "RAG_CONTEXT_MAX_EVIDENCE",
+            settings.RAG_CONTEXT_MAX_EVIDENCE,
+            int,
+        ),
+    )
+    budget_value = _coerce_setting(
+        config,
+        "RAG_CONTEXT_TOKEN_BUDGET",
+        settings.RAG_CONTEXT_TOKEN_BUDGET,
+        int,
+    )
+    budget = max(200, budget_value)
     tokens_used = 0
     entries: List[str] = []
 
@@ -165,13 +198,14 @@ def _localized_prompts(lang: str) -> PromptBundle:
 def _prepare_system_and_user(
     user_text: str,
     similar: Iterable[RetrievedChunk],
+    config: Mapping[str, Any] | None,
 ) -> Tuple[str, str]:
     """Build localized prompts together with formatted evidence and fallbacks."""
 
     lang = _normalize_lang(user_text)
     bundle = _localized_prompts(lang)
     evidence_list = list(similar or [])
-    context = _build_context(evidence_list, lang) if evidence_list else ""
+    context = _build_context(evidence_list, lang, config) if evidence_list else ""
 
     if context:
         final_user = bundle.context_template.format(context=context, user_text=user_text)
@@ -182,7 +216,10 @@ def _prepare_system_and_user(
 
 
 async def prepare_system_and_user(
-    user_text: str, similar: Iterable[RetrievedChunk]
+    user_text: str,
+    similar: Iterable[RetrievedChunk],
+    config: Mapping[str, Any] | None = None,
 ) -> Tuple[str, str]:
-    """Async wrapper for `_prepare_system_and_user` for compatibility with async call sites."""
-    return await run_in_threadpool(_prepare_system_and_user, user_text, similar)
+    """Async wrapper for `_prepare_system_and_user` with optional dynamic config."""
+
+    return await run_in_threadpool(_prepare_system_and_user, user_text, similar, config)
