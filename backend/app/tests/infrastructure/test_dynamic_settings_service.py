@@ -18,11 +18,8 @@ os.environ.setdefault("PGADMIN_DEFAULT_EMAIL", "admin@example.com")
 os.environ.setdefault("PGADMIN_DEFAULT_PASSWORD", "password123")
 
 from app.core.config import settings
-from app.infrastructure.dynamic_settings.service import (
-    DYNAMIC_SETTINGS_KEY,
-    DYNAMIC_SETTINGS_META_KEY,
-    DynamicSettingsService,
-)
+from app.infrastructure.dynamic_settings.service import DynamicSettingsService
+from app.infrastructure.redis.keyspace import redis_keys
 
 
 class FakeRedis:
@@ -33,10 +30,14 @@ class FakeRedis:
         initial: Dict[str, Any] | None = None,
         *,
         set_success: bool = True,
+        redis_key: str | None = None,
+        metadata_key: str | None = None,
     ) -> None:
+        self.redis_key = redis_key or redis_keys.app.dynamic_settings()
+        self.metadata_key = metadata_key or redis_keys.app.dynamic_settings_metadata()
         self.store: Dict[str, Dict[str, Any]] = {}
         if initial is not None:
-            self.store[DYNAMIC_SETTINGS_KEY] = dict(initial)
+            self.store[self.redis_key] = dict(initial)
         self.set_success = set_success
         self.ensure_calls = 0
         self.get_calls: List[str] = []
@@ -69,7 +70,7 @@ def test_get_all_returns_defaults_when_cache_empty():
     result = _run(service.get_all())
 
     assert result == settings.dynamic_settings_defaults()
-    assert fake.get_calls == [DYNAMIC_SETTINGS_KEY]
+    assert fake.get_calls == [service.redis_key]
 
 
 def test_get_all_merges_stored_overrides():
@@ -100,11 +101,11 @@ def test_update_persists_and_returns_snapshot():
     assert pytest.approx(0.9) == updated["RAG_MIN_SIM"]
     assert "NEW_KEY" in updated
     assert after["RAG_MIN_SIM"] == pytest.approx(0.9)
-    assert fake.store[DYNAMIC_SETTINGS_KEY]["RAG_MIN_SIM"] == pytest.approx(0.9)
-    assert fake.store[DYNAMIC_SETTINGS_KEY]["NEW_KEY"] == "hello"
-    assert fake.set_calls[0][0] == DYNAMIC_SETTINGS_KEY
-    assert fake.set_calls[1][0] == DYNAMIC_SETTINGS_META_KEY
-    assert "updated_at" in fake.store[DYNAMIC_SETTINGS_META_KEY]
+    assert fake.store[service.redis_key]["RAG_MIN_SIM"] == pytest.approx(0.9)
+    assert fake.store[service.redis_key]["NEW_KEY"] == "hello"
+    assert fake.set_calls[0][0] == service.redis_key
+    assert fake.set_calls[1][0] == service.metadata_key
+    assert "updated_at" in fake.store[service.metadata_key]
 
 
 def test_update_falls_back_when_redis_write_fails():
@@ -114,5 +115,5 @@ def test_update_falls_back_when_redis_write_fails():
     result = _run(service.update({"RAG_TOP_K": 42}))
 
     assert result["RAG_TOP_K"] == 5  # returns previous snapshot
-    assert fake.store[DYNAMIC_SETTINGS_KEY]["RAG_TOP_K"] == 5  # persisted value unchanged
-    assert fake.set_calls[0][0] == DYNAMIC_SETTINGS_KEY
+    assert fake.store[service.redis_key]["RAG_TOP_K"] == 5  # persisted value unchanged
+    assert fake.set_calls[0][0] == service.redis_key

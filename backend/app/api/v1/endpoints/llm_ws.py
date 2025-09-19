@@ -102,7 +102,9 @@ async def ws_chat(
 
             # 由服务层生成 system_prompt，并对 user_text 做包装（语言/模板等）
             system_prompt, wrapped_user_text = await prepare_system_and_user(
-                user_text, similar
+                user_text,
+                similar,
+                config=config,
             )
 
             # 追加到历史（只保留最近 N 条）

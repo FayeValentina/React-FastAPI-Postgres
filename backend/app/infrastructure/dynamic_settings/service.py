@@ -9,12 +9,10 @@ from functools import lru_cache
 from typing import Any, Dict
 
 from app.core.config import Settings, settings
+from app.infrastructure.redis.keyspace import redis_keys
 from app.infrastructure.redis.redis_base import RedisBase
 
 logger = logging.getLogger(__name__)
-
-DYNAMIC_SETTINGS_KEY = "app:dynamic_settings"
-DYNAMIC_SETTINGS_META_KEY = f"{DYNAMIC_SETTINGS_KEY}:meta"
 
 
 class DynamicSettingsService:
@@ -24,13 +22,13 @@ class DynamicSettingsService:
         self,
         redis_client: RedisBase,
         settings: Settings,
-        redis_key: str = DYNAMIC_SETTINGS_KEY,
-        meta_key: str = DYNAMIC_SETTINGS_META_KEY,
+        redis_key: str | None = None,
+        meta_key: str | None = None,
     ):
         self._redis = redis_client
         self._settings = settings
-        self._redis_key = redis_key
-        self._meta_key = meta_key
+        self._redis_key = redis_key or redis_keys.app.dynamic_settings()
+        self._meta_key = meta_key or redis_keys.app.dynamic_settings_metadata()
 
     @property
     def redis_key(self) -> str:
