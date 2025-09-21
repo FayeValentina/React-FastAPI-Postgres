@@ -5,10 +5,12 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  FormControlLabel,
   TextField,
   Stack,
   Typography,
   Alert,
+  Switch,
 } from '@mui/material';
 
 import { AdminSettingDefinition } from './settingDefinitions';
@@ -16,11 +18,11 @@ import { AdminSettingDefinition } from './settingDefinitions';
 interface SettingsEditDialogProps {
   open: boolean;
   definition: AdminSettingDefinition | null;
-  currentValue: number | null;
-  defaultValue: number | null;
+  currentValue: number | boolean | null;
+  defaultValue: number | boolean | null;
   onClose: () => void;
-  onSubmit: (value: number) => Promise<void> | void;
-  onResetToDefault: (defaultValue: number) => Promise<void> | void;
+  onSubmit: (value: number | boolean) => Promise<void> | void;
+  onResetToDefault: (defaultValue: number | boolean) => Promise<void> | void;
   saving?: boolean;
 }
 
@@ -35,26 +37,39 @@ const SettingsEditDialog: React.FC<SettingsEditDialogProps> = ({
   saving = false,
 }) => {
   const [inputValue, setInputValue] = useState('');
+  const [boolValue, setBoolValue] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && definition) {
-      const initialValue =
-        currentValue !== null && currentValue !== undefined
-          ? currentValue
-          : defaultValue !== null && defaultValue !== undefined
-            ? defaultValue
-            : '';
-      setInputValue(initialValue === '' ? '' : String(initialValue));
+      if (definition.type === 'boolean') {
+        const resolved =
+          typeof currentValue === 'boolean'
+            ? currentValue
+            : typeof defaultValue === 'boolean'
+              ? defaultValue
+              : false;
+        setBoolValue(resolved);
+        setInputValue('');
+      } else {
+        const initialValue =
+          currentValue !== null && currentValue !== undefined
+            ? currentValue
+            : defaultValue !== null && defaultValue !== undefined
+              ? defaultValue
+              : '';
+        setInputValue(initialValue === '' ? '' : String(initialValue));
+      }
       setError(null);
     } else if (!open) {
       setInputValue('');
+      setBoolValue(false);
       setError(null);
     }
   }, [open, definition, currentValue, defaultValue]);
 
   const helperRange = useMemo(() => {
-    if (!definition) return '';
+    if (!definition || definition.type === 'boolean') return '';
     const parts: string[] = [];
     if (definition.min !== undefined) {
       parts.push(`≥ ${definition.min}`);
@@ -65,9 +80,14 @@ const SettingsEditDialog: React.FC<SettingsEditDialogProps> = ({
     return parts.join('，');
   }, [definition]);
 
-  const parseValue = () => {
+  const parseValue = (): number | boolean | null => {
     if (!definition) {
       return null;
+    }
+
+    if (definition.type === 'boolean') {
+      setError(null);
+      return boolValue;
     }
 
     if (inputValue === '') {
@@ -115,6 +135,19 @@ const SettingsEditDialog: React.FC<SettingsEditDialogProps> = ({
     await onSubmit(parsed);
   };
 
+  const formatDisplayValue = (value: number | boolean | null) => {
+    if (value === null || value === undefined) {
+      return '—';
+    }
+    if (typeof value === 'boolean') {
+      return value ? '是' : '否';
+    }
+    if (Number.isInteger(value)) {
+      return value.toString();
+    }
+    return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  };
+
   const handleReset = async () => {
     if (defaultValue === null || defaultValue === undefined || definition === null) {
       return;
@@ -138,23 +171,36 @@ const SettingsEditDialog: React.FC<SettingsEditDialogProps> = ({
             </Alert>
           )}
           <Typography variant="body2" color="text.secondary">
-            当前生效值：{currentValue ?? '—'}，默认值：{defaultValue ?? '—'}
+            当前生效值：{formatDisplayValue(currentValue)}，默认值：{formatDisplayValue(defaultValue)}
           </Typography>
-          <TextField
-            label="新的覆盖值"
-            type="number"
-            value={inputValue}
-            onChange={(event) => setInputValue(event.target.value)}
-            fullWidth
-            inputProps={{
-              step: definition.step ?? (definition.type === 'float' ? 0.01 : 1),
-              min: definition.min,
-              max: definition.max,
-            }}
-            error={Boolean(error)}
-            helperText={error ?? helperRange}
-            disabled={saving}
-          />
+          {definition.type === 'boolean' ? (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={boolValue}
+                  onChange={(event) => setBoolValue(event.target.checked)}
+                  disabled={saving}
+                />
+              }
+              label={boolValue ? '启用' : '停用'}
+            />
+          ) : (
+            <TextField
+              label="新的覆盖值"
+              type="number"
+              value={inputValue}
+              onChange={(event) => setInputValue(event.target.value)}
+              fullWidth
+              inputProps={{
+                step: definition.step ?? (definition.type === 'float' ? 0.01 : 1),
+                min: definition.min,
+                max: definition.max,
+              }}
+              error={Boolean(error)}
+              helperText={error ?? helperRange}
+              disabled={saving}
+            />
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>

@@ -47,11 +47,12 @@ aiosmtplib = "^4.0.0"
 openai = "^1.107.0" # 已更新到较新稳定版
 sentence-transformers = "^3.0.1"
 pgvector = "^0.2.5"
-spacy = "^3.7.0"
 hf-transfer = "^0.1.6"
-langdetect = "^1.0.9"
-beautifulsoup4 = "^4.12.0"
-markdown = "^3.6"
+unstructured = "^0.17.0"
+charset-normalizer = "^3.3"
+langchain-text-splitters = "^0.3.0"
+tiktoken = "^0.7"
+lingua-language-detector = "^1.4"
 
 # --- NLTK 已被移除 ---
 # nltk = "^3.9" 

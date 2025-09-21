@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -19,18 +20,27 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("PGADMIN_DEFAULT_EMAIL", "admin@example.com")
 os.environ.setdefault("PGADMIN_DEFAULT_PASSWORD", "password123")
 
-if "sentence_transformers" not in sys.modules:
-    fake_sentence_transformers = types.ModuleType("sentence_transformers")
+fake_sentence_transformers = types.ModuleType("sentence_transformers")
 
-    class _DummySentenceTransformer:  # pragma: no cover - simple stub
-        def __init__(self, *args, **kwargs) -> None:
-            pass
 
-        def encode(self, texts, normalize_embeddings=True):
-            return []
+class _DummySentenceTransformer:  # pragma: no cover - simple stub
+    def __init__(self, *args, **kwargs) -> None:
+        pass
 
-    fake_sentence_transformers.SentenceTransformer = _DummySentenceTransformer
-    sys.modules["sentence_transformers"] = fake_sentence_transformers
+    def encode(self, texts, normalize_embeddings=True):
+        return []
+
+
+class _DummyCrossEncoder:  # pragma: no cover - simple stub
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def predict(self, *args, **kwargs):
+        return []
+
+fake_sentence_transformers.SentenceTransformer = _DummySentenceTransformer
+fake_sentence_transformers.CrossEncoder = _DummyCrossEncoder
+sys.modules["sentence_transformers"] = fake_sentence_transformers
 
 from app.api.v1.endpoints import admin_settings
 from app.api.dependencies import get_current_superuser
@@ -80,6 +90,12 @@ class FakeDynamicSettingsService:
 def admin_client() -> tuple[TestClient, FakeDynamicSettingsService, FastAPI]:
     test_app = FastAPI()
     test_app.include_router(admin_settings.router, prefix="/api/v1")
+
+    @asynccontextmanager
+    async def noop_lifespan(_app):  # pragma: no cover - test helper
+        yield
+
+    test_app.router.lifespan_context = noop_lifespan
 
     client = TestClient(test_app)
     fake_service = FakeDynamicSettingsService()

@@ -19,6 +19,7 @@ import EditIcon from '@mui/icons-material/Edit';
 
 import {
   ADMIN_SETTING_DEFINITIONS,
+  FEATURE_TOGGLE_KEYS,
   AdminSettingDefinition,
 } from './settingDefinitions';
 import {
@@ -57,6 +58,12 @@ const renderDescription = (definition: AdminSettingDefinition) => {
   );
 };
 
+const FEATURE_TOGGLE_KEY_SET = new Set<AdminSettingKey>(FEATURE_TOGGLE_KEYS);
+
+const TABLE_SETTING_DEFINITIONS = ADMIN_SETTING_DEFINITIONS.filter(
+  ({ key }) => !FEATURE_TOGGLE_KEY_SET.has(key),
+);
+
 const SettingsTable: React.FC<SettingsTableProps> = ({ settings, loading, onEdit }) => {
   return (
     <TableContainer component={Paper} sx={{ mt: 2 }}>
@@ -71,7 +78,7 @@ const SettingsTable: React.FC<SettingsTableProps> = ({ settings, loading, onEdit
           </TableRow>
         </TableHead>
         <TableBody>
-          {ADMIN_SETTING_DEFINITIONS.map((definition) => {
+          {TABLE_SETTING_DEFINITIONS.map((definition) => {
             const { key } = definition;
             const defaultValue = settings?.defaults?.[key] ?? null;
             const effectiveValue = settings?.effective?.[key] ?? null;

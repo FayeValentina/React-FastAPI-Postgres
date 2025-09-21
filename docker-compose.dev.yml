@@ -74,6 +74,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - RERANKER_MODEL=${RERANKER_MODEL}
       - RAG_TOP_K=${RAG_TOP_K:-3}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
@@ -139,6 +140,7 @@ services:
       - .env.dev
     environment:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - RERANKER_MODEL=${RERANKER_MODEL}
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/models/hf
       - HF_HUB_ENABLE_HF_TRANSFER=1

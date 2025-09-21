@@ -325,7 +325,13 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = "sk-local"
     # 默认从 HF_FILENAME 读取，避免变量不同步
     LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
-    EMBEDDING_MODEL: str = Field(default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
+    RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-base")
+    RAG_STRATEGY_ENABLED: bool = Field(default=False)
+    RAG_RERANK_ENABLED: bool = Field(default=False)
+    RAG_RERANK_CANDIDATES: int = Field(default=40)
+    RAG_RERANK_SCORE_THRESHOLD: float = Field(default=0.5)
+    RAG_RERANK_MAX_BATCH: int = Field(default=16)
     RAG_TOP_K: int = Field(default=3)
     RAG_MIN_SIM: float = Field(default=0.4)
     RAG_MMR_LAMBDA: float = Field(default=0.6)
@@ -342,9 +348,11 @@ class Settings(BaseSettings):
     RAG_CODE_CHUNK_MAX_LINES: int = Field(default=40)
     RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
     RAG_IVFFLAT_PROBES: int = Field(default=10)
-    # spaCy 英文模型配置（保留轻量模型路径以便自定义）
-    SPACY_MODEL_EN: str = Field(default="en_core_web_sm")
-    SPACY_MODEL_PATH_EN: str | None = Field(default=None)
+    RAG_USE_LINGUA: bool = Field(default=False)
+    RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
+    RAG_STRATEGY_LLM_CLASSIFIER_MODEL: str = Field(default="gemma-3-4b-it-q4_0.gguf")
+    RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS: int = Field(default=20000)
+    RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -359,6 +367,11 @@ class Settings(BaseSettings):
     def dynamic_settings_defaults(self) -> dict[str, Any]:
         """Return the default dynamic settings that can be overridden via Redis."""
         return {
+            "RAG_STRATEGY_ENABLED": self.RAG_STRATEGY_ENABLED,
+            "RAG_RERANK_ENABLED": self.RAG_RERANK_ENABLED,
+            "RAG_RERANK_CANDIDATES": self.RAG_RERANK_CANDIDATES,
+            "RAG_RERANK_SCORE_THRESHOLD": self.RAG_RERANK_SCORE_THRESHOLD,
+            "RAG_RERANK_MAX_BATCH": self.RAG_RERANK_MAX_BATCH,
             "RAG_TOP_K": self.RAG_TOP_K,
             "RAG_MIN_SIM": self.RAG_MIN_SIM,
             "RAG_MMR_LAMBDA": self.RAG_MMR_LAMBDA,
@@ -375,6 +388,9 @@ class Settings(BaseSettings):
             "RAG_CODE_CHUNK_MAX_LINES": self.RAG_CODE_CHUNK_MAX_LINES,
             "RAG_CODE_CHUNK_OVERLAP_LINES": self.RAG_CODE_CHUNK_OVERLAP_LINES,
             "RAG_IVFFLAT_PROBES": self.RAG_IVFFLAT_PROBES,
+            "RAG_USE_LINGUA": self.RAG_USE_LINGUA,
+            "RAG_STRATEGY_LLM_CLASSIFIER_ENABLED": self.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
+            "RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD": self.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
         }
 
 settings = Settings()

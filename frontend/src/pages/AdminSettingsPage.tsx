@@ -16,7 +16,9 @@ import { useApiStore } from '../stores/api-store';
 import {
   SettingsTable,
   SettingsEditDialog,
+  SettingsFeatureToggles,
   ADMIN_SETTING_DEFINITION_MAP,
+  type AdminSettingDefinition,
 } from '../components/AdminSettings';
 import {
   AdminSettingKey,
@@ -38,11 +40,44 @@ const initialSnackbar: SnackbarState = {
   severity: 'success',
 };
 
-const ensureNumber = (value: AdminSettingValue | undefined): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+const coerceValueForDefinition = (
+  definition: AdminSettingDefinition | null,
+  value: AdminSettingValue | undefined,
+): number | boolean | null => {
+  if (!definition) {
+    return null;
   }
-  return null;
+
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  switch (definition.type) {
+    case 'boolean':
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'number') {
+        return value !== 0;
+      }
+      if (typeof value === 'string') {
+        return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+      }
+      return Boolean(value);
+    case 'int':
+    case 'float': {
+      const num = typeof value === 'number' ? value : Number(value);
+      if (Number.isNaN(num)) {
+        return null;
+      }
+      if (definition.type === 'int') {
+        return Math.trunc(num);
+      }
+      return num;
+    }
+    default:
+      return null;
+  }
 };
 
 const AdminSettingsPage: React.FC = () => {
@@ -87,14 +122,18 @@ const AdminSettingsPage: React.FC = () => {
     if (!selectedKey || !settings) {
       return null;
     }
-    return ensureNumber(settings.effective?.[selectedKey]);
+    const definition = ADMIN_SETTING_DEFINITION_MAP[selectedKey] ?? null;
+    const value = settings.effective?.[selectedKey];
+    return coerceValueForDefinition(definition, value);
   }, [selectedKey, settings]);
 
   const defaultValue = useMemo(() => {
     if (!selectedKey || !settings) {
       return null;
     }
-    return ensureNumber(settings.defaults?.[selectedKey]);
+    const definition = ADMIN_SETTING_DEFINITION_MAP[selectedKey] ?? null;
+    const value = settings.defaults?.[selectedKey];
+    return coerceValueForDefinition(definition, value);
   }, [selectedKey, settings]);
 
   const handleEdit = (key: AdminSettingKey) => {
@@ -109,7 +148,7 @@ const AdminSettingsPage: React.FC = () => {
     setSelectedKey(null);
   };
 
-  const applyUpdate = async (key: AdminSettingKey, value: number) => {
+  const applyUpdate = async (key: AdminSettingKey, value: number | boolean) => {
     setSaving(true);
     try {
       const response = await putData<AdminSettingsResponse>(SETTINGS_URL, { [key]: value });
@@ -125,18 +164,22 @@ const AdminSettingsPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (value: number) => {
+  const handleSubmit = async (value: number | boolean) => {
     if (!selectedKey) {
       return;
     }
     await applyUpdate(selectedKey, value);
   };
 
-  const handleResetToDefault = async (defaultValueParam: number) => {
+  const handleResetToDefault = async (defaultValueParam: number | boolean) => {
     if (!selectedKey) {
       return;
     }
     await applyUpdate(selectedKey, defaultValueParam);
+  };
+
+  const handleToggleUpdate = async (key: AdminSettingKey, value: boolean) => {
+    await applyUpdate(key, value);
   };
 
   const handleCloseSnackbar = () => {
@@ -200,6 +243,13 @@ const AdminSettingsPage: React.FC = () => {
           <Alert severity="info" icon={false}>
             上次更新时间：{new Date(settings.updated_at).toLocaleString()}
           </Alert>
+        )}
+        {settings && (
+          <SettingsFeatureToggles
+            settings={settings}
+            loading={loading || saving}
+            onToggle={handleToggleUpdate}
+          />
         )}
 
         <SettingsTable

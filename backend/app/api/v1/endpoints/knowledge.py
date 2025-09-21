@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.knowledge_base.schemas import (
     KnowledgeDocumentCreate,
@@ -25,9 +28,14 @@ from app.modules.knowledge_base.service import (
     update_chunk,
     delete_chunk,
 )
+from app.modules.knowledge_base.strategy import (
+    StrategyContext,
+    resolve_rag_parameters,
+)
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/documents", response_model=KnowledgeDocumentRead, status_code=201)
@@ -136,11 +144,37 @@ async def search_knowledge(
     db: AsyncSession = Depends(get_async_session),
     dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
+    try:
+        base_config = await dynamic_settings_service.get_all()
+    except Exception:
+        base_config = settings.dynamic_settings_defaults()
+
+    strategy = await resolve_rag_parameters(
+        payload.query,
+        base_config,
+        request_ctx=StrategyContext(
+            top_k_request=payload.top_k,
+            channel="rest",
+        ),
+    )
+
+    logger.info("rag_strategy", extra=strategy.to_log_dict())
+
+    strategy_config = strategy.config
+    raw_top_k = strategy_config.get("RAG_TOP_K", payload.top_k)
+    try:
+        top_k_value = int(raw_top_k)
+    except (TypeError, ValueError):
+        top_k_value = payload.top_k
+    if top_k_value <= 0:
+        top_k_value = payload.top_k
+
     results = await search_similar_chunks(
         db,
         query=payload.query,
-        top_k=payload.top_k,
+        top_k=top_k_value,
         dynamic_settings_service=dynamic_settings_service,
+        config=strategy_config,
     )
     return [item.chunk for item in results]
 

@@ -1,6 +1,6 @@
 import { AdminSettingKey } from '../../types/adminSettings';
 
-export type AdminSettingValueType = 'int' | 'float';
+export type AdminSettingValueType = 'int' | 'float' | 'boolean';
 
 export interface AdminSettingDefinition {
   key: AdminSettingKey;
@@ -12,7 +12,26 @@ export interface AdminSettingDefinition {
   step?: number;
 }
 
+export const FEATURE_TOGGLE_KEYS: AdminSettingKey[] = [
+  'RAG_STRATEGY_ENABLED',
+  'RAG_STRATEGY_LLM_CLASSIFIER_ENABLED',
+  'RAG_RERANK_ENABLED',
+  'RAG_USE_LINGUA',
+];
+
 export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
+  {
+    key: 'RAG_STRATEGY_ENABLED',
+    label: '策略层开关',
+    description: '控制是否启用基于查询特征的策略层。开启后会动态覆盖 top_k、相似度阈值等核心参数；关闭则使用静态或 Redis 配置。',
+    type: 'boolean',
+  },
+  {
+    key: 'RAG_STRATEGY_LLM_CLASSIFIER_ENABLED',
+    label: 'LLM 查询意图分类器',
+    description: '开启后将调用 LLM 对查询意图进行判定，并在高置信度时覆盖策略场景；关闭则仅依赖启发式分类。',
+    type: 'boolean',
+  },
   {
     key: 'RAG_TOP_K',
     label: '候选文档数量 (TOP_K)',
@@ -25,6 +44,15 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     key: 'RAG_MIN_SIM',
     label: '最小相似度 (MIN_SIM)',
     description: '低于该阈值的文档将被过滤，范围在 0 和 1 之间。值越大筛选越严格，结果更精确但可能缺少备选；值越小放宽过滤，召回更多但噪声增加。',
+    type: 'float',
+    min: 0,
+    max: 1,
+    step: 0.01,
+  },
+  {
+    key: 'RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD',
+    label: 'LLM 分类置信度阈值',
+    description: '当 LLM 返回的置信度低于该阈值时，将回退至启发式分类结果。范围 0-1。',
     type: 'float',
     min: 0,
     max: 1,
@@ -59,6 +87,37 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     description: '用于后续 rerank 阶段的最大候选文档数量上限。值越大 rerank 空间更充分但耗时更长；值越小速度更快但可能错过高质量候选。',
     type: 'int',
     min: 1,
+  },
+  {
+    key: 'RAG_RERANK_ENABLED',
+    label: 'Cross-Encoder 重排开关',
+    description: '控制是否在向量召回后执行 Cross-Encoder 重排。开启可显著提高候选质量，但会增加每次请求的推理时间。',
+    type: 'boolean',
+  },
+  {
+    key: 'RAG_RERANK_CANDIDATES',
+    label: '重排候选数量',
+    description: '送入 Cross-Encoder 重排的候选数量。值越大排序更精细但耗时更长；值越小速度快但可能错过相关片段。',
+    type: 'int',
+    min: 1,
+    max: 200,
+  },
+  {
+    key: 'RAG_RERANK_SCORE_THRESHOLD',
+    label: '重排得分阈值',
+    description: '低于该阈值的候选会被丢弃，范围 0-1。阈值越高越严格，噪声更少但可能漏掉边缘内容；阈值越低覆盖更多但上下文可能变杂。',
+    type: 'float',
+    min: 0,
+    max: 1,
+    step: 0.01,
+  },
+  {
+    key: 'RAG_RERANK_MAX_BATCH',
+    label: '重排批处理大小',
+    description: 'Cross-Encoder 推理时的批处理大小。增大可提高吞吐，过大可能导致显存/内存压力；减小可降低单批负载但调度成本上升。',
+    type: 'int',
+    min: 1,
+    max: 128,
   },
   {
     key: 'RAG_SAME_LANG_BONUS',
@@ -126,6 +185,13 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     description: '相邻代码分片的重叠行数。值越大上下文连续性更强但片段冗余增加；值越小索引体积更小但函数或代码块可能被拆散。',
     type: 'int',
     min: 0,
+  },
+  {
+    key: 'RAG_USE_LINGUA',
+    label: '启用 Lingua 语言检测',
+    description:
+      '开启后优先使用 Lingua 进行语言识别，准确度更高；关闭时会退回到轻量规则或正则，适合对依赖体积敏感的环境。',
+    type: 'boolean',
   },
   {
     key: 'RAG_IVFFLAT_PROBES',

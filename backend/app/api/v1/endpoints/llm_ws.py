@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,10 +12,12 @@ from app.infrastructure.dynamic_settings import (
     get_dynamic_settings_service,
 )
 from app.modules.knowledge_base.service import search_similar_chunks
+from app.modules.knowledge_base.strategy import StrategyContext, resolve_rag_parameters
 from app.api.dependencies import get_current_user_from_ws
 from app.modules.auth.models import User
 
 router = APIRouter(prefix="/ws", tags=["llm"])
+logger = logging.getLogger(__name__)
 
 # 控制历史长度，避免上下文过大
 MAX_HISTORY_MESSAGES = 15
@@ -54,11 +58,37 @@ async def ws_chat(
 
             # RAG: 检索相似上下文（失败时回退为空）
             try:
-                config = await dynamic_settings_service.get_all()
+                base_config = await dynamic_settings_service.get_all()
             except Exception:
-                config = settings.dynamic_settings_defaults()
+                base_config = settings.dynamic_settings_defaults()
 
-            raw_top_k = config.get("RAG_TOP_K", settings.RAG_TOP_K)
+            requested_top_k = incoming.get("top_k")
+            try:
+                requested_top_k_int = int(requested_top_k)
+            except (TypeError, ValueError):
+                requested_top_k_int = None
+
+            document_id = incoming.get("document_id")
+            try:
+                document_id_int = int(document_id) if document_id is not None else None
+            except (TypeError, ValueError):
+                document_id_int = None
+
+            strategy = await resolve_rag_parameters(
+                user_text,
+                base_config,
+                request_ctx=StrategyContext(
+                    top_k_request=requested_top_k_int,
+                    document_id=document_id_int,
+                    channel="websocket",
+                    user_role=getattr(current_user, "role", None),
+                ),
+            )
+
+            logger.info("rag_strategy", extra=strategy.to_log_dict())
+
+            strategy_config = strategy.config
+            raw_top_k = strategy_config.get("RAG_TOP_K", settings.RAG_TOP_K)
             try:
                 top_k_value = int(raw_top_k)
             except (TypeError, ValueError):
@@ -71,7 +101,7 @@ async def ws_chat(
                     user_text,
                     top_k_value,
                     dynamic_settings_service=dynamic_settings_service,
-                    config=config,
+                    config=strategy_config,
                 )
             except Exception:
                 similar = []
@@ -104,7 +134,7 @@ async def ws_chat(
             system_prompt, wrapped_user_text = await prepare_system_and_user(
                 user_text,
                 similar,
-                config=config,
+                config=strategy_config,
             )
 
             # 追加到历史（只保留最近 N 条）
