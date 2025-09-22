@@ -42,10 +42,10 @@ fake_sentence_transformers.SentenceTransformer = _DummySentenceTransformer
 fake_sentence_transformers.CrossEncoder = _DummyCrossEncoder
 sys.modules["sentence_transformers"] = fake_sentence_transformers
 
-from app.api.v1.endpoints import admin_settings
-from app.api.dependencies import get_current_superuser
-from app.core.config import settings
-from app.infrastructure.dynamic_settings import get_dynamic_settings_service
+from app.api.v1.endpoints import admin_settings # noqa: E402
+from app.api.dependencies import get_current_superuser # noqa: E402
+from app.core.config import settings # noqa: E402
+from app.infrastructure.dynamic_settings import get_dynamic_settings_service # noqa: E402
 
 
 class FakeDynamicSettingsService:
