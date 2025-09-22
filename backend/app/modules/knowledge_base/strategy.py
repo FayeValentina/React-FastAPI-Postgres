@@ -187,16 +187,22 @@ def _apply_scenario(
         overrides["RAG_OVERSAMPLE"] = max(1, min(base_oversample, 3))
         overrides["RAG_MAX_CANDIDATES"] = max(top_k_target * 3, min(base_max_candidates, 80))
         overrides["RAG_RERANK_CANDIDATES"] = max(top_k_target, min(base_rerank_candidates, top_k_target * 3))
-        overrides["RAG_RERANK_SCORE_THRESHOLD"] = max(base_rerank_threshold, 0.6)
+        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.55)
         overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(6, min(base_context_max_evidence, 10))
         overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(1200, min(base_context_budget, 1800))
     elif scenario == "document_focus":
         overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 6)
-        overrides["RAG_TOP_K"] = max(base_top_k, min(request_top_k, 8))
+        top_k_target = max(base_top_k, min(request_top_k, 8))
+        overrides["RAG_TOP_K"] = top_k_target
         overrides["RAG_MIN_SIM"] = min(0.85, max(base_min_sim, 0.6))
         overrides["RAG_OVERSAMPLE"] = max(base_oversample, 6)
-        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, 160)
-        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, 120)
+        max_candidates_target = max(base_max_candidates, 160)
+        overrides["RAG_MAX_CANDIDATES"] = max_candidates_target
+        rerank_target = max(
+            base_rerank_candidates,
+            min(max_candidates_target, max(top_k_target * 6, 80)),
+        )
+        overrides["RAG_RERANK_CANDIDATES"] = rerank_target
         overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(base_context_max_evidence, 16)
         overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 2600)
     elif scenario == "question":

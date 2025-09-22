@@ -27,6 +27,53 @@ HEADERS_TO_SPLIT_ON = [
 DEFAULT_ENCODING = "cl100k_base"
 CODE_TOKENS_PER_LINE = 12
 
+_LANGUAGE_ALIAS_MAP = {
+    "english": "en",
+    "eng": "en",
+    "en-us": "en",
+    "en_us": "en",
+    "en-gb": "en",
+    "chinese": "zh",
+    "zh-cn": "zh",
+    "zh_cn": "zh",
+    "zh-hans": "zh",
+    "zh-hant": "zh",
+    "zh-tw": "zh",
+    "mandarin": "zh",
+    "cn": "zh",
+    "japanese": "ja",
+    "jp": "ja",
+}
+
+
+def _normalise_lang_code(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        code = value.strip().lower()
+        if not code:
+            return None
+        code = _LANGUAGE_ALIAS_MAP.get(code, code)
+        for separator in ("-", "_"):
+            if separator in code:
+                code = code.split(separator, 1)[0]
+        if code == "code":
+            return "code"
+        if len(code) == 2 and code.isalpha():
+            return code
+        return _LANGUAGE_ALIAS_MAP.get(code)
+
+    if isinstance(value, Mapping):
+        return _normalise_lang_code(value.get("language"))
+
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            normalised = _normalise_lang_code(item)
+            if normalised:
+                return normalised
+
+    return None
+
 
 @dataclass(slots=True)
 class SplitChunk:
@@ -224,15 +271,36 @@ def split_elements(
     params = build_chunking_parameters(config)
     chunks: List[SplitChunk] = []
 
+    @lru_cache(maxsize=2048)
+    def _detect_cached(text: str, default_lang: str) -> str:
+        return detect_language(text, config=config, default=default_lang)
+
+    def _resolve_language(text: str, *, default_lang: str) -> str:
+        normalized_default = _normalise_lang_code(default_lang) or "en"
+        if not text:
+            return normalized_default
+        detected = _detect_cached(text, normalized_default)
+        normalised = _normalise_lang_code(detected)
+        return normalised if normalised else normalized_default
+
     for element in elements:
         text = (element.text or "").strip()
         if not text:
             continue
 
         base_meta = dict(element.metadata or {})
-        lang = element.language or detect_language(text, config=config)
+        meta_lang = _normalise_lang_code(base_meta.get("language"))
+        element_lang = _normalise_lang_code(element.language)
+        base_language = element_lang or meta_lang
+        if base_language:
+            base_meta.setdefault("language", base_language)
+
+        lang = base_language or _resolve_language(
+            text, default_lang=base_meta.get("language", "en")
+        )
 
         if element.is_code or lang == "code" or is_probable_code(text):
+            base_meta.setdefault("language", "code")
             code_chunks = _split_code(text, params)
             for chunk in code_chunks:
                 chunks.append(
@@ -245,14 +313,25 @@ def split_elements(
                 )
             continue
 
+        default_section_lang = "en" if lang == "code" else (lang or "en")
+
         for section_text, metadata in _markdown_sections(text, base_meta):
-            section_lang = detect_language(section_text, config=config) or lang
+            section_meta = dict(metadata)
+            section_default = (
+                element_lang
+                or _normalise_lang_code(section_meta.get("language"))
+                or default_section_lang
+            )
+            section_lang = element_lang or _resolve_language(
+                section_text, default_lang=section_default
+            )
+            section_meta.setdefault("language", section_lang)
             for part in _split_text(section_text, section_lang, params):
                 chunks.append(
                     SplitChunk(
                         content=part,
                         language=section_lang,
-                        metadata=dict(metadata),
+                        metadata=dict(section_meta),
                         is_code=False,
                     )
                 )

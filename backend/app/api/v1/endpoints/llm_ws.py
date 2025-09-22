@@ -88,11 +88,28 @@ async def ws_chat(
             logger.info("rag_strategy", extra=strategy.to_log_dict())
 
             strategy_config = strategy.config
-            raw_top_k = strategy_config.get("RAG_TOP_K", settings.RAG_TOP_K)
+            raw_top_k = strategy_config.get("RAG_TOP_K")
+            strategy_top_k: int | None
             try:
-                top_k_value = int(raw_top_k)
+                strategy_top_k = int(raw_top_k)
             except (TypeError, ValueError):
-                top_k_value = settings.RAG_TOP_K
+                strategy_top_k = None
+
+            if requested_top_k_int is not None and requested_top_k_int > 0:
+                top_k_value = requested_top_k_int
+                if strategy_top_k is not None and strategy_top_k > 0:
+                    top_k_value = max(top_k_value, strategy_top_k)
+            else:
+                top_k_value = strategy_top_k if strategy_top_k and strategy_top_k > 0 else settings.RAG_TOP_K
+
+            max_candidates_raw = strategy_config.get("RAG_MAX_CANDIDATES", settings.RAG_MAX_CANDIDATES)
+            try:
+                max_candidates = int(max_candidates_raw)
+            except (TypeError, ValueError):
+                max_candidates = settings.RAG_MAX_CANDIDATES
+            if max_candidates > 0:
+                top_k_value = min(top_k_value, max_candidates)
+
             top_k_value = max(1, top_k_value)
 
             try:

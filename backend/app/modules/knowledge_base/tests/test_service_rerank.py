@@ -96,7 +96,7 @@ def test_rerank_applies_scores(monkeypatch, service):
     dummy_reranker = DummyReranker([2.0, -5.0])
 
     monkeypatch.setattr(service.crud_knowledge_base, "fetch_chunk_candidates_by_embedding", fake_fetch)
-    monkeypatch.setattr(service, "_detect_language", lambda _q: "en")
+    monkeypatch.setattr(service, "_detect_language", lambda _q, _config=None: "en")
     monkeypatch.setattr(service, "_get_reranker", lambda: dummy_reranker)
 
     config_map = {
@@ -143,7 +143,7 @@ def test_rerank_failure_falls_back(monkeypatch, service):
         return [(chunk, 0.1)]
 
     monkeypatch.setattr(service.crud_knowledge_base, "fetch_chunk_candidates_by_embedding", fake_fetch)
-    monkeypatch.setattr(service, "_detect_language", lambda _q: "en")
+    monkeypatch.setattr(service, "_detect_language", lambda _q, _config=None: "en")
 
     failing_reranker = DummyReranker([], raise_on_call=True)
     monkeypatch.setattr(service, "_get_reranker", lambda: failing_reranker)

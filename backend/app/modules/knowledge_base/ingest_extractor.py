@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any, List, Mapping
 
 from charset_normalizer import from_bytes
 from unstructured.documents.elements import Element  # type: ignore
@@ -22,6 +22,66 @@ class ExtractedElement:
     language: str | None = None
 
 
+_LANGUAGE_ALIASES = {
+    "english": "en",
+    "eng": "en",
+    "en-us": "en",
+    "en_us": "en",
+    "en-gb": "en",
+    "chinese": "zh",
+    "zh-cn": "zh",
+    "zh_cn": "zh",
+    "zh-hans": "zh",
+    "zh-hant": "zh",
+    "zh-tw": "zh",
+    "cn": "zh",
+    "mandarin": "zh",
+    "japanese": "ja",
+    "jp": "ja",
+}
+
+
+def _normalise_language(value: Any) -> str | None:
+    """Convert various language hints to a normalized ISO-like code."""
+
+    if isinstance(value, str):
+        candidate = value.strip().lower()
+        if not candidate:
+            return None
+        candidate = _LANGUAGE_ALIASES.get(candidate, candidate)
+        for separator in ("-", "_"):
+            if separator in candidate:
+                candidate = candidate.split(separator, 1)[0]
+        if len(candidate) == 2 and candidate.isalpha():
+            return candidate
+        return _LANGUAGE_ALIASES.get(candidate)
+
+    if isinstance(value, Mapping):
+        return _normalise_language(value.get("language"))
+
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            normalised = _normalise_language(item)
+            if normalised:
+                return normalised
+
+    return None
+
+
+def _extract_language(metadata: Mapping[str, Any], meta_obj: Any) -> str | None:
+    for key in ("language", "languages"):
+        if key in metadata:
+            lang = _normalise_language(metadata[key])
+            if lang:
+                return lang
+    if meta_obj is not None:
+        for key in ("language", "languages"):
+            lang = _normalise_language(getattr(meta_obj, key, None))
+            if lang:
+                return lang
+    return None
+
+
 def _element_to_payload(element: Element) -> ExtractedElement | None:
     text = (getattr(element, "text", None) or "").strip()
     if not text:
@@ -37,8 +97,15 @@ def _element_to_payload(element: Element) -> ExtractedElement | None:
 
     category = getattr(element, "category", None)
     is_code = bool(category and category.lower() == "code")
+    language = _extract_language(metadata, getattr(element, "metadata", None))
 
-    return ExtractedElement(text=text, metadata=metadata, category=category, is_code=is_code)
+    return ExtractedElement(
+        text=text,
+        metadata=metadata,
+        category=category,
+        is_code=is_code,
+        language=language,
+    )
 
 
 def _decode_bytes_to_text(raw: bytes) -> str:
