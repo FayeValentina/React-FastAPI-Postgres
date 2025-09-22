@@ -36,7 +36,7 @@ _LINGUA_LOCK = threading.Lock()
 _LINGUA_DETECTOR: T_LanguageDetector | None = None
 logger = logging.getLogger(__name__)
 _LINGUA_AVAILABLE = (_Language is not None and _LanguageDetectorBuilder is not None)
-logger.info("ingest_language: lingua installed=%s", _LINGUA_AVAILABLE)
+logger.debug("ingest_language: lingua installed=%s", _LINGUA_AVAILABLE)
 
 
 def _should_use_lingua(config: Mapping[str, Any] | None) -> bool:
@@ -50,7 +50,7 @@ def _should_use_lingua(config: Mapping[str, Any] | None) -> bool:
         else:
             flag = bool(candidate)
     use = bool(flag and (_LanguageDetectorBuilder is not None))
-    logger.info("ingest_language: should_use_lingua=%s (flag=%s, installed=%s)", use, flag, _LINGUA_AVAILABLE)
+    logger.debug("ingest_language: should_use_lingua=%s (flag=%s, installed=%s)", use, flag, _LINGUA_AVAILABLE)
     return use
 
 
@@ -60,13 +60,13 @@ def _build_lingua_detector() -> T_LanguageDetector | None:
 
     languages = [_Language.ENGLISH, _Language.CHINESE, _Language.JAPANESE]
     try:
-        logger.info("ingest_language: building lingua detector...")
+        logger.debug("ingest_language: building lingua detector...")
         det = (
             _LanguageDetectorBuilder.from_languages(*languages)
             .with_preloaded_language_models()
             .build()
         )
-        logger.info("ingest_language: lingua detector built successfully")
+        logger.debug("ingest_language: lingua detector built successfully")
         return det
     except Exception:  # pragma: no cover - instantiation should rarely fail
         logger.warning("ingest_language: failed to build lingua detector; falling back to heuristics", exc_info=logger.isEnabledFor(logging.DEBUG))
@@ -82,7 +82,7 @@ def _get_lingua_detector() -> T_LanguageDetector | None:
         if _LINGUA_DETECTOR is None:
             _LINGUA_DETECTOR = _build_lingua_detector()
             if _LINGUA_DETECTOR is None:
-                logger.info("ingest_language: lingua detector unavailable")
+                logger.debug("ingest_language: lingua detector unavailable")
     return _LINGUA_DETECTOR
 
 
@@ -130,7 +130,7 @@ def detect_language(
         return default
 
     if is_probable_code(text):
-        logger.info("ingest_language.detect: path=code")
+        logger.debug("ingest_language.detect: path=code")
         return "code"
 
     if _should_use_lingua(config):
@@ -139,19 +139,19 @@ def detect_language(
             try:
                 detected = detector.detect_language_of(text)
                 if _Language and detected == _Language.CHINESE:
-                    logger.info("ingest_language.detect: path=lingua lang=zh")
+                    logger.debug("ingest_language.detect: path=lingua lang=zh")
                     return "zh"
                 if _Language and detected == _Language.JAPANESE:
-                    logger.info("ingest_language.detect: path=lingua lang=ja")
+                    logger.debug("ingest_language.detect: path=lingua lang=ja")
                     return "ja"
                 if _Language and detected == _Language.ENGLISH:
-                    logger.info("ingest_language.detect: path=lingua lang=en")
+                    logger.debug("ingest_language.detect: path=lingua lang=en")
                     return "en"
             except Exception:  # pragma: no cover - lingua failures fall back to heuristics
                 logger.warning("ingest_language.detect: lingua failed; falling back to heuristics",exc_info=logger.isEnabledFor(logging.DEBUG))
 
     lang = _heuristic_language(text) or default
-    logger.info("ingest_language.detect: path=heuristic lang=%s", lang)
+    logger.debug("ingest_language.detect: path=heuristic lang=%s", lang)
     return lang
 
 
