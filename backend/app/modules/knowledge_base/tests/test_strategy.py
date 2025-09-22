@@ -75,7 +75,7 @@ def test_strategy_precise_query_focuses_results():
     assert result.overrides["RAG_OVERSAMPLE"] == 3
     assert result.overrides["RAG_MAX_CANDIDATES"] == 80
     assert result.overrides["RAG_RERANK_CANDIDATES"] == 9
-    assert result.overrides["RAG_RERANK_SCORE_THRESHOLD"] == pytest.approx(0.6)
+    assert "RAG_RERANK_SCORE_THRESHOLD" not in result.overrides
     assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 10
     assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 1800
 
@@ -91,7 +91,7 @@ def test_strategy_document_focus_raises_min_similarity():
     assert result.overrides["RAG_MIN_SIM"] == pytest.approx(0.6)
     assert result.overrides["RAG_OVERSAMPLE"] == 6
     assert result.overrides["RAG_MAX_CANDIDATES"] == 160
-    assert result.overrides["RAG_RERANK_CANDIDATES"] == 120
+    assert result.overrides["RAG_RERANK_CANDIDATES"] == 80
     assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 16
     assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 2600
 

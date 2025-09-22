@@ -35,6 +35,8 @@ class RetrievedChunk:
     similarity: float
     score: float
     embedding: np.ndarray
+    language_bonus: float = 0.0
+    coarse_score: float = 0.0
     mmr_score: float = 0.0
     rerank_score: float | None = None
 
@@ -95,6 +97,10 @@ async def _resolve_dynamic_settings(
     return payload
 
 
+def _detect_language(text: str, config: DynamicSettingsMapping | None) -> str:
+    return detect_language(text, config)
+
+
 def _sigmoid(value: float) -> float:
     try:
         if value >= 0:
@@ -119,6 +125,27 @@ def _get_reranker() -> CrossEncoder:
             logger.info("Loading reranker model %s", model_name)
             _reranker_instance = CrossEncoder(model_name)
     return _reranker_instance
+
+
+def _build_rerank_preview(content: str, limit: int = 512) -> str:
+    """Trim content for reranker input while trying to respect sentence boundaries."""
+
+    text = (content or "").strip()
+    if len(text) <= limit:
+        return text
+
+    cutoff = -1
+    boundary_markers = ["\n", "。", "！", "!", "?", "？", "."]
+    for marker in boundary_markers:
+        idx = text.rfind(marker, 0, limit)
+        if idx > cutoff:
+            cutoff = idx
+
+    if cutoff >= int(limit * 0.6):
+        return text[: cutoff + 1].strip()
+
+    return text[:limit].rstrip()
+
 
 def _mmr_select(
     candidates: List[RetrievedChunk],
@@ -400,7 +427,7 @@ async def search_similar_chunks(
     )
     
     logger.debug("rag_lang_status %s", lingua_status(config_map))
-    q_lang = detect_language(query, config_map)
+    q_lang = _detect_language(query, config_map)
     q_emb = (await run_in_threadpool(_model.encode, [query], normalize_embeddings=True))[0]
 
     oversample = max(top_k * oversample_factor, top_k)
@@ -430,9 +457,11 @@ async def search_similar_chunks(
         distance_val = float(distance)
         similarity = max(0.0, 1.0 - distance_val)
         score = similarity
+        language_bonus_value = 0.0
         chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
         if q_lang and chunk_lang and chunk_lang == q_lang:
-            score += language_bonus
+            language_bonus_value = language_bonus
+            score += language_bonus_value
         embedding_vector = np.array(chunk.embedding, dtype=np.float32)
         candidates.append(
             RetrievedChunk(
@@ -441,6 +470,8 @@ async def search_similar_chunks(
                 similarity=similarity,
                 score=score,
                 embedding=embedding_vector,
+                language_bonus=language_bonus_value,
+                coarse_score=score,
             )
         )
 
@@ -448,21 +479,29 @@ async def search_similar_chunks(
     if not filtered:
         return []
 
-    rerank_stats: dict[str, Any] = {}
-    original_scores: list[float] = [item.score for item in filtered]
+    filtered.sort(key=lambda item: item.score, reverse=True)
 
-    if rerank_enabled:
+    rerank_stats: dict[str, Any] = {}
+
+    if rerank_enabled and filtered:
         start_time = time.perf_counter()
-        baseline_filtered = list(filtered)
+        rerank_limit = min(len(filtered), rerank_candidates)
+        head = filtered[:rerank_limit]
+        tail = filtered[rerank_limit:]
+        rerank_stats = {
+            "rerank_candidates": len(head),
+            "rerank_threshold": rerank_score_threshold,
+        }
+
+        rerank_scores: list[float] = []
         try:
             reranker = _get_reranker()
             pairs = []
-            for item in baseline_filtered:
-                content = (item.chunk.content or "").strip()
-                preview = content[:512]
+            for item in head:
+                content = getattr(item.chunk, "content", "") or ""
+                preview = _build_rerank_preview(content)
                 pairs.append([query, preview])
 
-            rerank_scores: list[float] = []
             for batch_pairs in _batched(pairs, rerank_max_batch):
                 raw_scores = await run_in_threadpool(
                     reranker.predict,
@@ -473,60 +512,54 @@ async def search_similar_chunks(
                 )
                 for raw in raw_scores:
                     rerank_scores.append(float(raw))
-
-            if rerank_scores:
-                probabilities = [_sigmoid(score) for score in rerank_scores]
-                for item, prob in zip(baseline_filtered, probabilities):
-                    item.rerank_score = prob
-                    item.score = prob
-
-                filtered = [
-                    item
-                    for item in baseline_filtered
-                    if item.rerank_score is not None and item.rerank_score >= rerank_score_threshold
-                ]
-
-                rerank_stats = {
-                    "rerank_candidates": len(baseline_filtered),
-                    "rerank_kept": len(filtered),
-                    "rerank_avg_score": float(
-                        sum(item.rerank_score for item in filtered) / len(filtered)
-                    )
-                    if filtered
-                    else 0.0,
-                    "rerank_duration_ms": round((time.perf_counter() - start_time) * 1000, 3),
-                    "rerank_threshold": rerank_score_threshold,
-                }
-
-                if not filtered:
-                    filtered = baseline_filtered
-                    for item, original in zip(filtered, original_scores):
-                        item.score = original
-                        item.rerank_score = None
-            else:
-                filtered = baseline_filtered
-                for item, original in zip(filtered, original_scores):
-                    item.score = original
-                    item.rerank_score = None
-
         except Exception as exc:  # pragma: no cover - safety fallback
             logger.warning(
                 "Cross-encoder rerank failed: %s", exc, exc_info=logger.isEnabledFor(logging.DEBUG)
             )
-            filtered = baseline_filtered
-            for item, original in zip(filtered, original_scores):
-                item.score = original
+            rerank_scores.clear()
+
+        rerank_stats["rerank_duration_ms"] = round(
+            (time.perf_counter() - start_time) * 1000, 3
+        )
+
+        if rerank_scores:
+            probabilities = [_sigmoid(score) for score in rerank_scores]
+            above_threshold = sum(prob >= rerank_score_threshold for prob in probabilities)
+            for item, prob in zip(head, probabilities):
+                item.rerank_score = prob
+                coarse_without_bonus = max(0.0, item.coarse_score - item.language_bonus)
+                adjusted = prob
+                if prob < rerank_score_threshold:
+                    adjusted = (prob + coarse_without_bonus) / 2.0
+                item.score = adjusted + item.language_bonus
+
+            for leftover in head[len(probabilities) :]:
+                leftover.score = leftover.coarse_score
+                leftover.rerank_score = None
+
+            rerank_stats.update(
+                {
+                    "rerank_above_threshold": above_threshold,
+                    "rerank_below_threshold": len(probabilities) - above_threshold,
+                    "rerank_avg_score": float(
+                        sum(probabilities) / len(probabilities)
+                    ),
+                }
+            )
+        else:
+            for item in head:
+                item.score = item.coarse_score
                 item.rerank_score = None
 
-    # 预排序提升 MMR 起点（此处 score 已根据 rerank 可能更新）
-    filtered.sort(key=lambda item: item.score, reverse=True)
+        filtered = head + tail
+        filtered.sort(key=lambda item: item.score, reverse=True)
 
     selected = _mmr_select(filtered, top_k, mmr_lambda, per_doc_limit)
 
     if not selected:
         return []
 
-    selected.sort(key=lambda item: (item.score, item.similarity), reverse=True)
+    selected.sort(key=lambda item: (item.mmr_score, item.score, item.similarity), reverse=True)
 
     logger.debug(
         "rag_retrieval",

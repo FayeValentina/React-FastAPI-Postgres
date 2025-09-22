@@ -161,13 +161,26 @@ async def search_knowledge(
     logger.info("rag_strategy", extra=strategy.to_log_dict())
 
     strategy_config = strategy.config
-    raw_top_k = strategy_config.get("RAG_TOP_K", payload.top_k)
+    user_top_k = max(1, payload.top_k)
+    strategy_top_k_raw = strategy_config.get("RAG_TOP_K")
+    strategy_top_k: int | None
     try:
-        top_k_value = int(raw_top_k)
+        strategy_top_k = int(strategy_top_k_raw)
     except (TypeError, ValueError):
-        top_k_value = payload.top_k
-    if top_k_value <= 0:
-        top_k_value = payload.top_k
+        strategy_top_k = None
+
+    if strategy_top_k is not None and strategy_top_k > 0:
+        top_k_value = max(user_top_k, strategy_top_k)
+    else:
+        top_k_value = user_top_k
+
+    max_candidates_raw = strategy_config.get("RAG_MAX_CANDIDATES", settings.RAG_MAX_CANDIDATES)
+    try:
+        max_candidates = int(max_candidates_raw)
+    except (TypeError, ValueError):
+        max_candidates = settings.RAG_MAX_CANDIDATES
+    if max_candidates > 0:
+        top_k_value = min(top_k_value, max_candidates)
 
     results = await search_similar_chunks(
         db,
