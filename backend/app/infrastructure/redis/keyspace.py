@@ -93,10 +93,28 @@ class _SchedulerKeys:
         return f"scheduled_task:{config_id}:{uid}"
 
 
+class _AppKeys:
+    """Application-scoped keys using the shared "app:" namespace."""
+
+    PREFIX = "app:"
+    DYNAMIC_SETTINGS_KEY = "dynamic_settings"
+
+    def dynamic_settings(self) -> str:
+        """Primary key storing the JSON blob of dynamic settings."""
+
+        return f"{self.PREFIX}{self.DYNAMIC_SETTINGS_KEY}"
+
+    def dynamic_settings_metadata(self) -> str:
+        """Metadata companion key (e.g., updated timestamps)."""
+
+        return f"{self.dynamic_settings()}:meta"
+
+
 class RedisKeys:
     """Root container for key helpers."""
 
     def __init__(self) -> None:
+        self.app = _AppKeys()
         self.auth = _AuthKeys()
         self.cache = _CacheKeys()
         self.scheduler = _SchedulerKeys()

@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
 import datetime
 from fastapi import FastAPI, Depends, Request
-# 删除 CORS 导入
-# from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api import router
 from app.core.config import settings
@@ -11,7 +9,6 @@ from app.api.middleware.auth import AuthMiddleware, DEFAULT_EXCLUDE_PATHS
 from app.core.logging import setup_logging
 from app.core.exceptions import ApiError, AuthenticationError
 from app.infrastructure.utils.common import create_exception_handlers
-# from app.core.task_manager import task_manager  # 已删除，使用新架构
 from app.broker import broker
 from app.infrastructure.redis.redis_pool import redis_connection_manager
 from app.infrastructure.scheduler.scheduler import scheduler_service
@@ -39,7 +36,16 @@ async def lifespan(app: FastAPI):
         await redis_connection_manager.initialize()
         await scheduler_service.initialize()
         logger.info("Redis连接池和调度器初始化成功")
-        
+
+        try:
+            from app.infrastructure.dynamic_settings import get_dynamic_settings_service
+
+            dynamic_settings_service = get_dynamic_settings_service()
+            await dynamic_settings_service.refresh()
+            logger.info("动态配置缓存预热成功")
+        except Exception as exc:
+            logger.warning(f"动态配置缓存预热失败: {exc}")
+
         # 运行启动时维护流程：清理遗留、清理孤儿、确保默认实例
         try:
             legacy = await scheduler_service.cleanup_legacy_artifacts()
@@ -95,7 +101,7 @@ app = FastAPI(
 # 设置中间件（注意顺序很重要）
 # 中间件的执行顺序与添加顺序相反
 
-# 1. 请求/响应日志记录中间件 (最后执行，最先完成)
+# 请求/响应日志记录中间件 (最后执行，最先完成)
 # 这允许记录所有请求和响应，包括其他中间件添加的信息
 app.add_middleware(
     RequestResponseLoggingMiddleware,
@@ -113,16 +119,7 @@ app.add_middleware(
     ]
 )
 
-# 2. 删除整个 CORS 中间件配置
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=settings.cors.ORIGINS,
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
-# 3. JWT认证中间件
+# JWT认证中间件
 app.add_middleware(
     AuthMiddleware,
     exclude_paths=DEFAULT_EXCLUDE_PATHS  # 使用集中定义的排除路径列表

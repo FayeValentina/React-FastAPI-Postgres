@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.knowledge_base.schemas import (
     KnowledgeDocumentCreate,
@@ -14,6 +17,10 @@ from app.modules.knowledge_base.schemas import (
 )
 from app.modules.knowledge_base import models
 from app.modules.knowledge_base.repository import crud_knowledge_base
+from app.infrastructure.dynamic_settings import (
+    DynamicSettingsService,
+    get_dynamic_settings_service,
+)
 from app.modules.knowledge_base.service import (
     ingest_document_content,
     ingest_document_file,
@@ -21,9 +28,14 @@ from app.modules.knowledge_base.service import (
     update_chunk,
     delete_chunk,
 )
+from app.modules.knowledge_base.strategy import (
+    StrategyContext,
+    resolve_rag_parameters,
+)
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/documents", response_model=KnowledgeDocumentRead, status_code=201)
@@ -35,7 +47,12 @@ async def create_knowledge_document(payload: KnowledgeDocumentCreate, db: AsyncS
 
 
 @router.post("/documents/{document_id}/ingest", response_model=KnowledgeIngestResult, status_code=201)
-async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest, db: AsyncSession = Depends(get_async_session)):
+async def ingest_content(
+    document_id: int,
+    body: KnowledgeDocumentIngestRequest,
+    db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
+):
     # 简单校验文档存在
     exist = await db.get(models.KnowledgeDocument, document_id)
     if not exist:
@@ -46,6 +63,7 @@ async def ingest_content(document_id: int, body: KnowledgeDocumentIngestRequest,
         body.content,
         overwrite=body.overwrite,
         document=exist,
+        dynamic_settings_service=dynamic_settings_service,
     )
     return {"document_id": document_id, "chunks": count}
 
@@ -56,6 +74,7 @@ async def ingest_content_upload(
     file: UploadFile = File(...),
     overwrite: bool = Form(False),
     db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     exist = await db.get(models.KnowledgeDocument, document_id)
     if not exist:
@@ -68,6 +87,7 @@ async def ingest_content_upload(
             file,
             overwrite=overwrite,
             document=exist,
+            dynamic_settings_service=dynamic_settings_service,
         )
     except ValueError as exc:
         reason = str(exc)
@@ -122,8 +142,40 @@ async def patch_document(
 async def search_knowledge(
     payload: KnowledgeSearchRequest,
     db: AsyncSession = Depends(get_async_session),
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
-    results = await search_similar_chunks(db, query=payload.query, top_k=payload.top_k)
+    try:
+        base_config = await dynamic_settings_service.get_all()
+    except Exception:
+        base_config = settings.dynamic_settings_defaults()
+
+    strategy = await resolve_rag_parameters(
+        payload.query,
+        base_config,
+        request_ctx=StrategyContext(
+            top_k_request=payload.top_k,
+            channel="rest",
+        ),
+    )
+
+    logger.info("rag_strategy", extra=strategy.to_log_dict())
+
+    strategy_config = strategy.config
+    raw_top_k = strategy_config.get("RAG_TOP_K", payload.top_k)
+    try:
+        top_k_value = int(raw_top_k)
+    except (TypeError, ValueError):
+        top_k_value = payload.top_k
+    if top_k_value <= 0:
+        top_k_value = payload.top_k
+
+    results = await search_similar_chunks(
+        db,
+        query=payload.query,
+        top_k=top_k_value,
+        dynamic_settings_service=dynamic_settings_service,
+        config=strategy_config,
+    )
     return [item.chunk for item in results]
 
 

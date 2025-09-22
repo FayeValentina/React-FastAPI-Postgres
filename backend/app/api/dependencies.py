@@ -147,5 +147,3 @@ async def get_current_user_from_ws(
         raise InactiveUserError()
 
     return user
-
-    
