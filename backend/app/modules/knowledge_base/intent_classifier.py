@@ -33,8 +33,10 @@ def _clamp01(x: float | None) -> float | None:
         v = float(x)
     except (TypeError, ValueError):
         return None
-    if v < 0.0: v = 0.0
-    if v > 1.0: v = 1.0
+    if v < 0.0: 
+        v = 0.0
+    if v > 1.0: 
+        v = 1.0
     # 保留两位小数（与提示词一致）
     return float(f"{v:.2f}")
 
