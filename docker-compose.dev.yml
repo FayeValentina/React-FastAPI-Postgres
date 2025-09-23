@@ -73,6 +73,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
+      - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
+      - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - RERANKER_MODEL=${RERANKER_MODEL}
       - RAG_TOP_K=${RAG_TOP_K:-3}
@@ -87,17 +89,12 @@ services:
         condition: service_healthy
       llama_server:
         condition: service_healthy
-      spacy_init:
-        condition: service_completed_successfully
+      clf_server:
+        condition: service_healthy
       embeddings_init:
         condition: service_completed_successfully
     command: >
       bash -c "
-        MODEL_URL=\"$${SPACY_MODEL_URL}\" &&
-        MODEL_FILE=$$(basename \"$${MODEL_URL}\") &&
-        echo '安装本地 spaCy 模型...' &&
-        echo \" - pip install /models/$${MODEL_FILE}\" &&
-        poetry run pip install /models/$${MODEL_FILE} || true &&
         echo '等待数据库准备...' &&
         echo '应用数据库迁移...' &&
         poetry run alembic upgrade head &&
@@ -239,26 +236,12 @@ services:
       - HF_REPO_ID=${HF_REPO_ID}
       - HF_FILENAME=${HF_FILENAME}
       - HF_REVISION=${HF_REVISION:-main}
+      - CLASSIFIER_REPO_ID=${CLASSIFIER_REPO_ID}
+      - CLASSIFIER_FILENAME=${CLASSIFIER_FILENAME}
+      - CLASSIFIER_REVISION=${CLASSIFIER_REVISION:-main}
       - PIP_NO_CACHE_DIR=1
       - HF_HUB_ENABLE_HF_TRANSFER=1
     command: ["sh", "/entry-scripts/llm_init.sh"]
-    volumes:
-      - models_data:/models
-      - ./scripts:/entry-scripts:ro
-    restart: "no"
-    networks:
-      - dbNetWork
-
-  # 预下载 spaCy 模型（一次性执行，完成即退出）
-  spacy_init:
-    image: python:3.11-slim
-    env_file:
-      - .env.dev
-    environment:
-      - SPACY_MODEL_URL=${SPACY_MODEL_URL}
-      - PIP_NO_CACHE_DIR=1
-      - PIP_DEFAULT_TIMEOUT=1200
-    command: ["sh", "/entry-scripts/spacy_init.sh"]
     volumes:
       - models_data:/models
       - ./scripts:/entry-scripts:ro
@@ -288,13 +271,47 @@ services:
       - --host
       - 0.0.0.0
       - --ctx-size
-      - "8192"
+      - "16384"
       - --parallel
       - "2"
       - --api-key
       - ${LLM_API_KEY}
     expose:
       - "8080"
+    volumes:
+      - models_data:/models:ro
+    restart: unless-stopped
+    networks:
+      - dbNetWork
+
+  clf_server:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    env_file:
+      - .env.dev
+    depends_on:
+      llm_init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/v1/models >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    command:
+      - --model
+      - /models/${CLASSIFIER_FILENAME}
+      - --port
+      - "8081"
+      - --host
+      - 0.0.0.0
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "1"
+      - --api-key
+      - ${CLASSIFIER_API_KEY}
+    expose:
+      - "8081"
     volumes:
       - models_data:/models:ro
     restart: unless-stopped
@@ -321,6 +338,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
+      - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -329,6 +348,8 @@ services:
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      clf_server:
         condition: service_healthy
       embeddings_init:
         condition: service_completed_successfully
@@ -367,6 +388,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
+      - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -378,6 +401,8 @@ services:
         condition: service_healthy
       taskiq_worker:
         condition: service_started
+      clf_server:
+        condition: service_healthy
       embeddings_init:
         condition: service_completed_successfully
     command: >

@@ -323,6 +323,8 @@ class Settings(BaseSettings):
     # LLM / RAG 配置（简单直挂根 Settings，便于直接引用）
     LLM_BASE_URL: str = "http://llama_server:8080/v1"
     LLM_API_KEY: str = "sk-local"
+    CLASSIFIER_BASE_URL: str = "http://clf_server:8081/v1"
+    CLASSIFIER_API_KEY: str = "sk-classifier"
     # 默认从 HF_FILENAME 读取，避免变量不同步
     LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
@@ -350,7 +352,9 @@ class Settings(BaseSettings):
     RAG_IVFFLAT_PROBES: int = Field(default=10)
     RAG_USE_LINGUA: bool = Field(default=False)
     RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
-    RAG_STRATEGY_LLM_CLASSIFIER_MODEL: str = Field(default="gemma-3-4b-it-q4_0.gguf")
+    RAG_STRATEGY_LLM_CLASSIFIER_MODEL: str = Field(
+        default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-1b-it-q4_0.gguf"),
+    )
     RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS: int = Field(default=20000)
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
 

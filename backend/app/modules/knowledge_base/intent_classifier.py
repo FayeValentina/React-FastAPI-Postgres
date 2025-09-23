@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple, TYPE_CHECKING
 
 from app.core.config import settings
-from app.modules.llm.client import client
+from app.modules.llm.client import classifier_client
 
 if TYPE_CHECKING:  # pragma: no cover - circular import guard
     from .strategy import StrategyContext
@@ -145,7 +145,7 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
     for attempt in range(max_attempts):
         try:
             response = await asyncio.wait_for(
-                client.chat.completions.create(
+                classifier_client.chat.completions.create(
                     model=settings.RAG_STRATEGY_LLM_CLASSIFIER_MODEL,
                     messages=[
                         {"role": "system", "content": PROMPT_TEMPLATE},
