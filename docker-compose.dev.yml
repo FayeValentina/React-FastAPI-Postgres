@@ -71,8 +71,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_API_KEY=${LLM_API_KEY}
+      - CHAT_BASE_URL=${CHAT_BASE_URL}
+      - CHAT_API_KEY=${CHAT_API_KEY}
       - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
       - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
@@ -87,7 +87,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      llama_server:
+      chat_server:
         condition: service_healthy
       clf_server:
         condition: service_healthy
@@ -233,9 +233,9 @@ services:
       - .env.dev
     environment:
       - HF_TOKEN=${HF_TOKEN}
-      - HF_REPO_ID=${HF_REPO_ID}
-      - HF_FILENAME=${HF_FILENAME}
-      - HF_REVISION=${HF_REVISION:-main}
+      - CHAT_REPO_ID=${CHAT_REPO_ID}
+      - CHAT_FILENAME=${CHAT_FILENAME}
+      - CHAT_REVISION=${CHAT_REVISION:-main}
       - CLASSIFIER_REPO_ID=${CLASSIFIER_REPO_ID}
       - CLASSIFIER_FILENAME=${CLASSIFIER_FILENAME}
       - CLASSIFIER_REVISION=${CLASSIFIER_REVISION:-main}
@@ -250,7 +250,7 @@ services:
       - dbNetWork
 
   # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
-  llama_server:
+  chat_server:
     image: ghcr.io/ggerganov/llama.cpp:server
     env_file:
       - .env.dev
@@ -265,7 +265,7 @@ services:
       start_period: 15s
     command:
       - --model
-      - /models/${HF_FILENAME}
+      - /models/${CHAT_FILENAME}
       - --port
       - "8080"
       - --host
@@ -275,7 +275,7 @@ services:
       - --parallel
       - "2"
       - --api-key
-      - ${LLM_API_KEY}
+      - ${CHAT_API_KEY}
     expose:
       - "8080"
     volumes:

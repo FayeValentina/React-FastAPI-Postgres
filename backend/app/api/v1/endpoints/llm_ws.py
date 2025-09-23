@@ -167,7 +167,7 @@ async def ws_chat(
             acc: list[str] = []
             try:
                 stream = await client.chat.completions.create(
-                    model=settings.LLM_MODEL,
+                    model=settings.CHAT_MODEL,
                     messages=[{"role": "system", "content": system_prompt}] + history,
                     temperature=temperature,
                     stream=True,

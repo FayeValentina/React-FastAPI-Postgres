@@ -88,11 +88,11 @@ def ensure_models(targets: List[dict]) -> None:
 def main() -> None:
     targets: List[dict] = []
 
-    primary = build_target("primary", "HF_REPO_ID", "HF_FILENAME", "HF_REVISION", "HF_TOKEN")
+    primary = build_target("primary", "CHAT_REPO_ID", "CHAT_FILENAME", "CHAT_REVISION", "HF_TOKEN")
     if primary:
         targets.append(primary)
 
-    classifier = build_target("classifier", "CLASSIFIER_REPO_ID", "CLASSIFIER_FILENAME", "CLASSIFIER_REVISION", "CLASSIFIER_TOKEN")
+    classifier = build_target("classifier", "CLASSIFIER_REPO_ID", "CLASSIFIER_FILENAME", "CLASSIFIER_REVISION", "HF_TOKEN")
     if classifier:
         targets.append(classifier)
 
