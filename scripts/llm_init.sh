@@ -3,69 +3,108 @@ set -eu
 # Best-effort enable pipefail if supported by the shell
 set -o pipefail 2>/dev/null || true
 
-# This script downloads a Hugging Face file into /models if not present.
-# Env vars expected:
-# - HF_REPO_ID (required)
-# - HF_FILENAME (optional; if unset, does nothing)
-# - HF_REVISION (optional; defaults to main)
-# - HF_TOKEN (optional)
+# This script downloads Hugging Face GGUF models into /models.
+# It supports downloading the primary chat model (HF_*) and an optional
+# classifier model (CLASSIFIER_*). Any other *.gguf files in /models will be
+# removed to avoid mixing incompatible artifacts.
 
 echo "[llm_init] starting..."
 
-# Quick no-op if HF_FILENAME is unset
-if [ "${HF_FILENAME:-}" = "" ]; then
-  echo "[llm_init] HF_FILENAME is not set; nothing to do."
-  exit 0
-fi
-
-mkdir -p /models
-
-# Cleanup: keep only the target .gguf, remove other .gguf files
-echo "[llm_init] Cleaning up stale .gguf models in /models (keeping: ${HF_FILENAME}) ..."
-for f in /models/*.gguf; do
-  [ -e "$f" ] || break
-  bn="$(basename "$f")"
-  if [ "$bn" = "$HF_FILENAME" ]; then
-    echo "[llm_init] keep: $bn"
-  else
-    echo "[llm_init] remove: $bn"
-    rm -f -- "$f" || true
-  fi
-done
-
-if [ -f "/models/${HF_FILENAME}" ]; then
-  echo "[llm_init] Model already present: /models/${HF_FILENAME}"
-  ls -lh /models || true
-  exit 0
-fi
-
-echo "[llm_init] Installing huggingface_hub (with hf_transfer)..."
 python -m pip install -q "huggingface_hub[hf_transfer]"
 
-echo "[llm_init] Downloading ${HF_FILENAME} from repo ${HF_REPO_ID} (rev=${HF_REVISION:-main})..."
+echo "[llm_init] preparing downloads..."
+
 python - <<'PY'
+import os
+import shutil
+from pathlib import Path
+from typing import List
+
 from huggingface_hub import hf_hub_download
-import os, os.path as p, shutil
 
-repo = os.environ.get("HF_REPO_ID")
-fn = os.environ.get("HF_FILENAME")
-rev = os.environ.get("HF_REVISION", "main")
-token = os.environ.get("HF_TOKEN")
 
-if not fn:
-    print("HF_FILENAME is not set; nothing to do.")
-    raise SystemExit(0)
+def build_target(label: str, repo_var: str, filename_var: str, revision_var: str, token_var: str) -> dict | None:
+    filename = os.getenv(filename_var)
+    if not filename:
+        print(f"[llm_init] {label} filename not set; skipping.")
+        return None
 
-if not repo:
-    print("HF_REPO_ID is not set; cannot download. Exiting.")
-    raise SystemExit(1)
+    repo = os.getenv(repo_var)
+    if not repo:
+        raise SystemExit(f"[llm_init] {label} repo variable {repo_var} is not set; cannot download {filename}.")
 
-path = hf_hub_download(repo_id=repo, filename=fn, revision=rev, token=token)
-os.makedirs("/models", exist_ok=True)
-dst = f"/models/{fn}"
-if p.abspath(path) != p.abspath(dst):
-    shutil.copy2(path, dst)
-print("[llm_init] Downloaded:", dst)
+    revision = os.getenv(revision_var, "main")
+    token = os.getenv(token_var) or os.getenv("HF_TOKEN")
+    return {
+        "label": label,
+        "repo": repo,
+        "filename": filename,
+        "revision": revision,
+        "token": token,
+    }
+
+
+def ensure_models(targets: List[dict]) -> None:
+    models_dir = Path("/models")
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    target_files = {target["filename"] for target in targets}
+    for path in models_dir.glob("*.gguf"):
+        if path.name in target_files:
+            print(f"[llm_init] keep existing model: {path.name}")
+        else:
+            print(f"[llm_init] remove stale model: {path.name}")
+            path.unlink(missing_ok=True)
+
+    for target in targets:
+        dst = models_dir / target["filename"]
+        if dst.exists():
+            print(f"[llm_init] Model already present: {dst}")
+            continue
+
+        print(
+            f"[llm_init] Downloading {target['filename']} from {target['repo']} "
+            f"(rev={target['revision']}) for {target['label']}..."
+        )
+        downloaded = hf_hub_download(
+            repo_id=target["repo"],
+            filename=target["filename"],
+            revision=target["revision"],
+            token=target["token"],
+        )
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        downloaded_path = Path(downloaded)
+        if downloaded_path.resolve() != dst.resolve():
+            shutil.copy2(downloaded_path, dst)
+            print(f"[llm_init] Copied to {dst}")
+        else:
+            print(f"[llm_init] Downloaded to {dst}")
+
+    print("[llm_init] Models available:")
+    for path in sorted(models_dir.glob("*.gguf")):
+        print(f" - {path.name}")
+
+
+def main() -> None:
+    targets: List[dict] = []
+
+    primary = build_target("primary", "CHAT_REPO_ID", "CHAT_FILENAME", "CHAT_REVISION", "HF_TOKEN")
+    if primary:
+        targets.append(primary)
+
+    classifier = build_target("classifier", "CLASSIFIER_REPO_ID", "CLASSIFIER_FILENAME", "CLASSIFIER_REVISION", "HF_TOKEN")
+    if classifier:
+        targets.append(classifier)
+
+    if not targets:
+        print("[llm_init] No models requested; exiting.")
+        return
+
+    ensure_models(targets)
+
+
+if __name__ == "__main__":
+    main()
 PY
 
 ls -lh /models || true

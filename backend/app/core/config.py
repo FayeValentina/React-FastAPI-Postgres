@@ -321,10 +321,13 @@ class Settings(BaseSettings):
     DB_ECHO_LOG: bool = True
 
     # LLM / RAG 配置（简单直挂根 Settings，便于直接引用）
-    LLM_BASE_URL: str = "http://llama_server:8080/v1"
-    LLM_API_KEY: str = "sk-local"
-    # 默认从 HF_FILENAME 读取，避免变量不同步
-    LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
+    CHAT_BASE_URL: str = "http://chat_server:8080/v1"
+    CHAT_API_KEY: str = "sk-local"
+    CLASSIFIER_BASE_URL: str = "http://clf_server:8081/v1"
+    CLASSIFIER_API_KEY: str = "sk-classifier"
+    # 默认从 FILENAME 读取，避免变量不同步
+    CHAT_MODEL: str = Field(default_factory=lambda: os.getenv("CHAT_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
+    CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-1b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
     RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-base")
     RAG_STRATEGY_ENABLED: bool = Field(default=False)
@@ -350,8 +353,7 @@ class Settings(BaseSettings):
     RAG_IVFFLAT_PROBES: int = Field(default=10)
     RAG_USE_LINGUA: bool = Field(default=False)
     RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
-    RAG_STRATEGY_LLM_CLASSIFIER_MODEL: str = Field(default="gemma-3-4b-it-q4_0.gguf")
-    RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS: int = Field(default=20000)
+    RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS: int = Field(default=10000)
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
 
     model_config = SettingsConfigDict(
