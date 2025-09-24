@@ -113,9 +113,10 @@ async def ws_chat(
             top_k_value = max(1, top_k_value)
 
             try:
+                effective_query = strategy.processed_query or user_text
                 similar = await search_similar_chunks(
                     db,
-                    user_text,
+                    effective_query,
                     top_k_value,
                     dynamic_settings_service=dynamic_settings_service,
                     config=strategy_config,
