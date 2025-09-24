@@ -20,15 +20,15 @@ from app.modules.knowledge_base.strategy import (
 
 BASE_CONFIG = {
     "RAG_STRATEGY_ENABLED": True,
-    "RAG_TOP_K": 5,
-    "RAG_PER_DOC_LIMIT": 1,
+    "RAG_TOP_K": 8,
+    "RAG_PER_DOC_LIMIT": 3,
     "RAG_MIN_SIM": 0.4,
     "RAG_OVERSAMPLE": 5,
     "RAG_MAX_CANDIDATES": 100,
     "RAG_RERANK_CANDIDATES": 40,
     "RAG_RERANK_SCORE_THRESHOLD": 0.5,
-    "RAG_CONTEXT_MAX_EVIDENCE": 12,
-    "RAG_CONTEXT_TOKEN_BUDGET": 2000,
+    "RAG_CONTEXT_MAX_EVIDENCE": 18,
+    "RAG_CONTEXT_TOKEN_BUDGET": 2600,
 }
 
 
@@ -51,15 +51,15 @@ def test_strategy_broad_query_increases_top_k_and_relaxes_threshold():
     result = asyncio.run(resolve_rag_parameters(query, BASE_CONFIG, request_ctx=ctx))
 
     assert result.scenario == "broad"
-    assert result.overrides["RAG_TOP_K"] == 9
-    assert result.overrides["RAG_PER_DOC_LIMIT"] == 3
+    assert result.overrides["RAG_TOP_K"] == 14
+    assert result.overrides["RAG_PER_DOC_LIMIT"] == 5
     assert result.overrides["RAG_MIN_SIM"] == pytest.approx(0.3)
-    assert result.overrides["RAG_OVERSAMPLE"] == 7
-    assert result.overrides["RAG_MAX_CANDIDATES"] == 108
-    assert result.overrides["RAG_RERANK_CANDIDATES"] == 54
+    assert result.overrides["RAG_OVERSAMPLE"] == 14
+    assert result.overrides["RAG_MAX_CANDIDATES"] == 168
+    assert result.overrides["RAG_RERANK_CANDIDATES"] == 84
     assert result.overrides["RAG_RERANK_SCORE_THRESHOLD"] == pytest.approx(0.45)
-    assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 18
-    assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 2800
+    assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 20
+    assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 3200
 
 
 def test_strategy_precise_query_focuses_results():
@@ -69,15 +69,15 @@ def test_strategy_precise_query_focuses_results():
     result = asyncio.run(resolve_rag_parameters(query, BASE_CONFIG, request_ctx=ctx))
 
     assert result.scenario == "precise"
-    assert result.overrides["RAG_TOP_K"] == 3
-    assert result.overrides["RAG_PER_DOC_LIMIT"] == 5
+    assert result.overrides["RAG_TOP_K"] == 9
+    assert result.overrides["RAG_PER_DOC_LIMIT"] == 4
     assert result.overrides["RAG_MIN_SIM"] == pytest.approx(0.55, rel=1e-3)
-    assert result.overrides["RAG_OVERSAMPLE"] == 3
-    assert result.overrides["RAG_MAX_CANDIDATES"] == 80
-    assert result.overrides["RAG_RERANK_CANDIDATES"] == 9
-    assert "RAG_RERANK_SCORE_THRESHOLD" not in result.overrides
-    assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 10
-    assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 1800
+    assert result.overrides["RAG_OVERSAMPLE"] == 6
+    assert result.overrides["RAG_MAX_CANDIDATES"] == 126
+    assert result.overrides["RAG_RERANK_CANDIDATES"] == 54
+    assert result.overrides["RAG_RERANK_SCORE_THRESHOLD"] == pytest.approx(0.48)
+    assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 20
+    assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 2800
 
 
 def test_strategy_document_focus_raises_min_similarity():
@@ -87,13 +87,14 @@ def test_strategy_document_focus_raises_min_similarity():
     result = asyncio.run(resolve_rag_parameters(query, BASE_CONFIG, request_ctx=ctx))
 
     assert result.scenario == "document_focus"
-    assert result.overrides["RAG_PER_DOC_LIMIT"] == 6
+    assert result.overrides["RAG_PER_DOC_LIMIT"] == 8
+    assert result.overrides["RAG_TOP_K"] == 10
     assert result.overrides["RAG_MIN_SIM"] == pytest.approx(0.6)
     assert result.overrides["RAG_OVERSAMPLE"] == 6
-    assert result.overrides["RAG_MAX_CANDIDATES"] == 160
-    assert result.overrides["RAG_RERANK_CANDIDATES"] == 80
-    assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 16
-    assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 2600
+    assert result.overrides["RAG_MAX_CANDIDATES"] == 140
+    assert result.overrides["RAG_RERANK_CANDIDATES"] == 100
+    assert result.overrides["RAG_CONTEXT_MAX_EVIDENCE"] == 22
+    assert result.overrides["RAG_CONTEXT_TOKEN_BUDGET"] == 3200
 
 
 def test_strategy_error_path_falls_back(monkeypatch):
