@@ -169,58 +169,78 @@ def _apply_scenario(
     base_context_budget: int,
     ctx: StrategyContext,
 ) -> Dict[str, Any]:
-    request_top_k = _safe_int(ctx.top_k_request, base_top_k) if ctx.top_k_request else base_top_k
+    request_top_k = (
+        _safe_int(ctx.top_k_request, base_top_k)
+        if ctx.top_k_request is not None
+        else base_top_k
+    )
     overrides: Dict[str, Any] = {}
 
     if scenario == "broad":
-        top_k_target = max(base_top_k, request_top_k)
-        top_k_target = min(top_k_target + 4, 12)
+        top_k_target = max(base_top_k, request_top_k, 10)
+        top_k_target = min(top_k_target + 4, 16)
         overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 3)
+        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 5)
         overrides["RAG_MIN_SIM"] = max(0.2, base_min_sim - 0.1)
-        overrides["RAG_OVERSAMPLE"] = max(base_oversample, 7)
+        overrides["RAG_OVERSAMPLE"] = max(base_oversample, top_k_target)
         overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 12)
         overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
         overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.45)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(base_context_max_evidence, 18)
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 2800)
+        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
+            base_context_max_evidence, max(20, top_k_target)
+        )
+        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3200)
     elif scenario == "precise":
-        top_k_target = min(base_top_k, request_top_k)
-        top_k_target = max(3, top_k_target - 2)
+        top_k_target = min(max(base_top_k, request_top_k, 9), 14)
         overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 5)
-        overrides["RAG_MIN_SIM"] = min(0.9, base_min_sim + 0.15)
-        overrides["RAG_OVERSAMPLE"] = max(1, min(base_oversample, 3))
-        overrides["RAG_MAX_CANDIDATES"] = max(top_k_target * 3, min(base_max_candidates, 80))
-        overrides["RAG_RERANK_CANDIDATES"] = max(top_k_target, min(base_rerank_candidates, top_k_target * 3))
-        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.55)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(6, min(base_context_max_evidence, 10))
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(1200, min(base_context_budget, 1800))
+        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 4)
+        overrides["RAG_MIN_SIM"] = min(0.9, max(base_min_sim, 0.55))
+        oversample_target = max(base_oversample, max(6, top_k_target // 2 + 2))
+        overrides["RAG_OVERSAMPLE"] = oversample_target
+        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 14)
+        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
+        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.48)
+        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
+            base_context_max_evidence, max(20, top_k_target + 4)
+        )
+        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 2800)
     elif scenario == "document_focus":
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 6)
-        top_k_target = max(base_top_k, min(request_top_k, 8))
+        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 8)
+        top_k_target = min(max(base_top_k, request_top_k, 10), 18)
         overrides["RAG_TOP_K"] = top_k_target
         overrides["RAG_MIN_SIM"] = min(0.85, max(base_min_sim, 0.6))
-        overrides["RAG_OVERSAMPLE"] = max(base_oversample, 6)
-        max_candidates_target = max(base_max_candidates, 160)
+        overrides["RAG_OVERSAMPLE"] = max(base_oversample, max(6, top_k_target // 2))
+        max_candidates_target = max(base_max_candidates, top_k_target * 14)
         overrides["RAG_MAX_CANDIDATES"] = max_candidates_target
         rerank_target = max(
             base_rerank_candidates,
-            min(max_candidates_target, max(top_k_target * 6, 80)),
+            min(max_candidates_target, max(top_k_target * 7, 100)),
         )
         overrides["RAG_RERANK_CANDIDATES"] = rerank_target
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(base_context_max_evidence, 16)
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 2600)
+        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
+            base_context_max_evidence, max(22, top_k_target)
+        )
+        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3200)
     elif scenario == "question":
-        top_k_target = max(base_top_k, min(request_top_k + 2, 10))
+        top_k_target = min(max(base_top_k, request_top_k + 2, 10), 16)
+        overrides["RAG_TOP_K"] = top_k_target
+        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 5)
+        overrides["RAG_OVERSAMPLE"] = max(base_oversample, max(6, top_k_target // 2 + 2))
+        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 12)
+        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
+        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.45)
+        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
+            base_context_max_evidence, max(20, top_k_target)
+        )
+        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3000)
+    else:
+        top_k_target = min(max(base_top_k, request_top_k, 8), 16)
         overrides["RAG_TOP_K"] = top_k_target
         overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 4)
-        overrides["RAG_OVERSAMPLE"] = max(base_oversample, 5)
-        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 10)
-        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 5)
-        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.5)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(base_context_max_evidence, 14)
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 2400)
+        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
+            base_context_max_evidence, max(18, top_k_target)
+        )
+        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3000)
 
     return overrides
 
