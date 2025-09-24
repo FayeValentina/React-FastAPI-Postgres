@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_SCENARIOS = {"broad", "precise", "question", "document_focus", "unknown"}
 
+MAX_REWRITTEN_CHARS = 600
+
 def _to_snake_lower(s: str) -> str:
     s = (s or "").strip()
     if not s:
@@ -47,6 +49,17 @@ def _limit_words(reason: str | None, max_words: int = 60) -> str | None:
     if len(words) <= max_words:
         return reason.strip()
     return " ".join(words[:max_words]).strip()
+
+def _sanitize_rewritten_query(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) > MAX_REWRITTEN_CHARS:
+        text = text[:MAX_REWRITTEN_CHARS].rstrip()
+    return text
+
 
 def _sanitize_parsed_payload(parsed: Dict[str, Any]) -> Dict[str, Any]:
     # scenario
@@ -82,45 +95,50 @@ def _sanitize_parsed_payload(parsed: Dict[str, Any]) -> Dict[str, Any]:
         if len(norm) >= 5:
             break
 
+    rewritten_query = _sanitize_rewritten_query(parsed.get("rewritten_query"))
+
     return {
         "scenario": scenario,
         "confidence": confidence,
         "reason": reason,
         "tags": norm,
+        "rewritten_query": rewritten_query,
     }
 
 PROMPT_TEMPLATE = (
-    "You are an intent classification assistant for a RAG retrieval system.\n"
+    "You are a retrieval query processing assistant for a RAG system.\n"
     "Return a SINGLE compact JSON object ONLY, with EXACTLY these fields and no others:\n"
     "  - scenario: one of {broad, precise, question, document_focus, unknown}\n"
     "  - confidence: a float in [0,1], rounded to two decimals\n"
     "  - reason: <= 60 words, concise, in English\n"
     "  - tags: an array (0-5 items) of unique, lowercase strings (snake_case)\n"
+    "  - rewritten_query: a richer retrieval-ready rewrite of the user's query in the SAME language, 1-3 sentences, <= 120 words\n"
+    "\n"
+    "Rewrite guidance:\n"
+    "- Expand pronouns or vague references into explicit entities or actions.\n"
+    "- Include relevant technical keywords, context, constraints, or desired outputs from the user query.\n"
+    "- If the original query is already precise, you may return it unchanged.\n"
+    "- Keep the rewrite factual and avoid fabricating details that contradict the query.\n"
     "\n"
     "Rules:\n"
     "1) Do not include any extra keys, comments, markdown, or prose outside the JSON object.\n"
-    "2) If uncertain, set scenario=\"unknown\" and confidence<=0.5 with a brief reason.\n"
-    "3) Never echo the user query or payload fields back in the JSON.\n"
-    "4) Preferred mapping hints (non-binding):\n"
-    "   - broad: overviews, lists, comparisons without concrete target\n"
-    "   - precise: definition/lookup/step-by-step about a specific thing\n"
-    "   - question: explicit Q&A, troubleshooting, diagnostics\n"
-    "   - document_focus: the query targets a specific document/id/context\n"
-    "5) Keep tags topical (e.g., troubleshooting, procedural, compare, definition, api_usage),\n"
-    "   max 5, lowercase snake_case.\n"
+    "2) If uncertain about intent, set scenario=\"unknown\" and confidence<=0.5 with a brief reason, but still provide your best rewrite.\n"
+    "3) Never echo the entire payload or metadata fields.\n"
+    "4) Preferred mapping hints (non-binding): broad=overviews/comparisons, precise=definitions or targeted instructions, question=Q&A/troubleshooting, document_focus=specific document or identifier.\n"
+    "5) Keep tags topical (e.g., troubleshooting, procedural, compare, definition, api_usage), max 5, lowercase snake_case.\n"
     "\n"
-    "Output format (example shape only; values must reflect the input):\n"
-    "{\"scenario\":\"precise\",\"confidence\":0.92,\"reason\":\"User requests a specific explanation with actionable focus.\",\"tags\":[\"definition\",\"procedural\"]}\n"
+    "Output format (shape only; values must reflect the input):\n"
+    "{\"scenario\":\"precise\",\"confidence\":0.92,\"reason\":\"User requests a specific explanation with actionable focus.\",\"tags\":[\"definition\",\"procedural\"],\"rewritten_query\":\"Describe...\"}\n"
     "\n"
     "Few-shot calibration:\n"
     "USER: {\"query\":\"列出微服务最佳实践\",\"channel\":\"rest\"}\n"
-    "ASSISTANT: {\"scenario\":\"broad\",\"confidence\":0.88,\"reason\":\"Asks for a wide overview list, not a specific target.\",\"tags\":[\"overview\",\"best_practices\"]}\n"
+    "ASSISTANT: {\"scenario\":\"broad\",\"confidence\":0.88,\"reason\":\"Asks for an overview of recommended actions.\",\"tags\":[\"overview\",\"best_practices\"],\"rewritten_query\":\"列出微服务架构在生产环境中的核心最佳实践，包括服务拆分、部署、监控、容错和团队协作指南。\"}\n"
     "\n"
     "USER: {\"query\":\"PostgreSQL 连接池超时怎么排查？\",\"channel\":\"rest\"}\n"
-    "ASSISTANT: {\"scenario\":\"question\",\"confidence\":0.90,\"reason\":\"Troubleshooting intent with a clear problem.\",\"tags\":[\"troubleshooting\",\"database\"]}\n"
+    "ASSISTANT: {\"scenario\":\"question\",\"confidence\":0.90,\"reason\":\"Troubleshooting intent with a clear problem.\",\"tags\":[\"troubleshooting\",\"database\"],\"rewritten_query\":\"提供排查 PostgreSQL 生产环境连接池超时问题的步骤，重点涵盖常见错误日志、max_connections、statement_timeout 设置以及连接池监控指标。\"}\n"
     "\n"
     "USER: {\"query\":\"12-factor 中的端口绑定要点\",\"channel\":\"websocket\"}\n"
-    "ASSISTANT: {\"scenario\":\"precise\",\"confidence\":0.93,\"reason\":\"Specific concept explanation with focused scope.\",\"tags\":[\"definition\"]}\n"
+    "ASSISTANT: {\"scenario\":\"precise\",\"confidence\":0.93,\"reason\":\"Specific concept explanation with focused scope.\",\"tags\":[\"definition\"],\"rewritten_query\":\"解释 12-factor 应用中 Port Binding 原则的关键要点，包括应用如何独立绑定端口、避免依赖外部 web 服务器，以及在部署中的实践示例。\"}\n"
 )
 
 
@@ -131,6 +149,7 @@ class ClassificationResult:
     confidence: float | None
     reason: str | None
     tags: Tuple[str, ...] = ()
+    rewritten_query: str | None = None
     raw_response: Dict[str, Any] | None = None
     source: str = "llm"
     fallback: bool = False
@@ -146,6 +165,11 @@ class ClassificationResult:
             payload["reason"] = self.reason
         if self.tags:
             payload["tags"] = list(self.tags)
+        if self.rewritten_query:
+            preview = self.rewritten_query
+            if len(preview) > 160:
+                preview = preview[:157].rstrip() + "…"
+            payload["rewritten_query"] = preview
         if self.fallback:
             payload["fallback"] = True
         if self.error:
@@ -334,11 +358,13 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
     confidence_value = sanitized["confidence"]
     reason = sanitized["reason"]
     tags = tuple(sanitized["tags"])
+    rewritten_query = sanitized["rewritten_query"]
 
     return ClassificationResult(
         scenario=scenario,
         confidence=confidence_value,
         reason=reason,
         tags=tags,
+        rewritten_query=rewritten_query,
         raw_response={"parsed": parsed, "sanitized": sanitized},
     )

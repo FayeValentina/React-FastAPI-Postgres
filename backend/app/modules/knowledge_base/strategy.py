@@ -109,6 +109,7 @@ class StrategyResult:
     context: StrategyContext | None = None
     error: str | None = None
     classifier: Dict[str, Any] | None = None
+    processed_query: str | None = None
 
     def to_log_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -121,6 +122,11 @@ class StrategyResult:
             payload["error"] = self.error
         if self.classifier:
             payload["classifier"] = self.classifier
+        if self.processed_query:
+            preview = self.processed_query
+            if len(preview) > 160:
+                preview = preview[:157].rstrip() + "…"
+            payload["processed_query"] = preview
         return payload
 
 
@@ -276,6 +282,8 @@ async def resolve_rag_parameters(
             settings.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
         )
 
+        processed_query_text: str | None = None
+
         if classifier_enabled:
             threshold = _safe_float(
                 base.get("RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD"),
@@ -287,6 +295,8 @@ async def resolve_rag_parameters(
             classifier_result = await intent_classifier.classify(query, request_ctx)
             classifier_meta = classifier_result.to_log_dict()
             classifier_meta["threshold"] = round(threshold, 4)
+            if not classifier_result.fallback and classifier_result.rewritten_query:
+                processed_query_text = classifier_result.rewritten_query
 
             mapped_scenario, matched_label = _select_llm_scenario(classifier_result)
 
@@ -360,12 +370,16 @@ async def resolve_rag_parameters(
         merged = dict(base)
         merged.update(sanitized)
 
+        if not processed_query_text:
+            processed_query_text = None
+
         return StrategyResult(
             config=merged,
             overrides=sanitized,
             scenario=scenario,
             context=request_ctx,
             classifier=classifier_meta,
+            processed_query=processed_query_text,
         )
 
     except Exception as exc:  # pragma: no cover - safety net
