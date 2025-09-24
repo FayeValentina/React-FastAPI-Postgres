@@ -353,7 +353,6 @@ class Settings(BaseSettings):
     RAG_IVFFLAT_PROBES: int = Field(default=10)
     RAG_USE_LINGUA: bool = Field(default=False)
     RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
-    RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS: int = Field(default=10000)
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
 
     model_config = SettingsConfigDict(
