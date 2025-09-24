@@ -283,9 +283,9 @@ services:
       - --host
       - 0.0.0.0
       - --ctx-size
-      - "2048"
+      - "8192"
       - --parallel
-      - "1"
+      - "2"
       - --api-key
       - ${CLASSIFIER_API_KEY}
     expose:
