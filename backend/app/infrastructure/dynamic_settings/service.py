@@ -7,7 +7,7 @@ import logging
 import threading
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 from app.core.config import Settings, settings
 from app.infrastructure.redis.keyspace import redis_keys
@@ -166,6 +166,51 @@ class DynamicSettingsService:
     async def refresh(self) -> dict[str, Any]:
         """Refresh the cached snapshot from Redis and return the latest values."""
         return await self.get_all()
+
+    async def reset(self, keys: Iterable[str] | None = None) -> dict[str, Any]:
+        """Reset dynamic settings to defaults.
+
+        When ``keys`` is provided, only the specified settings are restored. When it is
+        omitted, all overrides are cleared and the defaults snapshot is returned.
+        """
+
+        defaults = self.defaults()
+
+        if keys is None:
+            # Clear the override document entirely and refresh metadata timestamp.
+            try:
+                await self._redis.ensure_connection()
+                await self._redis.delete(self._redis_key)
+            except Exception as exc:  # pragma: no cover - defensive
+                if isinstance(exc, asyncio.CancelledError):
+                    raise
+                logger.warning("Failed to clear dynamic settings overrides: %s", exc)
+
+            timestamp = datetime.now(timezone.utc).isoformat()
+            metadata = {
+                "updated_at": timestamp,
+                "updated_fields": sorted(defaults.keys()),
+            }
+            try:
+                await self._redis.set_json(self._meta_key, metadata)
+            except Exception as exc:  # pragma: no cover - defensive
+                if isinstance(exc, asyncio.CancelledError):
+                    raise
+                logger.warning("Failed to persist dynamic settings metadata after reset: %s", exc)
+
+            self._set_latest_effective(defaults)
+            return dict(defaults)
+
+        keys_set = {key for key in keys if key}
+        if not keys_set:
+            return await self.get_all()
+
+        invalid_keys = [key for key in keys_set if key not in defaults]
+        if invalid_keys:
+            raise ValueError(f"Unknown dynamic settings: {', '.join(sorted(invalid_keys))}")
+
+        updates = {key: defaults[key] for key in keys_set}
+        return await self.update(updates)
 
 
 @lru_cache(maxsize=1)

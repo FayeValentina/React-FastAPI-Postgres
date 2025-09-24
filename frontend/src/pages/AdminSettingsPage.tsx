@@ -9,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import RestoreIcon from '@mui/icons-material/Restore';
 
 import ManagementLayout from '../components/Layout/ManagementLayout';
 import { useAuthStore } from '../stores/auth-store';
@@ -27,6 +28,7 @@ import {
 } from '../types/adminSettings';
 
 const SETTINGS_URL = '/v1/admin/settings';
+const RESET_URL = '/v1/admin/settings/reset';
 
 type SnackbarState = {
   open: boolean;
@@ -82,7 +84,7 @@ const coerceValueForDefinition = (
 
 const AdminSettingsPage: React.FC = () => {
   const { user } = useAuthStore();
-  const { fetchData, putData, getApiState, setError } = useApiStore();
+  const { fetchData, putData, postData, getApiState, setError, setData } = useApiStore();
 
   const [selectedKey, setSelectedKey] = useState<AdminSettingKey | null>(null);
   const [saving, setSaving] = useState(false);
@@ -171,12 +173,53 @@ const AdminSettingsPage: React.FC = () => {
     await applyUpdate(selectedKey, value);
   };
 
-  const handleResetToDefault = async (defaultValueParam: number | boolean) => {
+  const resetSettings = useCallback(
+    async (keys?: AdminSettingKey[], successMessage?: string) => {
+      setSaving(true);
+      try {
+        const payload = keys && keys.length > 0 ? { keys } : {};
+        const response = await postData<AdminSettingsResponse>(RESET_URL, payload);
+        setData<AdminSettingsResponse>(SETTINGS_URL, response);
+        setSnackbar({
+          open: true,
+          message: successMessage ?? '设置已恢复默认值',
+          severity: 'success',
+        });
+        return response;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '重置失败，请稍后重试';
+        setSnackbar({ open: true, message, severity: 'error' });
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [postData, setData],
+  );
+
+  const handleResetToDefault = useCallback(async () => {
     if (!selectedKey) {
       return;
     }
-    await applyUpdate(selectedKey, defaultValueParam);
-  };
+    try {
+      await resetSettings([selectedKey], '设置已重置为默认值');
+      setSelectedKey(null);
+    } catch {
+      // 错误提示已在 resetSettings 中处理
+    }
+  }, [resetSettings, selectedKey]);
+
+  const handleResetAll = useCallback(async () => {
+    const confirmed = window.confirm('确认将所有设置恢复为默认值？该操作会覆盖当前所有自定义配置。');
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await resetSettings(undefined, '所有设置已恢复默认值');
+    } catch {
+      // 错误提示已在 resetSettings 中处理
+    }
+  }, [resetSettings]);
 
   const handleToggleUpdate = async (key: AdminSettingKey, value: boolean) => {
     await applyUpdate(key, value);
@@ -208,14 +251,25 @@ const AdminSettingsPage: React.FC = () => {
               管理动态检索参数，实时调优 RAG 服务表现。
             </Typography>
           </Box>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={() => void loadSettings()}
-            disabled={loading}
-          >
-            刷新
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => void loadSettings()}
+              disabled={loading || saving}
+            >
+              刷新
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<RestoreIcon />}
+              onClick={() => void handleResetAll()}
+              disabled={loading || saving}
+            >
+              重置全部
+            </Button>
+          </Stack>
         </Stack>
 
         {loading && !settings && (

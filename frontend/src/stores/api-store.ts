@@ -63,17 +63,21 @@ export const useApiStore = create<ApiStore>()(
         }), false, 'setData'),
       
       setError: (url: string, error: Error | null) =>
-        set((state) => ({
-          apiStates: {
-            ...state.apiStates,
-            [url]: {
-              ...state.apiStates[url],
-              error,
-              loading: false,
-              data: null,
+        set((state) => {
+          const previous = state.apiStates[url];
+
+          return {
+            apiStates: {
+              ...state.apiStates,
+              [url]: {
+                ...previous,
+                error,
+                loading: false,
+                data: error ? null : previous?.data ?? null,
+              },
             },
-          },
-        }), false, 'setError'),
+          };
+        }, false, 'setError'),
       
       clearState: (url: string) =>
         set((state) => {

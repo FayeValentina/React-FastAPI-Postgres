@@ -43,3 +43,14 @@ class AdminSettingsUpdate(BaseModel):
     RAG_IVFFLAT_PROBES: int | None = Field(None, ge=1)
     RAG_USE_LINGUA: bool | None = None
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float | None = Field(None, ge=0.0, le=1.0)
+
+
+class AdminSettingsResetRequest(BaseModel):
+    """Payload for resetting one or more admin-configurable settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    keys: list[str] | None = Field(
+        default=None,
+        description="Optional list of setting keys to reset. Reset all when omitted.",
+    )

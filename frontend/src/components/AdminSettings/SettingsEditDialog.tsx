@@ -22,7 +22,7 @@ interface SettingsEditDialogProps {
   defaultValue: number | boolean | null;
   onClose: () => void;
   onSubmit: (value: number | boolean) => Promise<void> | void;
-  onResetToDefault: (defaultValue: number | boolean) => Promise<void> | void;
+  onResetToDefault: () => Promise<void> | void;
   saving?: boolean;
 }
 
@@ -153,7 +153,7 @@ const SettingsEditDialog: React.FC<SettingsEditDialogProps> = ({
       return;
     }
     setError(null);
-    await onResetToDefault(defaultValue);
+    await onResetToDefault();
   };
 
   if (!definition) {

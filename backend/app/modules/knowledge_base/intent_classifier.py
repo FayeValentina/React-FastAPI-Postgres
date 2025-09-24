@@ -257,6 +257,7 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
         )
 
     payload = _build_payload(normalized, ctx)
+
     response = None
     last_error: Optional[BaseException] = None
     max_attempts = 2
@@ -264,16 +265,16 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
     for attempt in range(max_attempts):
         try:
             response = await classifier_client.chat.completions.create(
-                model=settings.CLASSIFIER_MODEL,
-                messages=[
-                    {"role": "system", "content": PROMPT_TEMPLATE},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                ],
-                temperature=0.0,
-                top_p=0.0,
-                max_tokens=256,
-                response_format={"type": "json_object"},
-            )
+                    model=settings.CLASSIFIER_MODEL,
+                    messages=[
+                        {"role": "system", "content": PROMPT_TEMPLATE},
+                        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                    ],
+                    temperature=0.0,
+                    top_p=0.0,
+                    max_tokens=256,
+                    response_format={"type": "json_object"},
+                )
             last_error = None
             break
         except asyncio.TimeoutError as exc:

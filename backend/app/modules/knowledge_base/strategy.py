@@ -164,7 +164,6 @@ def _apply_scenario(
     base_oversample: int,
     base_max_candidates: int,
     base_rerank_candidates: int,
-    base_rerank_threshold: float,
     base_context_max_evidence: int,
     base_context_budget: int,
     ctx: StrategyContext,
@@ -185,7 +184,6 @@ def _apply_scenario(
         overrides["RAG_OVERSAMPLE"] = max(base_oversample, top_k_target)
         overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 12)
         overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
-        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.45)
         overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
             base_context_max_evidence, max(20, top_k_target)
         )
@@ -199,7 +197,6 @@ def _apply_scenario(
         overrides["RAG_OVERSAMPLE"] = oversample_target
         overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 14)
         overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
-        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.48)
         overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
             base_context_max_evidence, max(20, top_k_target + 4)
         )
@@ -228,7 +225,6 @@ def _apply_scenario(
         overrides["RAG_OVERSAMPLE"] = max(base_oversample, max(6, top_k_target // 2 + 2))
         overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 12)
         overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
-        overrides["RAG_RERANK_SCORE_THRESHOLD"] = min(base_rerank_threshold, 0.45)
         overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
             base_context_max_evidence, max(20, top_k_target)
         )
@@ -357,12 +353,6 @@ async def resolve_rag_parameters(
         base_oversample = _safe_int(base.get("RAG_OVERSAMPLE"), settings.RAG_OVERSAMPLE)
         base_max_candidates = _safe_int(base.get("RAG_MAX_CANDIDATES"), settings.RAG_MAX_CANDIDATES)
         base_rerank_candidates = _safe_int(base.get("RAG_RERANK_CANDIDATES"), settings.RAG_RERANK_CANDIDATES)
-        base_rerank_threshold = _safe_float(
-            base.get("RAG_RERANK_SCORE_THRESHOLD"),
-            settings.RAG_RERANK_SCORE_THRESHOLD,
-            minimum=0.0,
-            maximum=1.0,
-        )
         base_context_max_evidence = _safe_int(
             base.get("RAG_CONTEXT_MAX_EVIDENCE"),
             settings.RAG_CONTEXT_MAX_EVIDENCE,
@@ -380,7 +370,6 @@ async def resolve_rag_parameters(
             base_oversample,
             base_max_candidates,
             base_rerank_candidates,
-            base_rerank_threshold,
             base_context_max_evidence,
             base_context_budget,
             request_ctx,
