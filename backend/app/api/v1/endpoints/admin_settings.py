@@ -10,6 +10,7 @@ from app.infrastructure.dynamic_settings import (
 from app.modules.admin_settings.schemas import (
     AdminSettingsResponse,
     AdminSettingsUpdate,
+    AdminSettingsResetRequest,
 )
 from app.modules.admin_settings.service import admin_settings_service
 
@@ -34,3 +35,11 @@ async def update_admin_settings(
     dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ) -> AdminSettingsResponse:
     return await admin_settings_service.update_settings(payload, dynamic_settings_service)
+
+
+@router.post("/reset", response_model=AdminSettingsResponse)
+async def reset_admin_settings(
+    payload: AdminSettingsResetRequest,
+    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
+) -> AdminSettingsResponse:
+    return await admin_settings_service.reset_settings(dynamic_settings_service, payload.keys)

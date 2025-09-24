@@ -77,7 +77,6 @@ services:
       - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - RERANKER_MODEL=${RERANKER_MODEL}
-      - RAG_TOP_K=${RAG_TOP_K:-3}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -86,8 +85,6 @@ services:
       rabbitmq:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      chat_server:
         condition: service_healthy
       clf_server:
         condition: service_healthy
@@ -233,9 +230,6 @@ services:
       - .env.dev
     environment:
       - HF_TOKEN=${HF_TOKEN}
-      - CHAT_REPO_ID=${CHAT_REPO_ID}
-      - CHAT_FILENAME=${CHAT_FILENAME}
-      - CHAT_REVISION=${CHAT_REVISION:-main}
       - CLASSIFIER_REPO_ID=${CLASSIFIER_REPO_ID}
       - CLASSIFIER_FILENAME=${CLASSIFIER_FILENAME}
       - CLASSIFIER_REVISION=${CLASSIFIER_REVISION:-main}
@@ -249,8 +243,7 @@ services:
     networks:
       - dbNetWork
 
-  # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
-  chat_server:
+  clf_server:
     image: ghcr.io/ggerganov/llama.cpp:server
     env_file:
       - .env.dev
@@ -265,43 +258,9 @@ services:
       start_period: 15s
     command:
       - --model
-      - /models/${CHAT_FILENAME}
-      - --port
-      - "8080"
-      - --host
-      - 0.0.0.0
-      - --ctx-size
-      - "16384"
-      - --parallel
-      - "2"
-      - --api-key
-      - ${CHAT_API_KEY}
-    expose:
-      - "8080"
-    volumes:
-      - models_data:/models:ro
-    restart: unless-stopped
-    networks:
-      - dbNetWork
-
-  clf_server:
-    image: ghcr.io/ggerganov/llama.cpp:server
-    env_file:
-      - .env.dev
-    depends_on:
-      llm_init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/v1/models >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 15s
-    command:
-      - --model
       - /models/${CLASSIFIER_FILENAME}
       - --port
-      - "8081"
+      - "8080"
       - --host
       - 0.0.0.0
       - --ctx-size
@@ -311,7 +270,7 @@ services:
       - --api-key
       - ${CLASSIFIER_API_KEY}
     expose:
-      - "8081"
+      - "8080"
     volumes:
       - models_data:/models:ro
     restart: unless-stopped

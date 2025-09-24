@@ -74,30 +74,26 @@ class AdminSettingsService:
                 detail="No settings provided",
             )
 
-        effective = await dynamic_settings_service.update(updates)
-        defaults = dynamic_settings_service.defaults()
+        await dynamic_settings_service.update(updates)
+        return await self.read_settings(dynamic_settings_service)
 
-        redis_status: Literal["ok", "unavailable"] = "ok"
+    async def reset_settings(
+        self,
+        dynamic_settings_service: DynamicSettingsService,
+        keys: list[str] | None = None,
+    ) -> AdminSettingsResponse:
         try:
-            overrides = await dynamic_settings_service.get_overrides()
-        except Exception:
-            overrides = {}
-            redis_status = "unavailable"
+            if keys:
+                await dynamic_settings_service.reset(keys)
+            else:
+                await dynamic_settings_service.reset()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
-        metadata = await dynamic_settings_service.get_metadata()
-        updated_at = (
-            self._parse_updated_at(metadata.get("updated_at")) if metadata else None
-        )
-
-        normalized_overrides = self._normalize_overrides(overrides, defaults)
-
-        return AdminSettingsResponse(
-            defaults=defaults,
-            overrides=normalized_overrides,
-            effective=effective,
-            updated_at=updated_at,
-            redis_status=redis_status,
-        )
+        return await self.read_settings(dynamic_settings_service)
 
 
 admin_settings_service = AdminSettingsService()

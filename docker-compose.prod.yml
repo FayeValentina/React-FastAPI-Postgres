@@ -123,7 +123,6 @@ services:
       - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - RERANKER_MODEL=${RERANKER_MODEL}
-      - RAG_TOP_K=${RAG_TOP_K:-3}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -132,8 +131,6 @@ services:
       rabbitmq:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      chat_server:
         condition: service_healthy
       clf_server:
         condition: service_healthy
@@ -237,9 +234,6 @@ services:
       - .env.prod
     environment:
       - HF_TOKEN=${HF_TOKEN}
-      - CHAT_REPO_ID=${CHAT_REPO_ID}
-      - CHAT_FILENAME=${CHAT_FILENAME}
-      - CHAT_REVISION=${CHAT_REVISION:-main}
       - CLASSIFIER_REPO_ID=${CLASSIFIER_REPO_ID}
       - CLASSIFIER_FILENAME=${CLASSIFIER_FILENAME}
       - CLASSIFIER_REVISION=${CLASSIFIER_REVISION:-main}
@@ -273,42 +267,6 @@ services:
     networks:
       - prodNetWork
 
-  # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
-  chat_server:
-    image: amperecomputingai/llama.cpp:3.2.1
-    platform: "linux/arm64"
-    env_file:
-      - .env.prod
-    depends_on:
-      llm_init:
-        condition: service_completed_successfully
-    command:
-      - --model
-      - /models/${CHAT_FILENAME}
-      - --port
-      - "8080"
-      - --host
-      - 0.0.0.0
-      - --ctx-size
-      - "16384"
-      - --parallel
-      - "2"
-      - --api-key
-      - ${CHAT_API_KEY}
-    expose:
-      - "8080"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 8
-      start_period: 120s
-    volumes:
-      - models_data:/models:ro
-    restart: unless-stopped
-    networks:
-      - prodNetWork
-
   clf_server:
     image: amperecomputingai/llama.cpp:3.2.1
     platform: "linux/arm64"
@@ -321,7 +279,7 @@ services:
       - --model
       - /models/${CLASSIFIER_FILENAME}
       - --port
-      - "8081"
+      - "8080"
       - --host
       - 0.0.0.0
       - --ctx-size
@@ -331,9 +289,9 @@ services:
       - --api-key
       - ${CLASSIFIER_API_KEY}
     expose:
-      - "8081"
+      - "8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/v1/models >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/v1/models >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 8

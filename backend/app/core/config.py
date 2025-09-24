@@ -145,19 +145,6 @@ class TwitterSettings(BaseSettings):
         extra="allow"
     )
 
-
-class AISettings(BaseSettings):
-    """AI 服务配置"""
-    GEMINI_API_KEY: str = ""
-
-    model_config = SettingsConfigDict(
-        env_prefix="AI_",
-        env_file=[ENV_FILE],
-        env_file_encoding="utf-8",
-        extra="allow"
-    )
-
-
 class EmailSettings(BaseSettings):
     """邮件服务配置"""
     SMTP_SERVER: str = "smtp.gmail.com"
@@ -309,7 +296,6 @@ class Settings(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     reddit: RedditSettings = RedditSettings()
     twitter: TwitterSettings = TwitterSettings()
-    ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
     redis: RedisSettings = RedisSettings()
@@ -321,29 +307,31 @@ class Settings(BaseSettings):
     DB_ECHO_LOG: bool = True
 
     # LLM / RAG 配置（简单直挂根 Settings，便于直接引用）
-    CHAT_BASE_URL: str = "http://chat_server:8080/v1"
+    CHAT_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     CHAT_API_KEY: str = "sk-local"
-    CLASSIFIER_BASE_URL: str = "http://clf_server:8081/v1"
+    CLASSIFIER_BASE_URL: str = "http://clf_server:8080/v1"
     CLASSIFIER_API_KEY: str = "sk-classifier"
     # 默认从 FILENAME 读取，避免变量不同步
-    CHAT_MODEL: str = Field(default_factory=lambda: os.getenv("CHAT_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
+    CHAT_MODEL: str = Field(default="gemini-2.5-flash-lite")
     CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-1b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
     RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-base")
     RAG_STRATEGY_ENABLED: bool = Field(default=False)
     RAG_RERANK_ENABLED: bool = Field(default=False)
-    RAG_RERANK_CANDIDATES: int = Field(default=40)
-    RAG_RERANK_SCORE_THRESHOLD: float = Field(default=0.5)
+    RAG_USE_LINGUA: bool = Field(default=False)
+    RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
+    RAG_RERANK_CANDIDATES: int = Field(default=100)
+    RAG_RERANK_SCORE_THRESHOLD: float = Field(default=0.48)
     RAG_RERANK_MAX_BATCH: int = Field(default=16)
-    RAG_TOP_K: int = Field(default=8)
-    RAG_MIN_SIM: float = Field(default=0.4)
-    RAG_MMR_LAMBDA: float = Field(default=0.6)
-    RAG_PER_DOC_LIMIT: int = Field(default=3)
+    RAG_TOP_K: int = Field(default=12)
+    RAG_MIN_SIM: float = Field(default=0.35)
+    RAG_MMR_LAMBDA: float = Field(default=0.55)
+    RAG_PER_DOC_LIMIT: int = Field(default=6)
     RAG_OVERSAMPLE: int = Field(default=5)
-    RAG_MAX_CANDIDATES: int = Field(default=100)
+    RAG_MAX_CANDIDATES: int = Field(default=240)
     RAG_SAME_LANG_BONUS: float = Field(default=0.12)
-    RAG_CONTEXT_TOKEN_BUDGET: int = Field(default=2600)
-    RAG_CONTEXT_MAX_EVIDENCE: int = Field(default=18)
+    RAG_CONTEXT_TOKEN_BUDGET: int = Field(default=4000)
+    RAG_CONTEXT_MAX_EVIDENCE: int = Field(default=28)
     RAG_CHUNK_TARGET_TOKENS_EN: int = Field(default=260)
     RAG_CHUNK_TARGET_TOKENS_CJK: int = Field(default=420)
     RAG_CHUNK_TARGET_TOKENS_DEFAULT: int = Field(default=320)
@@ -351,9 +339,6 @@ class Settings(BaseSettings):
     RAG_CODE_CHUNK_MAX_LINES: int = Field(default=40)
     RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
     RAG_IVFFLAT_PROBES: int = Field(default=10)
-    RAG_USE_LINGUA: bool = Field(default=False)
-    RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
-    RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS: int = Field(default=10000)
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
 
     model_config = SettingsConfigDict(

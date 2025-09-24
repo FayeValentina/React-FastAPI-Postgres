@@ -257,7 +257,6 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
         )
 
     payload = _build_payload(normalized, ctx)
-    timeout_seconds = max(0.1, settings.RAG_STRATEGY_LLM_CLASSIFIER_TIMEOUT_MS / 1000.0)
 
     response = None
     last_error: Optional[BaseException] = None
@@ -265,8 +264,7 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
 
     for attempt in range(max_attempts):
         try:
-            response = await asyncio.wait_for(
-                classifier_client.chat.completions.create(
+            response = await classifier_client.chat.completions.create(
                     model=settings.CLASSIFIER_MODEL,
                     messages=[
                         {"role": "system", "content": PROMPT_TEMPLATE},
@@ -276,9 +274,7 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
                     top_p=0.0,
                     max_tokens=256,
                     response_format={"type": "json_object"},
-                ),
-                timeout=timeout_seconds,
-            )
+                )
             last_error = None
             break
         except asyncio.TimeoutError as exc:
