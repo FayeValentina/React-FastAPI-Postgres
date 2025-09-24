@@ -182,9 +182,11 @@ async def search_knowledge(
     if max_candidates > 0:
         top_k_value = min(top_k_value, max_candidates)
 
+    effective_query = strategy.processed_query or payload.query
+
     results = await search_similar_chunks(
         db,
-        query=payload.query,
+        query=effective_query,
         top_k=top_k_value,
         dynamic_settings_service=dynamic_settings_service,
         config=strategy_config,

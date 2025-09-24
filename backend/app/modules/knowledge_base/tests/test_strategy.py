@@ -122,6 +122,7 @@ def test_strategy_llm_high_confidence_applies(monkeypatch):
             confidence=0.82,
             reason="diagnosing errors",
             tags=("troubleshooting",),
+            rewritten_query="detailed troubleshooting steps for service failures",
         )
 
     monkeypatch.setattr(intent_classifier, "classify", fake_classify)
@@ -133,6 +134,7 @@ def test_strategy_llm_high_confidence_applies(monkeypatch):
     assert result.classifier is not None
     assert result.classifier.get("applied") is True
     assert result.classifier.get("label") == "troubleshooting"
+    assert result.processed_query == "detailed troubleshooting steps for service failures"
 
 
 def test_strategy_llm_low_confidence_fallback(monkeypatch):
@@ -158,3 +160,4 @@ def test_strategy_llm_low_confidence_fallback(monkeypatch):
     assert result.classifier is not None
     assert result.classifier.get("applied") is False
     assert result.classifier.get("cause") == "low_confidence"
+    assert result.processed_query is None
