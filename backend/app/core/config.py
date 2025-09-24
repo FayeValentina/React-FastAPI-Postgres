@@ -313,7 +313,7 @@ class Settings(BaseSettings):
     CLASSIFIER_API_KEY: str = "sk-classifier"
     # 默认从 FILENAME 读取，避免变量不同步
     CHAT_MODEL: str = Field(default="gemini-2.5-flash-lite")
-    CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-1b-it-q4_0.gguf"))
+    CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
     RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-base")
     RAG_STRATEGY_ENABLED: bool = Field(default=False)
