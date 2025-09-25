@@ -37,6 +37,8 @@
      )
      ```
    - 在 `downgrade()` 中删除索引与列。
+   - 在 `downgrade()` 中删除索引与列。
+   - 若业务需要支持中文或其它无空格语言，请在迁移说明中强调：`'simple'` 配置仅做基于空格/标点的切分。可以在迁移里预留配置参数，或在部署文档中说明如何切换到应用层预分词 + `'simple'` 的组合策略，确保中文词条能够正确入库。
 
 3. **触发器/函数（可选）**：若希望由数据库自动维护 `tsvector`，可在迁移中创建 `to_tsvector` 触发器。否则由应用层写入。
 
@@ -44,6 +46,7 @@
 
 1. **修改文件**：`backend/app/modules/knowledge_base/repository.py`
    - 在 `crud_knowledge_base.bulk_create_document_chunks` 等写入函数中，生成 `to_tsvector('simple', chunk.content)` 并填充到 `search_vector` 字段。
+   - 若知识库需覆盖中文内容，可在写入前使用分词器显式切词，再将分词结果拼接写入 `to_tsvector`。推荐在 `ingest_splitter` 中集成 `spaCy` 的中文模型（如 `zh_core_web_sm`），以保持与英文分词策略的统一；应用层可复用 `nlp(text)` 的 `token.text` 序列生成以空格分隔的中文词串后再喂给 `to_tsvector`。
    - 若采用数据库触发器，则保证插入时字段为 `None` 即可。
 
 2. **切分管线**：若需要对内容做额外清洗、分词或停用词处理，可在 `backend/app/modules/knowledge_base/ingest_splitter.py` 或对应的预处理模块中扩展逻辑。
@@ -87,7 +90,7 @@
      * 调用仓储层新增的 `search_by_bm25` 获取候选集合，按照 `BM25_TOP_K` 限制数量。
      * 将 BM25 候选与向量召回候选合并，构造统一的 `RetrievedChunk` 列表。
      * 为 BM25 候选设置 `coarse_score` 或新的 `bm25_score` 字段，作为融合时的初始得分。
-     * 在融合阶段（向量分数归一化、重排、MMR）前，利用 `BM25_WEIGHT` 将关键字分数与向量分数线性组合或采用学习到的融合策略。
+     * 在融合阶段前，先对两路得分做归一化。可根据业务数据选择 Min-Max、Z-score、基于分位数的校准等方法，保证 BM25 得分（通常为 0~20+）与向量相似度（0~1）处于可比较的量纲。归一化后再利用 `BM25_WEIGHT` 将关键字分数与向量分数线性组合，或接入更复杂的融合策略。
    - 若向量与 BM25 召回存在重复 chunk，按得分最高者保留或进行分数加权。
 
 2. **MMR / 重排适配**：确认 `_mmr_select` 与重排逻辑使用的是统一的 `score` 字段，必要时在计算总分后更新该字段。
