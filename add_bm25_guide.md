@@ -68,10 +68,16 @@
 ### 4.1 动态配置
 
 1. **修改文件**：`backend/app/core/config.py`
-   - 新增默认配置项，例如 `BM25_ENABLED`, `BM25_TOP_K`, `BM25_WEIGHT`, `BM25_MIN_SCORE` 等。
+   - 新增默认配置项，例如 `BM25_ENABLED`, `BM25_TOP_K`, `BM25_WEIGHT`, `BM25_MIN_SCORE`。
+   - 同时新增 `QUERY_REWRITE_ENABLED`（或类似命名）的布尔开关，用来控制是否启用 `intent_classifier.py` 中的查询改写流程。默认保持现有行为（启用），便于上线后通过配置关闭。
 
-2. **修改文件**：`backend/app/infrastructure/dynamic_settings.py`
-   - 确保上述配置可以通过动态配置服务读取/更新。
+2. **修改文件**：`backend/app/infrastructure/dynamic_settings.py` 及其子模块（如有）
+   - 确保上述配置可以通过动态配置服务读取/更新，包括新增加的 `QUERY_REWRITE_ENABLED`。为查询改写开关提供动态热更新能力，避免重新部署。
+   - 若已有缓存层或订阅机制，补充监听逻辑，保证新配置变更后能及时反映在服务层。
+
+3. **现有调用处适配**：
+   - `backend/app/modules/knowledge_base/intent_classifier.py`：读取 `QUERY_REWRITE_ENABLED` 决定是否执行 LLM 查询重写。
+   - `backend/app/api/v1/endpoints/knowledge.py` 与 `backend/app/api/v1/endpoints/llm_ws.py`：在构造查询请求时引用动态配置，保持默认优先使用重写；当开关关闭时应回退到原始用户查询。
 
 ### 4.2 检索流程调整
 
@@ -99,6 +105,7 @@ BM25 不涉及模型加载，但若引入额外库（如自定义分词），需
 1. **修改文件**：`backend/app/api/v1/endpoints/knowledge_base.py`
    - 在检索接口的请求模型中新增可选参数，例如 `bm25_weight`, `bm25_top_k`, `bm25_enabled`。
    - 将参数透传给 `search_similar_chunks`，保持默认值与现有行为一致（即不开启 BM25）。
+   - 针对 `@router.post("/search")` 端点（供前端 chunk 预览使用），在 BM25 融合完毕后默认改为调用新的 BM25 检索函数（如 `search_by_bm25` 或对融合后的服务入口传入 `bm25_enabled=True`），以提供更轻量、关键字导向的体验。保留向量检索作为可选策略。
 
 2. **请求/响应模型**：
    - 若需要在响应中区分命中来源，可在 `backend/app/schemas/knowledge_base.py` 中新增字段，如 `retrieval_source`、`bm25_score`。
@@ -113,7 +120,9 @@ BM25 不涉及模型加载，但若引入额外库（如自定义分词），需
 2. **Python 依赖**（若使用第三方 BM25 库）：
    - 修改 `backend/pyproject.toml` 或 `backend/requirements.txt`，添加 `rank-bm25`、`jieba` 等依赖。
    - 同步更新 `poetry.lock` 或 `requirements.lock`。
-3. **Docker 镜像**：更新 `backend/Dockerfile`，确保安装新增依赖，并执行 `alembic upgrade` 时包含新迁移。
+3. **Docker 镜像与编排文件**：
+   - 更新 `backend/Dockerfile`，确保安装新增依赖，并执行 `alembic upgrade` 时包含新迁移。
+   - 同步修改开发与生产环境的 compose 文件（`docker-compose.dev.yml`, `docker-compose.prod.yml`），保证新增的环境变量（如 `BM25_ENABLED`, `QUERY_REWRITE_ENABLED` 等）和依赖在两种环境下均正确注入。
 
 ---
 
@@ -123,6 +132,7 @@ BM25 不涉及模型加载，但若引入额外库（如自定义分词），需
 1. 修改 `frontend` 下的检索页组件，新增切换选项或展示标签。
 2. 更新 `frontend/src/services` 中的 API 调用函数，兼容新增参数。
 3. 在 UI 上展示返回的 `bm25_score`、`retrieval_source` 等信息。
+4. `frontend/src/components/Knowledge/KnowledgeSearch.tsx`：该搜索栏主要用于 chunk 预览。BM25 融合完成后，调整其默认请求参数或调用逻辑，使之命中后台新的 BM25 检索行为，减少纯向量检索带来的延迟；必要时提供“深度检索”按钮再触发向量召回。
 
 若前端无需改动，可跳过此步骤。
 
