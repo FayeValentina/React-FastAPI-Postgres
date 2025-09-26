@@ -88,6 +88,7 @@ class StrategyContext:
     channel: str = "rest"
     user_role: Optional[str] = None
     metadata: Mapping[str, Any] | None = None
+    query_rewrite_enabled: bool = True
 
     def to_log_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -293,6 +294,11 @@ async def resolve_rag_parameters(
         classifier_meta: Dict[str, Any] | None = None
         scenario: str | None = None
 
+        rewrite_enabled = _safe_bool(
+            base.get("QUERY_REWRITE_ENABLED"), settings.QUERY_REWRITE_ENABLED
+        )
+        request_ctx.query_rewrite_enabled = rewrite_enabled
+
         classifier_enabled = _safe_bool(
             base.get("RAG_STRATEGY_LLM_CLASSIFIER_ENABLED"),
             settings.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
@@ -311,7 +317,11 @@ async def resolve_rag_parameters(
             classifier_result = await intent_classifier.classify(query, request_ctx)
             classifier_meta = classifier_result.to_log_dict()
             classifier_meta["threshold"] = round(threshold, 4)
-            if not classifier_result.fallback and classifier_result.rewritten_query:
+            if (
+                rewrite_enabled
+                and not classifier_result.fallback
+                and classifier_result.rewritten_query
+            ):
                 processed_query_text = classifier_result.rewritten_query
 
             mapped_scenario, matched_label = _select_llm_scenario(classifier_result)
@@ -379,7 +389,7 @@ async def resolve_rag_parameters(
         merged = dict(base)
         merged.update(sanitized)
 
-        if not processed_query_text:
+        if not rewrite_enabled or not processed_query_text:
             processed_query_text = None
 
         return StrategyResult(

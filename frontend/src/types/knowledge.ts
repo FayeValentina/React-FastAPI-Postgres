@@ -47,4 +47,21 @@ export interface KnowledgeChunkUpdate {
 export interface KnowledgeSearchRequest {
   query: string;
   top_k?: number; // default 5 on backend
+  bm25_enabled?: boolean;
+  bm25_top_k?: number;
+  bm25_weight?: number;
+  bm25_min_score?: number;
+}
+
+export interface KnowledgeSearchResult {
+  id: number;
+  document_id?: number | null;
+  chunk_index?: number | null;
+  content: string;
+  language?: string | null;
+  created_at: string;
+  score: number;
+  similarity: number;
+  bm25_score?: number | null;
+  retrieval_source: 'vector' | 'bm25' | 'hybrid';
 }

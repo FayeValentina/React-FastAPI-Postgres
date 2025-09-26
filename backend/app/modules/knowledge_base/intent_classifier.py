@@ -356,6 +356,9 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
     tags = tuple(sanitized["tags"])
     rewritten_query = sanitized["rewritten_query"]
 
+    if not ctx.query_rewrite_enabled:
+        rewritten_query = None
+
     return ClassificationResult(
         scenario=scenario,
         confidence=confidence_value,

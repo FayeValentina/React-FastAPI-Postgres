@@ -18,7 +18,7 @@ import api from '../services/api';
 import { useNotifications } from '../components/Common/NotificationSystem';
 import { extractErrorMessage, type ApiError } from '../utils/errorHandler';
 import {
-  KnowledgeChunkRead,
+  KnowledgeSearchResult,
   KnowledgeDocumentCreate,
   KnowledgeDocumentRead,
   KnowledgeIngestResult,
@@ -34,7 +34,7 @@ const KnowledgeBasePage: React.FC = () => {
   const navigate = useNavigate();
 
   const [documents, setDocuments] = useState<KnowledgeDocumentRead[]>([]);
-  const [searchResults, setSearchResults] = useState<KnowledgeChunkRead[]>([]);
+  const [searchResults, setSearchResults] = useState<KnowledgeSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
@@ -113,7 +113,7 @@ const KnowledgeBasePage: React.FC = () => {
   const handleSearch = async (query: string, topK: number) => {
     setLoading(true);
     try {
-      const data = await api.post<KnowledgeChunkRead[]>('/v1/knowledge/search', { query, top_k: topK });
+      const data = await api.post<KnowledgeSearchResult[]>('/v1/knowledge/search', { query, top_k: topK });
       setSearchResults(data ?? []);
     } catch (e) {
       error(extractErrorMessage(e as ApiError) || '搜索失败');

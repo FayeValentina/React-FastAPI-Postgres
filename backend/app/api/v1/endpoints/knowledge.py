@@ -14,6 +14,7 @@ from app.modules.knowledge_base.schemas import (
     KnowledgeChunkRead,
     KnowledgeSearchRequest,
     KnowledgeChunkUpdate,
+    KnowledgeSearchResult,
 )
 from app.modules.knowledge_base import models
 from app.modules.knowledge_base.repository import crud_knowledge_base
@@ -138,7 +139,7 @@ async def patch_document(
     return doc
 
 
-@router.post("/search", response_model=list[KnowledgeChunkRead])
+@router.post("/search", response_model=list[KnowledgeSearchResult])
 async def search_knowledge(
     payload: KnowledgeSearchRequest,
     db: AsyncSession = Depends(get_async_session),
@@ -184,14 +185,43 @@ async def search_knowledge(
 
     effective_query = strategy.processed_query or payload.query
 
+    bm25_enabled = payload.bm25_enabled
+    raw_bm25_top_k = payload.bm25_top_k if payload.bm25_top_k is not None else payload.top_k
+    try:
+        bm25_top_k_value = int(raw_bm25_top_k)
+    except (TypeError, ValueError):
+        bm25_top_k_value = payload.top_k
+    bm25_top_k_value = max(1, min(100, bm25_top_k_value))
+
     results = await search_similar_chunks(
         db,
         query=effective_query,
         top_k=top_k_value,
         dynamic_settings_service=dynamic_settings_service,
         config=strategy_config,
+        bm25_enabled=bm25_enabled,
+        bm25_top_k=bm25_top_k_value,
+        bm25_weight=payload.bm25_weight,
+        bm25_min_score=payload.bm25_min_score,
     )
-    return [item.chunk for item in results]
+    response: list[KnowledgeSearchResult] = []
+    for item in results:
+        chunk = item.chunk
+        response.append(
+            KnowledgeSearchResult(
+                id=chunk.id,
+                document_id=chunk.document_id,
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                language=getattr(chunk, "language", None),
+                created_at=chunk.created_at,
+                score=float(item.score),
+                similarity=float(item.similarity),
+                bm25_score=float(item.bm25_score) if item.bm25_score is not None else None,
+                retrieval_source=item.retrieval_source,
+            )
+        )
+    return response
 
 
 @router.get("/documents/{document_id}/chunks", response_model=list[KnowledgeChunkRead])
