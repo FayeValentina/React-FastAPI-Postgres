@@ -344,7 +344,7 @@ class Settings(BaseSettings):
     BM25_TOP_K: int = Field(default=8)
     BM25_WEIGHT: float = Field(default=0.35)
     BM25_MIN_SCORE: float = Field(default=0.0)
-    QUERY_REWRITE_ENABLED: bool = Field(default=True)
+    QUERY_REWRITE_ENABLED: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

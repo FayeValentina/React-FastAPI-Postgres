@@ -185,7 +185,7 @@ async def search_knowledge(
 
     effective_query = strategy.processed_query or payload.query
 
-    bm25_enabled = payload.bm25_enabled if payload.bm25_enabled is not None else True
+    bm25_enabled = payload.bm25_enabled
     raw_bm25_top_k = payload.bm25_top_k if payload.bm25_top_k is not None else payload.top_k
     try:
         bm25_top_k_value = int(raw_bm25_top_k)
