@@ -74,12 +74,13 @@
    - 新增默认配置项，例如 `BM25_ENABLED`, `BM25_TOP_K`, `BM25_WEIGHT`, `BM25_MIN_SCORE`。
    - 同时新增 `QUERY_REWRITE_ENABLED`（或类似命名）的布尔开关，用来控制是否启用 `intent_classifier.py` 中的查询改写流程。默认保持现有行为（启用），便于上线后通过配置关闭。
 
-2. **修改文件**：`backend/app/infrastructure/dynamic_settings.py` 及其子模块（如有）
+2. **修改文件**：`backend/app/infrastructure/dynamic_settings/service.py`（或统称为 `dynamic_settings` 模块）
    - 确保上述配置可以通过动态配置服务读取/更新，包括新增加的 `QUERY_REWRITE_ENABLED`。为查询改写开关提供动态热更新能力，避免重新部署。
    - 若已有缓存层或订阅机制，补充监听逻辑，保证新配置变更后能及时反映在服务层。
 
 3. **现有调用处适配**：
-   - `backend/app/modules/knowledge_base/intent_classifier.py`：读取 `QUERY_REWRITE_ENABLED` 决定是否执行 LLM 查询重写。
+   - 推荐在 `backend/app/modules/knowledge_base/service.py` 的 `resolve_rag_parameters`（或等效流程）读取 `QUERY_REWRITE_ENABLED`，并按需决定是否使用 `intent_classifier.py` 返回的 `rewritten_query`。如需在分类器内部判断，需要先扩展 `StrategyContext`/`classify` 的调用链以携带配置。
+   - `backend/app/modules/knowledge_base/intent_classifier.py`：在调用链支持携带配置后，可读取该开关跳过改写逻辑。
    - `backend/app/api/v1/endpoints/knowledge.py` 与 `backend/app/api/v1/endpoints/llm_ws.py`：在构造查询请求时引用动态配置，保持默认优先使用重写；当开关关闭时应回退到原始用户查询。
 
 ### 4.2 检索流程调整
@@ -105,13 +106,14 @@ BM25 不涉及模型加载，但若引入额外库（如自定义分词），需
 
 ## 5. API 层改造
 
-1. **修改文件**：`backend/app/api/v1/endpoints/knowledge_base.py`
+1. **修改文件**：`backend/app/api/v1/endpoints/knowledge.py`
+   - 当前仓库的 `/knowledge` 相关 REST 路由均集中在该文件中，原文提到的 `knowledge_base.py` 并不存在。
    - 在检索接口的请求模型中新增可选参数，例如 `bm25_weight`, `bm25_top_k`, `bm25_enabled`。
    - 将参数透传给 `search_similar_chunks`，保持默认值与现有行为一致（即不开启 BM25）。
    - 针对 `@router.post("/search")` 端点（供前端 chunk 预览使用），在 BM25 融合完毕后默认改为调用新的 BM25 检索函数（如 `search_by_bm25` 或对融合后的服务入口传入 `bm25_enabled=True`），以提供更轻量、关键字导向的体验。保留向量检索作为可选策略。
 
 2. **请求/响应模型**：
-   - 若需要在响应中区分命中来源，可在 `backend/app/schemas/knowledge_base.py` 中新增字段，如 `retrieval_source`、`bm25_score`。
+   - 若需要在响应中区分命中来源，可在 `backend/app/modules/knowledge_base/schemas.py` 中新增字段，如 `retrieval_source`、`bm25_score`，并在文档中说明这些字段应在该模块维护，避免寻找不存在的 `app/schemas` 目录。
 
 3. **文档更新**：更新 FastAPI OpenAPI 描述，保证前端或调用方了解新参数及默认值。
 
