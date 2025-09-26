@@ -13,6 +13,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from fastapi.concurrency import run_in_threadpool
 from fastapi import UploadFile
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -39,6 +40,9 @@ class RetrievedChunk:
     coarse_score: float = 0.0
     mmr_score: float = 0.0
     rerank_score: float | None = None
+    bm25_score: float | None = None
+    retrieval_source: str = "vector"
+    vector_score: float = 0.0
 
 
 logger = logging.getLogger(__name__)
@@ -354,6 +358,7 @@ async def update_chunk(
         chunk.embedding = vector
         stripped = (chunk.content or "").strip()
         chunk.language = detect_language(stripped or "")
+        chunk.search_vector = func.to_tsvector("simple", chunk.content)
 
     if needs_persist:
         await crud_knowledge_base.persist_chunk(db, chunk)
@@ -377,6 +382,11 @@ async def search_similar_chunks(
     top_k: int,
     dynamic_settings_service: DynamicSettingsService | None = None,
     config: DynamicSettingsMapping | None = None,
+    *,
+    bm25_enabled: bool | None = None,
+    bm25_top_k: int | None = None,
+    bm25_weight: float | None = None,
+    bm25_min_score: float | None = None,
 ) -> List[RetrievedChunk]:
     """检索最相似的知识块，带最小相似度阈值、语言偏置与 MMR 去冗。"""
 
@@ -425,6 +435,32 @@ async def search_similar_chunks(
     per_doc_limit = _coerce_config_value(
         config_map, "RAG_PER_DOC_LIMIT", settings.RAG_PER_DOC_LIMIT, int
     )
+
+    bm25_enabled_value = (
+        bm25_enabled
+        if bm25_enabled is not None
+        else _coerce_bool(config_map, "BM25_ENABLED", settings.BM25_ENABLED)
+    )
+    bm25_top_k_value = (
+        bm25_top_k
+        if bm25_top_k is not None
+        else _coerce_config_value(config_map, "BM25_TOP_K", settings.BM25_TOP_K, int)
+    )
+    bm25_top_k_value = max(0, bm25_top_k_value)
+    bm25_weight_value = (
+        bm25_weight
+        if bm25_weight is not None
+        else _coerce_config_value(config_map, "BM25_WEIGHT", settings.BM25_WEIGHT, float)
+    )
+    bm25_weight_value = max(0.0, min(1.0, float(bm25_weight_value)))
+    bm25_min_score_value = (
+        bm25_min_score
+        if bm25_min_score is not None
+        else _coerce_config_value(
+            config_map, "BM25_MIN_SCORE", settings.BM25_MIN_SCORE, float
+        )
+    )
+    bm25_min_score_value = max(0.0, float(bm25_min_score_value))
     
     logger.debug("rag_lang_status %s", lingua_status(config_map))
     q_lang = _detect_language(query, config_map)
@@ -436,7 +472,11 @@ async def search_similar_chunks(
     limit = min(limit_cap, oversample)
 
     logger.info(
-        "rag_search_params top_k=%s oversample_factor=%s limit_cap=%s effective_limit=%s min_sim=%.4f mmr_lambda=%.4f per_doc_limit=%s rerank_enabled=%s rerank_candidates=%s rerank_threshold=%.4f",
+        (
+            "rag_search_params top_k=%s oversample_factor=%s limit_cap=%s effective_limit=%s "
+            "min_sim=%.4f mmr_lambda=%.4f per_doc_limit=%s rerank_enabled=%s rerank_candidates=%s "
+            "rerank_threshold=%.4f bm25_enabled=%s bm25_top_k=%s bm25_weight=%.3f bm25_min_score=%.3f"
+        ),
         top_k,
         oversample_factor,
         limit_cap,
@@ -447,6 +487,10 @@ async def search_similar_chunks(
         rerank_enabled,
         rerank_candidates,
         rerank_score_threshold,
+        bm25_enabled_value,
+        bm25_top_k_value,
+        bm25_weight_value,
+        bm25_min_score_value,
     )
 
     candidates: List[RetrievedChunk] = []
@@ -456,30 +500,133 @@ async def search_similar_chunks(
     for chunk, distance in rows:
         distance_val = float(distance)
         similarity = max(0.0, 1.0 - distance_val)
-        score = similarity
+        base_score = similarity
         language_bonus_value = 0.0
         chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
         if q_lang and chunk_lang and chunk_lang == q_lang:
             language_bonus_value = language_bonus
-            score += language_bonus_value
+            base_score += language_bonus_value
         embedding_vector = np.array(chunk.embedding, dtype=np.float32)
         candidates.append(
             RetrievedChunk(
                 chunk=chunk,
                 distance=distance_val,
                 similarity=similarity,
-                score=score,
+                score=base_score,
                 embedding=embedding_vector,
                 language_bonus=language_bonus_value,
-                coarse_score=score,
+                coarse_score=base_score,
+                retrieval_source="vector",
+                vector_score=similarity,
             )
         )
 
     filtered = [item for item in candidates if item.similarity >= min_sim]
+    candidate_map: dict[int, RetrievedChunk] = {item.chunk.id: item for item in filtered}
+    vector_candidates_count = len(filtered)
+
+    bm25_stats: dict[str, Any] = {
+        "bm25_enabled": bm25_enabled_value,
+        "bm25_weight": round(float(bm25_weight_value), 4),
+        "vector_candidates": vector_candidates_count,
+    }
+    bm25_normalized: dict[int, float] = {}
+
+    if bm25_enabled_value and bm25_top_k_value > 0 and query.strip():
+        bm25_rows = await crud_knowledge_base.search_by_bm25(
+            db,
+            query,
+            bm25_top_k_value,
+            filters={},
+        )
+        bm25_stats["bm25_raw_hits"] = len(bm25_rows)
+
+        filtered_rows: list[tuple[models.KnowledgeChunk, float]] = []
+        for chunk, raw_score in bm25_rows:
+            score_value = float(raw_score or 0.0)
+            if score_value < bm25_min_score_value:
+                continue
+            filtered_rows.append((chunk, score_value))
+
+        bm25_stats["bm25_after_threshold"] = len(filtered_rows)
+
+        if filtered_rows:
+            raw_scores = [score for _, score in filtered_rows]
+            max_score = max(raw_scores)
+            min_score = min(raw_scores)
+            bm25_stats["bm25_max_score"] = float(max_score)
+            bm25_stats["bm25_min_score"] = float(min_score)
+            denom = max(max_score - min_score, 1e-6)
+
+            for chunk, raw_score in filtered_rows:
+                normalized = 1.0 if denom <= 1e-6 else max(
+                    0.0, min(1.0, (raw_score - min_score) / denom)
+                )
+                bm25_normalized[chunk.id] = normalized
+
+                embedding_vector = np.array(chunk.embedding, dtype=np.float32)
+                chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
+                language_bonus_value = (
+                    language_bonus
+                    if q_lang and chunk_lang and chunk_lang == q_lang
+                    else 0.0
+                )
+                similarity_estimate = max(
+                    0.0, float(np.dot(q_emb, embedding_vector))
+                )
+                distance_estimate = max(0.0, 1.0 - similarity_estimate)
+                combined_base = (1.0 - bm25_weight_value) * similarity_estimate + bm25_weight_value * normalized
+                combined_base = max(0.0, min(1.0, combined_base))
+
+                existing = candidate_map.get(chunk.id)
+                if existing is None:
+                    coarse_score = combined_base + language_bonus_value
+                    candidate_map[chunk.id] = RetrievedChunk(
+                        chunk=chunk,
+                        distance=distance_estimate,
+                        similarity=similarity_estimate,
+                        score=coarse_score,
+                        embedding=embedding_vector,
+                        language_bonus=language_bonus_value,
+                        coarse_score=coarse_score,
+                        bm25_score=raw_score,
+                        retrieval_source="bm25",
+                        vector_score=similarity_estimate,
+                    )
+                else:
+                    existing.bm25_score = raw_score
+                    if bm25_weight_value > 0:
+                        existing.retrieval_source = "hybrid"
+                    existing.vector_score = max(
+                        float(existing.vector_score), similarity_estimate
+                    )
+                    existing.similarity = max(
+                        float(existing.similarity), similarity_estimate
+                    )
+                    base_component = (1.0 - bm25_weight_value) * float(
+                        existing.vector_score
+                    ) + bm25_weight_value * normalized
+                    base_component = max(0.0, min(1.0, base_component))
+                    existing.coarse_score = base_component + existing.language_bonus
+                    existing.score = existing.coarse_score
+
+        bm25_stats["bm25_fused"] = len(bm25_normalized)
+
+    if bm25_enabled_value and bm25_weight_value > 0 and candidate_map:
+        for item in candidate_map.values():
+            normalized = bm25_normalized.get(item.chunk.id, 0.0)
+            base_component = (1.0 - bm25_weight_value) * float(item.vector_score) + bm25_weight_value * normalized
+            base_component = max(0.0, min(1.0, base_component))
+            item.coarse_score = base_component + item.language_bonus
+            item.score = item.coarse_score
+            if normalized > 0.0 and item.retrieval_source == "vector":
+                item.retrieval_source = "hybrid"
+
+    filtered = list(candidate_map.values())
+    filtered.sort(key=lambda item: item.score, reverse=True)
+
     if not filtered:
         return []
-
-    filtered.sort(key=lambda item: item.score, reverse=True)
 
     rerank_stats: dict[str, Any] = {}
 
@@ -569,6 +716,7 @@ async def search_similar_chunks(
             "filtered_after_min_sim": len(filtered),
             "selected_count": len(selected),
             "rerank_enabled": rerank_enabled,
+            **bm25_stats,
             **rerank_stats,
         },
     )

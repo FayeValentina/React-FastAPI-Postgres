@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import DateTime, Text, String, func, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from pgvector.sqlalchemy import Vector
 
 from app.infrastructure.database.postgres_base import Base
@@ -48,6 +48,9 @@ class KnowledgeChunk(Base):
     # 384 维向量，需与所选嵌入模型维度一致
     embedding: Mapped[List[float]] = mapped_column(Vector(dim=768), nullable=False, comment="向量表示")
     language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, comment="块语言/类型")
+    search_vector: Mapped[Optional[str]] = mapped_column(
+        TSVECTOR(), nullable=True, comment="全文检索向量"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     document: Mapped[Optional[KnowledgeDocument]] = relationship(back_populates="chunks")

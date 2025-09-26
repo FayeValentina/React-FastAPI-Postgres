@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -124,6 +124,7 @@ class CRUDKnowledgeBase:
                     content=content,
                     embedding=np.asarray(embedding),
                     language=language,
+                    search_vector=func.to_tsvector("simple", content),
                 )
             )
             created += 1
@@ -164,6 +165,41 @@ class CRUDKnowledgeBase:
             .order_by(distance_expr.asc())
             .limit(limit)
         )
+
+        rows = await db.execute(stmt)
+        return rows.all()
+
+    async def search_by_bm25(
+        self,
+        db: AsyncSession,
+        query: str,
+        limit: int,
+        *,
+        filters: Mapping[str, Any] | None = None,
+    ) -> list[tuple[models.KnowledgeChunk, float]]:
+        if not query or limit <= 0:
+            return []
+
+        ts_query = func.plainto_tsquery("simple", query)
+        rank_expr = func.ts_rank_cd(models.KnowledgeChunk.search_vector, ts_query)
+
+        stmt = (
+            select(models.KnowledgeChunk, rank_expr.label("bm25_score"))
+            .options(selectinload(models.KnowledgeChunk.document))
+            .where(models.KnowledgeChunk.search_vector.isnot(None))
+            .where(models.KnowledgeChunk.search_vector.op("@@")(ts_query))
+        )
+
+        filters = filters or {}
+        document_ids = filters.get("document_ids")
+        if document_ids:
+            stmt = stmt.where(models.KnowledgeChunk.document_id.in_(document_ids))
+
+        language = filters.get("language")
+        if language:
+            stmt = stmt.where(models.KnowledgeChunk.language == language)
+
+        stmt = stmt.order_by(rank_expr.desc()).limit(limit)
 
         rows = await db.execute(stmt)
         return rows.all()
