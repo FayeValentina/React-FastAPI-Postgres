@@ -22,7 +22,12 @@ export type AdminSettingKey =
   | 'RAG_CODE_CHUNK_OVERLAP_LINES'
   | 'RAG_IVFFLAT_PROBES'
   | 'RAG_USE_LINGUA'
-  | 'RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD';
+  | 'RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD'
+  | 'BM25_ENABLED'
+  | 'BM25_TOP_K'
+  | 'BM25_WEIGHT'
+  | 'BM25_MIN_SCORE'
+  | 'QUERY_REWRITE_ENABLED';
 
 export type AdminSettingValue = number | string | boolean | null;
 

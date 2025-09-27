@@ -142,6 +142,11 @@ async def ws_chat(
                         "title": getattr(doc, "title", None),
                         "source_ref": getattr(doc, "source_ref", None),
                         "similarity": round(float(item.similarity), 4),
+                        "score": round(float(item.score), 4),
+                        "bm25_score": round(float(item.bm25_score), 4)
+                        if item.bm25_score is not None
+                        else None,
+                        "retrieval_source": item.retrieval_source,
                         "content": snippet,
                     }
                 )

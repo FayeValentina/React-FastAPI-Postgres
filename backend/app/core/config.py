@@ -340,6 +340,12 @@ class Settings(BaseSettings):
     RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
     RAG_IVFFLAT_PROBES: int = Field(default=10)
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
+    BM25_ENABLED: bool = Field(default=False)
+    BM25_TOP_K: int = Field(default=8)
+    BM25_WEIGHT: float = Field(default=0.35)
+    BM25_MIN_SCORE: float = Field(default=0.0)
+    QUERY_REWRITE_ENABLED: bool = Field(default=False)
+    SPACY_MODEL_NAME: str = Field(default="zh_core_web_sm")
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -378,6 +384,11 @@ class Settings(BaseSettings):
             "RAG_USE_LINGUA": self.RAG_USE_LINGUA,
             "RAG_STRATEGY_LLM_CLASSIFIER_ENABLED": self.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
             "RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD": self.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
+            "BM25_ENABLED": self.BM25_ENABLED,
+            "BM25_TOP_K": self.BM25_TOP_K,
+            "BM25_WEIGHT": self.BM25_WEIGHT,
+            "BM25_MIN_SCORE": self.BM25_MIN_SCORE,
+            "QUERY_REWRITE_ENABLED": self.QUERY_REWRITE_ENABLED,
         }
 
 settings = Settings()

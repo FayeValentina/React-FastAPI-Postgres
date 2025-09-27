@@ -17,6 +17,8 @@ export const FEATURE_TOGGLE_KEYS: AdminSettingKey[] = [
   'RAG_STRATEGY_LLM_CLASSIFIER_ENABLED',
   'RAG_RERANK_ENABLED',
   'RAG_USE_LINGUA',
+  'BM25_ENABLED',
+  'QUERY_REWRITE_ENABLED',
 ];
 
 export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
@@ -95,6 +97,12 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     type: 'boolean',
   },
   {
+    key: 'BM25_ENABLED',
+    label: 'BM25 关键字检索',
+    description: '开启后会结合 PostgreSQL 全文检索结果与向量召回进行融合，提高关键字匹配能力；关闭则仅依赖向量召回。',
+    type: 'boolean',
+  },
+  {
     key: 'RAG_RERANK_CANDIDATES',
     label: '重排候选数量',
     description: '送入 Cross-Encoder 重排的候选数量。值越大排序更精细但耗时更长；值越小速度快但可能错过相关片段。',
@@ -120,6 +128,14 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     max: 128,
   },
   {
+    key: 'BM25_TOP_K',
+    label: 'BM25 候选数量上限',
+    description: '参与 BM25 召回的最大片段数。数值越大关键词召回更充分但融合开销更高；数值越小性能更好但可能遗漏相关片段。',
+    type: 'int',
+    min: 0,
+    max: 200,
+  },
+  {
     key: 'RAG_SAME_LANG_BONUS',
     label: '同语言奖励 (SAME_LANG_BONUS)',
     description: '如果检索结果与查询语言一致，将加成该权重。值越大越偏向与查询语言相同的结果；值越小对跨语言内容更开放。',
@@ -141,6 +157,23 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     description: '构建回答上下文时最多可包含的片段数量。值越大可引用的证据更多但上下文冗长；值越小上下文精简但可能不足以支撑回答。',
     type: 'int',
     min: 0,
+  },
+  {
+    key: 'BM25_WEIGHT',
+    label: 'BM25 融合权重',
+    description: '调整 BM25 与向量相似度的融合比例。值越大越偏向关键字匹配，值越小更依赖向量语义相似度。',
+    type: 'float',
+    min: 0,
+    max: 1,
+    step: 0.01,
+  },
+  {
+    key: 'BM25_MIN_SCORE',
+    label: 'BM25 最小得分阈值',
+    description: 'BM25 原始得分低于该阈值的候选会被忽略，用于过滤低质量关键字命中。',
+    type: 'float',
+    min: 0,
+    step: 0.01,
   },
   {
     key: 'RAG_CHUNK_TARGET_TOKENS_EN',
@@ -199,6 +232,12 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     description: '向量索引的查询探针数量，直接影响检索性能与速度。值越大检索更准确但查询耗时增加；值越小响应更快但召回率可能下降。',
     type: 'int',
     min: 1,
+  },
+  {
+    key: 'QUERY_REWRITE_ENABLED',
+    label: '查询改写开关',
+    description: '允许后端针对用户查询执行改写或预处理逻辑，以改善召回效果。关闭时使用原始查询文本。',
+    type: 'boolean',
   },
 ];
 

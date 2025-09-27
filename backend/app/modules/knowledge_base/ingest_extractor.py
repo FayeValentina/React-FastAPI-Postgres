@@ -10,6 +10,7 @@ from charset_normalizer import from_bytes
 from unstructured.documents.elements import Element  # type: ignore
 from unstructured.partition.auto import partition  # type: ignore
 
+from .language_utils import normalize_language_value
 
 @dataclass(slots=True)
 class ExtractedElement:
@@ -22,61 +23,15 @@ class ExtractedElement:
     language: str | None = None
 
 
-_LANGUAGE_ALIASES = {
-    "english": "en",
-    "eng": "en",
-    "en-us": "en",
-    "en_us": "en",
-    "en-gb": "en",
-    "chinese": "zh",
-    "zh-cn": "zh",
-    "zh_cn": "zh",
-    "zh-hans": "zh",
-    "zh-hant": "zh",
-    "zh-tw": "zh",
-    "cn": "zh",
-    "mandarin": "zh",
-    "japanese": "ja",
-    "jp": "ja",
-}
-
-
-def _normalise_language(value: Any) -> str | None:
-    """Convert various language hints to a normalized ISO-like code."""
-
-    if isinstance(value, str):
-        candidate = value.strip().lower()
-        if not candidate:
-            return None
-        candidate = _LANGUAGE_ALIASES.get(candidate, candidate)
-        for separator in ("-", "_"):
-            if separator in candidate:
-                candidate = candidate.split(separator, 1)[0]
-        if len(candidate) == 2 and candidate.isalpha():
-            return candidate
-        return _LANGUAGE_ALIASES.get(candidate)
-
-    if isinstance(value, Mapping):
-        return _normalise_language(value.get("language"))
-
-    if isinstance(value, (list, tuple, set)):
-        for item in value:
-            normalised = _normalise_language(item)
-            if normalised:
-                return normalised
-
-    return None
-
-
 def _extract_language(metadata: Mapping[str, Any], meta_obj: Any) -> str | None:
     for key in ("language", "languages"):
         if key in metadata:
-            lang = _normalise_language(metadata[key])
+            lang = normalize_language_value(metadata[key])
             if lang:
                 return lang
     if meta_obj is not None:
         for key in ("language", "languages"):
-            lang = _normalise_language(getattr(meta_obj, key, None))
+            lang = normalize_language_value(getattr(meta_obj, key, None))
             if lang:
                 return lang
     return None
