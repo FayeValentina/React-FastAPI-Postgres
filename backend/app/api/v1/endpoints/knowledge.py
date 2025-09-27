@@ -31,7 +31,7 @@ from app.modules.knowledge_base.service import (
     update_chunk,
     delete_chunk,
 )
-from app.modules.knowledge_base.utils import coerce_bool, coerce_float, coerce_int
+from app.modules.knowledge_base.utils import coerce_float, coerce_int
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -183,14 +183,7 @@ async def search_knowledge(
     if not isinstance(config, dict):
         config = settings.dynamic_settings_defaults()
 
-    bm25_default_enabled = coerce_bool(config, "BM25_ENABLED", settings.BM25_ENABLED)
-    bm25_enabled = bm25_default_enabled
-    if not bm25_enabled:
-        logger.info(
-            "knowledge_search_bm25_disabled",
-            extra={"bm25_enabled": bm25_enabled, "top_k": top_k_value},
-        )
-        return []
+    bm25_enabled = True
 
     bm25_min_score = coerce_float(
         config,
