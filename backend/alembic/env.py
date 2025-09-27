@@ -15,8 +15,8 @@ import alembic_autogenerate_enums
 # 在 Docker 环境中，环境变量已通过 docker-compose 传递，不需要加载 .env 文件
 def get_env_file() -> str:
     """动态选择环境文件"""
-    environment = os.getenv("ENVIRONMENT", "dev")
-    if environment == "prod":
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production":
         return ".env.prod"
     else:
         return ".env.dev"

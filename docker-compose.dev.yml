@@ -71,10 +71,13 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_API_KEY=${LLM_API_KEY}
+      - CHAT_BASE_URL=${CHAT_BASE_URL}
+      - CHAT_API_KEY=${CHAT_API_KEY}
+      - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
+      - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
-      - RAG_TOP_K=${RAG_TOP_K:-3}
+      - RERANKER_MODEL=${RERANKER_MODEL}
+      - SPACY_MODEL_URL=${SPACY_MODEL_URL}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -84,21 +87,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      llama_server:
+      clf_server:
         condition: service_healthy
-      spacy_init:
-        condition: service_completed_successfully
       embeddings_init:
+        condition: service_completed_successfully
+      spacy_init:
         condition: service_completed_successfully
     command: >
       bash -c "
-        URLS=\"$${SPACY_MODEL_URLS:-$${SPACY_MODEL_URL}}\" &&
-        echo '安装本地 spaCy 模型...' &&
-        for U in $$(echo \"$${URLS}\" | tr ',' ' '); do \
-          F=$$(basename \"$${U}\"); \
-          echo \" - pip install /models/$${F}\"; \
-          poetry run pip install /models/$${F} || true; \
-        done &&
+        MODEL_URL=\"$${SPACY_MODEL_URL}\" &&
+        MODEL_FILE=$$(basename \"$${MODEL_URL}\") &&
+        if [ -n \"$${MODEL_URL}\" ]; then \
+          echo '安装本地 spaCy 模型...' && \
+          echo \" - pip install /models/$${MODEL_FILE}\" && \
+          poetry run pip install /models/$${MODEL_FILE} || true; \
+        fi &&
         echo '等待数据库准备...' &&
         echo '应用数据库迁移...' &&
         poetry run alembic upgrade head &&
@@ -141,11 +144,29 @@ services:
       - .env.dev
     environment:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - RERANKER_MODEL=${RERANKER_MODEL}
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/models/hf
       - HF_HUB_ENABLE_HF_TRANSFER=1
       - PIP_NO_CACHE_DIR=1
     command: ["sh", "/entry-scripts/embeddings_init.sh"]
+    volumes:
+      - models_data:/models
+      - ./scripts:/entry-scripts:ro
+    restart: "no"
+    networks:
+      - dbNetWork
+
+  # 预下载 spaCy 模型（一次性执行，完成即退出）
+  spacy_init:
+    image: python:3.11-slim
+    env_file:
+      - .env.dev
+    environment:
+      - SPACY_MODEL_URL=${SPACY_MODEL_URL}
+      - PIP_NO_CACHE_DIR=1
+      - PIP_DEFAULT_TIMEOUT=1200
+    command: ["sh", "/entry-scripts/spacy_init.sh"]
     volumes:
       - models_data:/models
       - ./scripts:/entry-scripts:ro
@@ -236,9 +257,9 @@ services:
       - .env.dev
     environment:
       - HF_TOKEN=${HF_TOKEN}
-      - HF_REPO_ID=${HF_REPO_ID}
-      - HF_FILENAME=${HF_FILENAME}
-      - HF_REVISION=${HF_REVISION:-main}
+      - CLASSIFIER_REPO_ID=${CLASSIFIER_REPO_ID}
+      - CLASSIFIER_FILENAME=${CLASSIFIER_FILENAME}
+      - CLASSIFIER_REVISION=${CLASSIFIER_REVISION:-main}
       - PIP_NO_CACHE_DIR=1
       - HF_HUB_ENABLE_HF_TRANSFER=1
     command: ["sh", "/entry-scripts/llm_init.sh"]
@@ -249,25 +270,7 @@ services:
     networks:
       - dbNetWork
 
-  # 预下载 spaCy 模型（一次性执行，完成即退出）
-  spacy_init:
-    image: python:3.11-slim
-    env_file:
-      - .env.dev
-    environment:
-      - SPACY_MODEL_URLS=${SPACY_MODEL_URLS}
-      - PIP_NO_CACHE_DIR=1
-      - PIP_DEFAULT_TIMEOUT=1200
-    command: ["sh", "/entry-scripts/spacy_init.sh"]
-    volumes:
-      - models_data:/models
-      - ./scripts:/entry-scripts:ro
-    restart: "no"
-    networks:
-      - dbNetWork
-
-  # OpenAI 兼容的 llama.cpp 服务器（内网可见，不对外暴露）
-  llama_server:
+  clf_server:
     image: ghcr.io/ggerganov/llama.cpp:server
     env_file:
       - .env.dev
@@ -282,7 +285,7 @@ services:
       start_period: 15s
     command:
       - --model
-      - /models/${HF_FILENAME}
+      - /models/${CLASSIFIER_FILENAME}
       - --port
       - "8080"
       - --host
@@ -292,7 +295,7 @@ services:
       - --parallel
       - "2"
       - --api-key
-      - ${LLM_API_KEY}
+      - ${CLASSIFIER_API_KEY}
     expose:
       - "8080"
     volumes:
@@ -321,6 +324,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
+      - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -329,6 +334,8 @@ services:
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      clf_server:
         condition: service_healthy
       embeddings_init:
         condition: service_completed_successfully
@@ -367,6 +374,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
+      - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -378,6 +387,8 @@ services:
         condition: service_healthy
       taskiq_worker:
         condition: service_started
+      clf_server:
+        condition: service_healthy
       embeddings_init:
         condition: service_completed_successfully
     command: >
@@ -400,11 +411,11 @@ services:
     env_file:
       - .env.dev
     ports:
-      - "127.0.0.1:${REDISINSIGHT_PORT:-5540}:5540"
+      - "5540:5540"
     volumes:
       - dev_redisinsight_data:/db
     environment:
-      - RITRUSTEDORIGINS=http://localhost:${REDISINSIGHT_PORT:-5540}
+      - RITRUSTEDORIGINS=http://localhost:5540
     depends_on:
       redis:
         condition: service_healthy

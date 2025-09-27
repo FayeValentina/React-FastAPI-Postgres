@@ -49,6 +49,7 @@ class KnowledgeChunkRead(BaseModel):
     document_id: Optional[int] = None
     chunk_index: Optional[int] = None
     content: str
+    language: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -59,8 +60,28 @@ class KnowledgeChunkUpdate(BaseModel):
     chunk_index: Optional[int] = Field(
         None, description="文档内块序，允许为空表示未指定"
     )
+    language: Optional[str] = Field(None, description="块语言，通常自动推断")
 
 
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="检索的查询文本")
     top_k: int = Field(5, ge=1, le=50, description="返回最相似的结果数量（1-50）")
+
+
+class KnowledgeSearchResult(BaseModel):
+    id: int
+    document_id: Optional[int] = None
+    chunk_index: Optional[int] = None
+    content: str
+    language: Optional[str] = None
+    created_at: datetime
+    score: float = Field(..., description="融合后的综合得分（0-1）")
+    similarity: float = Field(..., description="向量相似度分量（0-1）")
+    bm25_score: Optional[float] = Field(
+        None, description="BM25 原始分数，未命中则为空"
+    )
+    retrieval_source: str = Field(
+        ..., description="召回来源：vector/bm25/hybrid"
+    )
+
+    model_config = {"from_attributes": True}

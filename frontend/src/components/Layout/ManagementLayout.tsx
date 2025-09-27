@@ -81,7 +81,7 @@ const menuSections = [
         text: '系统设置',
         icon: <SettingsIcon />,
         path: '/management/settings',
-        implemented: false,
+        implemented: true,
       },
     ],
   },

@@ -67,7 +67,7 @@ The project is fully containerized and managed via Docker Compose.
     ```bash
     cp .env.example .env
     ```
-    Update `.env` with your desired model configurations (e.g., `EMBEDDING_MODEL`, `HF_REPO_ID`, `HF_FILENAME`).
+    Update `.env` with your desired model configurations (e.g., `EMBEDDING_MODEL`, `CHAT_REPO_ID`, `CHAT_FILENAME`).
 
 3.  **Start the application:**
     ```bash

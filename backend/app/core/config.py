@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 def get_env_file() -> str:
     """动态选择环境文件"""
-    environment = os.getenv("ENVIRONMENT", "dev")
-    if environment == "prod":
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production":
         return ".env.prod"
     else:
         return ".env.dev"
@@ -100,27 +100,6 @@ class SecuritySettings(BaseSettings):
     )
 
 
-class CORSSettings(BaseSettings):
-    """CORS 配置"""
-    ORIGINS: List[AnyHttpUrl] = []
-
-    @field_validator("ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
-
-    model_config = SettingsConfigDict(
-        env_prefix="BACKEND_CORS_",
-        env_file=[ENV_FILE],
-        env_file_encoding="utf-8",
-        extra="allow"
-    )
-
-
 class LoggingSettings(BaseSettings):
     """日志配置"""
     LEVEL: str = "INFO"
@@ -165,19 +144,6 @@ class TwitterSettings(BaseSettings):
         env_file_encoding="utf-8",
         extra="allow"
     )
-
-
-class AISettings(BaseSettings):
-    """AI 服务配置"""
-    GEMINI_API_KEY: str = ""
-
-    model_config = SettingsConfigDict(
-        env_prefix="AI_",
-        env_file=[ENV_FILE],
-        env_file_encoding="utf-8",
-        extra="allow"
-    )
-
 
 class EmailSettings(BaseSettings):
     """邮件服务配置"""
@@ -297,15 +263,8 @@ class RedisPoolConfig:
 
 class TaskIQSettings(BaseSettings):
     """TaskIQ 配置"""
-    # TaskIQ 基本配置
-    TIMEZONE: str = "UTC"
-    TASK_DEFAULT_RETRY_DELAY: int = 60
-    TASK_MAX_RETRIES: int = 3
-    TASK_TIME_LIMIT: int = 30 * 60  # 30分钟
-    
     # Worker设置
     WORKER_CONCURRENCY: int = 2
-    
     # 结果存储设置
     RESULT_EX_TIME: int = 3600  # 结果过期时间（秒）
     
@@ -321,22 +280,22 @@ class Settings(BaseSettings):
     # 基本配置
     PROJECT_NAME: str = "FastAPI Backend"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/v1"
     ENVIRONMENT: str = "development"
     
     # 服务配置
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_PORT: int = 8000
+
+    # Internal API
+    INTERNAL_API_SECRET: str = Field(default="")
     
     # 子配置
     postgres: PostgresSettings = PostgresSettings()
     pgadmin: PgAdminSettings = PgAdminSettings()
     security: SecuritySettings = SecuritySettings()
-    cors: CORSSettings = CORSSettings()
     logging: LoggingSettings = LoggingSettings()
     reddit: RedditSettings = RedditSettings()
     twitter: TwitterSettings = TwitterSettings()
-    ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
     rabbitmq: RabbitMQSettings = RabbitMQSettings()
     redis: RedisSettings = RedisSettings()
@@ -348,20 +307,45 @@ class Settings(BaseSettings):
     DB_ECHO_LOG: bool = True
 
     # LLM / RAG 配置（简单直挂根 Settings，便于直接引用）
-    LLM_BASE_URL: str = "http://llama_server:8080/v1"
-    LLM_API_KEY: str = "sk-local"
-    # 默认从 HF_FILENAME 读取，避免变量不同步
-    LLM_MODEL: str = Field(default_factory=lambda: os.getenv("HF_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
-    EMBEDDING_MODEL: str = Field(default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-    RAG_TOP_K: int = Field(default=3)
-    # spaCy 模型配置（多语言）
-    # 按语言分别配置小模型与可选路径
-    SPACY_MODEL_ZH: str = Field(default="zh_core_web_sm")
-    SPACY_MODEL_EN: str = Field(default="en_core_web_sm")
-    SPACY_MODEL_JA: str = Field(default="ja_core_news_sm")
-    SPACY_MODEL_PATH_ZH: str | None = Field(default=None)
-    SPACY_MODEL_PATH_EN: str | None = Field(default=None)
-    SPACY_MODEL_PATH_JA: str | None = Field(default=None)
+    CHAT_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    CHAT_API_KEY: str = "sk-local"
+    CLASSIFIER_BASE_URL: str = "http://clf_server:8080/v1"
+    CLASSIFIER_API_KEY: str = "sk-classifier"
+    # 默认从 FILENAME 读取，避免变量不同步
+    CHAT_MODEL: str = Field(default="gemini-2.5-flash-lite")
+    CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
+    EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
+    RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-base")
+    RAG_STRATEGY_ENABLED: bool = Field(default=False)
+    RAG_RERANK_ENABLED: bool = Field(default=False)
+    RAG_USE_LINGUA: bool = Field(default=False)
+    RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
+    RAG_RERANK_CANDIDATES: int = Field(default=100)
+    RAG_RERANK_SCORE_THRESHOLD: float = Field(default=0.48)
+    RAG_RERANK_MAX_BATCH: int = Field(default=16)
+    RAG_TOP_K: int = Field(default=12)
+    RAG_MIN_SIM: float = Field(default=0.35)
+    RAG_MMR_LAMBDA: float = Field(default=0.55)
+    RAG_PER_DOC_LIMIT: int = Field(default=6)
+    RAG_OVERSAMPLE: int = Field(default=5)
+    RAG_MAX_CANDIDATES: int = Field(default=240)
+    RAG_SAME_LANG_BONUS: float = Field(default=0.12)
+    RAG_CONTEXT_TOKEN_BUDGET: int = Field(default=4000)
+    RAG_CONTEXT_MAX_EVIDENCE: int = Field(default=28)
+    RAG_CHUNK_TARGET_TOKENS_EN: int = Field(default=260)
+    RAG_CHUNK_TARGET_TOKENS_CJK: int = Field(default=420)
+    RAG_CHUNK_TARGET_TOKENS_DEFAULT: int = Field(default=320)
+    RAG_CHUNK_OVERLAP_RATIO: float = Field(default=0.15)
+    RAG_CODE_CHUNK_MAX_LINES: int = Field(default=40)
+    RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
+    RAG_IVFFLAT_PROBES: int = Field(default=10)
+    RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
+    BM25_ENABLED: bool = Field(default=False)
+    BM25_TOP_K: int = Field(default=8)
+    BM25_WEIGHT: float = Field(default=0.35)
+    BM25_MIN_SCORE: float = Field(default=0.0)
+    QUERY_REWRITE_ENABLED: bool = Field(default=False)
+    SPACY_MODEL_NAME: str = Field(default="zh_core_web_sm")
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -372,5 +356,39 @@ class Settings(BaseSettings):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    def dynamic_settings_defaults(self) -> dict[str, Any]:
+        """Return the default dynamic settings that can be overridden via Redis."""
+        return {
+            "RAG_STRATEGY_ENABLED": self.RAG_STRATEGY_ENABLED,
+            "RAG_RERANK_ENABLED": self.RAG_RERANK_ENABLED,
+            "RAG_RERANK_CANDIDATES": self.RAG_RERANK_CANDIDATES,
+            "RAG_RERANK_SCORE_THRESHOLD": self.RAG_RERANK_SCORE_THRESHOLD,
+            "RAG_RERANK_MAX_BATCH": self.RAG_RERANK_MAX_BATCH,
+            "RAG_TOP_K": self.RAG_TOP_K,
+            "RAG_MIN_SIM": self.RAG_MIN_SIM,
+            "RAG_MMR_LAMBDA": self.RAG_MMR_LAMBDA,
+            "RAG_PER_DOC_LIMIT": self.RAG_PER_DOC_LIMIT,
+            "RAG_OVERSAMPLE": self.RAG_OVERSAMPLE,
+            "RAG_MAX_CANDIDATES": self.RAG_MAX_CANDIDATES,
+            "RAG_SAME_LANG_BONUS": self.RAG_SAME_LANG_BONUS,
+            "RAG_CONTEXT_TOKEN_BUDGET": self.RAG_CONTEXT_TOKEN_BUDGET,
+            "RAG_CONTEXT_MAX_EVIDENCE": self.RAG_CONTEXT_MAX_EVIDENCE,
+            "RAG_CHUNK_TARGET_TOKENS_EN": self.RAG_CHUNK_TARGET_TOKENS_EN,
+            "RAG_CHUNK_TARGET_TOKENS_CJK": self.RAG_CHUNK_TARGET_TOKENS_CJK,
+            "RAG_CHUNK_TARGET_TOKENS_DEFAULT": self.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
+            "RAG_CHUNK_OVERLAP_RATIO": self.RAG_CHUNK_OVERLAP_RATIO,
+            "RAG_CODE_CHUNK_MAX_LINES": self.RAG_CODE_CHUNK_MAX_LINES,
+            "RAG_CODE_CHUNK_OVERLAP_LINES": self.RAG_CODE_CHUNK_OVERLAP_LINES,
+            "RAG_IVFFLAT_PROBES": self.RAG_IVFFLAT_PROBES,
+            "RAG_USE_LINGUA": self.RAG_USE_LINGUA,
+            "RAG_STRATEGY_LLM_CLASSIFIER_ENABLED": self.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
+            "RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD": self.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
+            "BM25_ENABLED": self.BM25_ENABLED,
+            "BM25_TOP_K": self.BM25_TOP_K,
+            "BM25_WEIGHT": self.BM25_WEIGHT,
+            "BM25_MIN_SCORE": self.BM25_MIN_SCORE,
+            "QUERY_REWRITE_ENABLED": self.QUERY_REWRITE_ENABLED,
+        }
 
 settings = Settings()
