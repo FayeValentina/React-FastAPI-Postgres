@@ -167,7 +167,7 @@ jobs:
           push: false
           tags: backend:test
           cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-to: type=gha,mode=min,scope=backend,compression=zstd,compression-level=6
 
       - name: Build frontend image (cached)
         uses: docker/build-push-action@v6
@@ -179,4 +179,4 @@ jobs:
           push: false
           tags: frontend:test
           cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          cache-to: type=gha,mode=min,scope=frontend,compression=zstd,compression-level=6
