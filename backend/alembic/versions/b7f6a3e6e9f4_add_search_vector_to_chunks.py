@@ -14,12 +14,14 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "b7f6a3e6e9f4"
-down_revision: Union[str, None] = "7c2e9e5f3b92"
+down_revision: Union[str, None] = "4b7f97a4eb0c"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
+    op.execute("CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;")
     op.add_column(
         "knowledge_chunks",
         sa.Column("search_vector", postgresql.TSVECTOR(), nullable=True),

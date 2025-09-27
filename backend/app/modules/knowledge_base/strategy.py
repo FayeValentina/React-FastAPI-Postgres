@@ -7,41 +7,45 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from app.core.config import settings
 from app.modules.knowledge_base import intent_classifier
+from app.modules.knowledge_base.utils import ensure_bool, ensure_float, ensure_int
 
 
 logger = logging.getLogger(__name__)
 
 
-def _safe_int(value: Any, fallback: int) -> int:
-    try:
-        parsed = int(value)
-        return parsed if parsed > 0 else fallback
-    except (TypeError, ValueError):
-        return fallback
+def _positive_int(value: Any, fallback: int) -> int:
+    candidate = ensure_int(value, fallback)
+    return candidate if candidate > 0 else fallback
 
 
-def _safe_float(value: Any, fallback: float, *, minimum: float | None = None, maximum: float | None = None) -> float:
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        parsed = fallback
-    if minimum is not None and parsed < minimum:
-        parsed = minimum
-    if maximum is not None and parsed > maximum:
-        parsed = maximum
-    return parsed
+def _non_negative_int(value: Any, fallback: int) -> int:
+    candidate = ensure_int(value, fallback)
+    return candidate if candidate >= 0 else fallback
 
 
-def _safe_bool(value: Any, fallback: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "on"}:
-            return True
-        if lowered in {"false", "0", "no", "off"}:
-            return False
-    return fallback
+def _bounded_float(
+    value: Any,
+    fallback: float,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    return ensure_float(value, fallback, minimum=minimum, maximum=maximum)
+
+
+_INT_DEFAULTS: Dict[str, int] = {
+    "RAG_PER_DOC_LIMIT": settings.RAG_PER_DOC_LIMIT,
+    "RAG_OVERSAMPLE": settings.RAG_OVERSAMPLE,
+    "RAG_MAX_CANDIDATES": settings.RAG_MAX_CANDIDATES,
+    "RAG_RERANK_CANDIDATES": settings.RAG_RERANK_CANDIDATES,
+    "RAG_CONTEXT_MAX_EVIDENCE": settings.RAG_CONTEXT_MAX_EVIDENCE,
+    "RAG_CONTEXT_TOKEN_BUDGET": settings.RAG_CONTEXT_TOKEN_BUDGET,
+}
+
+_FLOAT_DEFAULTS: Dict[str, float] = {
+    "RAG_MIN_SIM": settings.RAG_MIN_SIM,
+    "RAG_RERANK_SCORE_THRESHOLD": settings.RAG_RERANK_SCORE_THRESHOLD,
+}
 
 
 LLM_SCENARIO_MAP: Dict[str, str] = {
@@ -170,7 +174,7 @@ def _apply_scenario(
     ctx: StrategyContext,
 ) -> Dict[str, Any]:
     request_top_k = (
-        _safe_int(ctx.top_k_request, base_top_k)
+        _positive_int(ctx.top_k_request, base_top_k)
         if ctx.top_k_request is not None
         else base_top_k
     )
@@ -246,33 +250,20 @@ def _sanitize_overrides(base: Mapping[str, Any], overrides: Dict[str, Any]) -> D
     sanitized: Dict[str, Any] = {}
     for key, value in overrides.items():
         if key == "RAG_TOP_K":
-            candidate = _safe_int(value, _safe_int(base.get(key), settings.RAG_TOP_K))
-            candidate = min(candidate, 50)
-            if candidate > 0 and candidate != base.get(key):
+            current = _positive_int(base.get(key), settings.RAG_TOP_K)
+            candidate = min(_positive_int(value, current), 50)
+            if candidate != current:
                 sanitized[key] = candidate
-        elif key in {
-            "RAG_PER_DOC_LIMIT",
-            "RAG_OVERSAMPLE",
-            "RAG_MAX_CANDIDATES",
-            "RAG_RERANK_CANDIDATES",
-            "RAG_CONTEXT_MAX_EVIDENCE",
-            "RAG_CONTEXT_TOKEN_BUDGET",
-        }:
-            candidate = _safe_int(value, _safe_int(base.get(key), 1))
-            if candidate >= 0 and candidate != base.get(key):
+        elif key in _INT_DEFAULTS:
+            current = _non_negative_int(base.get(key), _INT_DEFAULTS[key])
+            candidate = _non_negative_int(value, current)
+            if candidate != current:
                 sanitized[key] = candidate
-        elif key == "RAG_MIN_SIM":
-            candidate = _safe_float(value, _safe_float(base.get(key), settings.RAG_MIN_SIM), minimum=0.0, maximum=0.99)
-            if candidate != base.get(key):
-                sanitized[key] = round(candidate, 4)
-        elif key == "RAG_RERANK_SCORE_THRESHOLD":
-            candidate = _safe_float(
-                value,
-                _safe_float(base.get(key), settings.RAG_RERANK_SCORE_THRESHOLD),
-                minimum=0.0,
-                maximum=1.0,
-            )
-            if candidate != base.get(key):
+        elif key in _FLOAT_DEFAULTS:
+            minimum, maximum = (0.0, 0.99) if key == "RAG_MIN_SIM" else (0.0, 1.0)
+            current = _bounded_float(base.get(key), _FLOAT_DEFAULTS[key], minimum=minimum, maximum=maximum)
+            candidate = _bounded_float(value, current, minimum=minimum, maximum=maximum)
+            if candidate != current:
                 sanitized[key] = round(candidate, 4)
         else:
             sanitized[key] = value
@@ -294,12 +285,12 @@ async def resolve_rag_parameters(
         classifier_meta: Dict[str, Any] | None = None
         scenario: str | None = None
 
-        rewrite_enabled = _safe_bool(
+        rewrite_enabled = ensure_bool(
             base.get("QUERY_REWRITE_ENABLED"), settings.QUERY_REWRITE_ENABLED
         )
         request_ctx.query_rewrite_enabled = rewrite_enabled
 
-        classifier_enabled = _safe_bool(
+        classifier_enabled = ensure_bool(
             base.get("RAG_STRATEGY_LLM_CLASSIFIER_ENABLED"),
             settings.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
         )
@@ -307,7 +298,7 @@ async def resolve_rag_parameters(
         processed_query_text: str | None = None
 
         if classifier_enabled:
-            threshold = _safe_float(
+            threshold = _bounded_float(
                 base.get("RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD"),
                 settings.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
                 minimum=0.0,
@@ -357,17 +348,17 @@ async def resolve_rag_parameters(
         if scenario is None:
             scenario = _classify_query(query, request_ctx)
 
-        base_top_k = _safe_int(base.get("RAG_TOP_K"), settings.RAG_TOP_K)
-        base_per_doc = _safe_int(base.get("RAG_PER_DOC_LIMIT"), settings.RAG_PER_DOC_LIMIT)
-        base_min_sim = _safe_float(base.get("RAG_MIN_SIM"), settings.RAG_MIN_SIM, minimum=0.0, maximum=1.0)
-        base_oversample = _safe_int(base.get("RAG_OVERSAMPLE"), settings.RAG_OVERSAMPLE)
-        base_max_candidates = _safe_int(base.get("RAG_MAX_CANDIDATES"), settings.RAG_MAX_CANDIDATES)
-        base_rerank_candidates = _safe_int(base.get("RAG_RERANK_CANDIDATES"), settings.RAG_RERANK_CANDIDATES)
-        base_context_max_evidence = _safe_int(
+        base_top_k = _positive_int(base.get("RAG_TOP_K"), settings.RAG_TOP_K)
+        base_per_doc = _non_negative_int(base.get("RAG_PER_DOC_LIMIT"), settings.RAG_PER_DOC_LIMIT)
+        base_min_sim = _bounded_float(base.get("RAG_MIN_SIM"), settings.RAG_MIN_SIM, minimum=0.0, maximum=1.0)
+        base_oversample = _positive_int(base.get("RAG_OVERSAMPLE"), settings.RAG_OVERSAMPLE)
+        base_max_candidates = _positive_int(base.get("RAG_MAX_CANDIDATES"), settings.RAG_MAX_CANDIDATES)
+        base_rerank_candidates = _positive_int(base.get("RAG_RERANK_CANDIDATES"), settings.RAG_RERANK_CANDIDATES)
+        base_context_max_evidence = _positive_int(
             base.get("RAG_CONTEXT_MAX_EVIDENCE"),
             settings.RAG_CONTEXT_MAX_EVIDENCE,
         )
-        base_context_budget = _safe_int(
+        base_context_budget = _positive_int(
             base.get("RAG_CONTEXT_TOKEN_BUDGET"),
             settings.RAG_CONTEXT_TOKEN_BUDGET,
         )

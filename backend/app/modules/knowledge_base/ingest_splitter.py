@@ -15,7 +15,9 @@ from langchain_text_splitters import (  # type: ignore
 from app.core.config import settings
 
 from .ingest_extractor import ExtractedElement
-from .ingest_language import detect_language, is_probable_code
+from .ingest_language import detect_language, detect_language_meta, is_probable_code
+from .language_utils import normalize_language_value
+from .utils import coerce_value
 
 
 HEADERS_TO_SPLIT_ON = [
@@ -26,54 +28,6 @@ HEADERS_TO_SPLIT_ON = [
 
 DEFAULT_ENCODING = "cl100k_base"
 CODE_TOKENS_PER_LINE = 12
-
-_LANGUAGE_ALIAS_MAP = {
-    "english": "en",
-    "eng": "en",
-    "en-us": "en",
-    "en_us": "en",
-    "en-gb": "en",
-    "chinese": "zh",
-    "zh-cn": "zh",
-    "zh_cn": "zh",
-    "zh-hans": "zh",
-    "zh-hant": "zh",
-    "zh-tw": "zh",
-    "mandarin": "zh",
-    "cn": "zh",
-    "japanese": "ja",
-    "jp": "ja",
-}
-
-
-def _normalise_lang_code(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        code = value.strip().lower()
-        if not code:
-            return None
-        code = _LANGUAGE_ALIAS_MAP.get(code, code)
-        for separator in ("-", "_"):
-            if separator in code:
-                code = code.split(separator, 1)[0]
-        if code == "code":
-            return "code"
-        if len(code) == 2 and code.isalpha():
-            return code
-        return _LANGUAGE_ALIAS_MAP.get(code)
-
-    if isinstance(value, Mapping):
-        return _normalise_lang_code(value.get("language"))
-
-    if isinstance(value, (list, tuple, set)):
-        for item in value:
-            normalised = _normalise_lang_code(item)
-            if normalised:
-                return normalised
-
-    return None
-
 
 @dataclass(slots=True)
 class SplitChunk:
@@ -120,42 +74,27 @@ def _markdown_splitter() -> MarkdownHeaderTextSplitter:
     return MarkdownHeaderTextSplitter(headers_to_split_on=HEADERS_TO_SPLIT_ON, strip_headers=False)
 
 
-def _coerce_value(
-    config: Mapping[str, Any] | None,
-    key: str,
-    default: Any,
-    caster,
-):
-    if config is None:
-        return caster(default)
-    candidate = config.get(key, default)
-    try:
-        return caster(candidate)
-    except (TypeError, ValueError):
-        return caster(default)
-
-
 def build_chunking_parameters(config: Mapping[str, Any] | None = None) -> ChunkingParameters:
     return ChunkingParameters(
-        target_tokens_en=_coerce_value(
+        target_tokens_en=coerce_value(
             config, "RAG_CHUNK_TARGET_TOKENS_EN", settings.RAG_CHUNK_TARGET_TOKENS_EN, int
         ),
-        target_tokens_cjk=_coerce_value(
+        target_tokens_cjk=coerce_value(
             config, "RAG_CHUNK_TARGET_TOKENS_CJK", settings.RAG_CHUNK_TARGET_TOKENS_CJK, int
         ),
-        target_tokens_default=_coerce_value(
+        target_tokens_default=coerce_value(
             config,
             "RAG_CHUNK_TARGET_TOKENS_DEFAULT",
             settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
             int,
         ),
-        overlap_ratio=_coerce_value(
+        overlap_ratio=coerce_value(
             config, "RAG_CHUNK_OVERLAP_RATIO", settings.RAG_CHUNK_OVERLAP_RATIO, float
         ),
-        code_max_lines=_coerce_value(
+        code_max_lines=coerce_value(
             config, "RAG_CODE_CHUNK_MAX_LINES", settings.RAG_CODE_CHUNK_MAX_LINES, int
         ),
-        code_overlap_lines=_coerce_value(
+        code_overlap_lines=coerce_value(
             config,
             "RAG_CODE_CHUNK_OVERLAP_LINES",
             settings.RAG_CODE_CHUNK_OVERLAP_LINES,
@@ -271,16 +210,12 @@ def split_elements(
     params = build_chunking_parameters(config)
     chunks: List[SplitChunk] = []
 
-    @lru_cache(maxsize=2048)
-    def _detect_cached(text: str, default_lang: str) -> str:
-        return detect_language(text, config=config, default=default_lang)
-
     def _resolve_language(text: str, *, default_lang: str) -> str:
-        normalized_default = _normalise_lang_code(default_lang) or "en"
+        normalized_default = normalize_language_value(default_lang) or "en"
         if not text:
             return normalized_default
-        detected = _detect_cached(text, normalized_default)
-        normalised = _normalise_lang_code(detected)
+        meta = detect_language_meta(text, config=config, default=normalized_default)
+        normalised = normalize_language_value(meta["language"])
         return normalised if normalised else normalized_default
 
     for element in elements:
@@ -289,17 +224,20 @@ def split_elements(
             continue
 
         base_meta = dict(element.metadata or {})
-        meta_lang = _normalise_lang_code(base_meta.get("language"))
-        element_lang = _normalise_lang_code(element.language)
+        meta_lang = normalize_language_value(base_meta.get("language"))
+        element_lang = normalize_language_value(element.language)
         base_language = element_lang or meta_lang
         if base_language:
             base_meta.setdefault("language", base_language)
 
-        lang = base_language or _resolve_language(
+        canonical_lang = base_language or _resolve_language(
             text, default_lang=base_meta.get("language", "en")
         )
 
-        if element.is_code or lang == "code" or is_probable_code(text):
+        meta = detect_language_meta(text, config=config, default=canonical_lang)
+        detected_lang = normalize_language_value(meta["language"]) or canonical_lang
+
+        if element.is_code or meta.get("is_code") or detected_lang == "code":
             base_meta.setdefault("language", "code")
             code_chunks = _split_code(text, params)
             for chunk in code_chunks:
@@ -313,19 +251,35 @@ def split_elements(
                 )
             continue
 
-        default_section_lang = "en" if lang == "code" else (lang or "en")
+        default_section_lang = "en" if detected_lang == "code" else (detected_lang or "en")
 
         for section_text, metadata in _markdown_sections(text, base_meta):
             section_meta = dict(metadata)
             section_default = (
                 element_lang
-                or _normalise_lang_code(section_meta.get("language"))
+                or normalize_language_value(section_meta.get("language"))
                 or default_section_lang
             )
-            section_lang = element_lang or _resolve_language(
-                section_text, default_lang=section_default
+            section_info = detect_language_meta(
+                section_text, config=config, default=section_default
             )
+            section_lang = normalize_language_value(section_info["language"]) or section_default
             section_meta.setdefault("language", section_lang)
+
+            if section_info.get("is_code") or section_lang == "code":
+                code_meta = dict(section_meta)
+                code_meta["language"] = "code"
+                for chunk in _split_code(section_text, params):
+                    chunks.append(
+                        SplitChunk(
+                            content=chunk,
+                            language="code",
+                            metadata=dict(code_meta),
+                            is_code=True,
+                        )
+                    )
+                continue
+
             for part in _split_text(section_text, section_lang, params):
                 chunks.append(
                     SplitChunk(

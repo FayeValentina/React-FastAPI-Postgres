@@ -66,18 +66,6 @@ class KnowledgeChunkUpdate(BaseModel):
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="检索的查询文本")
     top_k: int = Field(5, ge=1, le=50, description="返回最相似的结果数量（1-50）")
-    bm25_enabled: Optional[bool] = Field(
-        None, description="是否启用 BM25 关键字检索，默认遵循后端配置"
-    )
-    bm25_top_k: Optional[int] = Field(
-        None, ge=1, le=100, description="BM25 候选数量上限"
-    )
-    bm25_weight: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="BM25 得分在融合时的权重"
-    )
-    bm25_min_score: Optional[float] = Field(
-        None, ge=0.0, description="筛除低于该 BM25 原始分数的候选"
-    )
 
 
 class KnowledgeSearchResult(BaseModel):

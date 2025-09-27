@@ -345,6 +345,7 @@ class Settings(BaseSettings):
     BM25_WEIGHT: float = Field(default=0.35)
     BM25_MIN_SCORE: float = Field(default=0.0)
     QUERY_REWRITE_ENABLED: bool = Field(default=False)
+    SPACY_MODEL_NAME: str = Field(default="zh_core_web_sm")
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

@@ -53,6 +53,7 @@ charset-normalizer = "^3.3"
 langchain-text-splitters = "^0.3.0"
 tiktoken = "^0.7"
 lingua-language-detector = "^1.4"
+spacy = "^3.8.2"
 
 # --- NLTK 已被移除 ---
 # nltk = "^3.9" 

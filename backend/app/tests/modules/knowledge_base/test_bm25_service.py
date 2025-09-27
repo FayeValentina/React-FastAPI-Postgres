@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from app.core.config import settings
-from app.modules.knowledge_base import service
+from app.modules.knowledge_base import service, bm25
 
 
 class DummyEncoder:
@@ -35,8 +35,27 @@ async def test_bm25_fusion_combines_vector_and_keyword(monkeypatch) -> None:
     async def fake_fetch(_db, _embedding, _limit):
         return [(vector_chunk, 0.2)]
 
-    async def fake_bm25(_db, _query, _limit, filters=None):
-        return [(bm25_chunk, 12.0)]
+    async def fake_bm25_matches(
+        _db,
+        _query,
+        _top_k,
+        *,
+        min_score=0.0,
+        language=None,
+        filters=None,
+    ):
+        match = bm25.BM25Match(
+            chunk=bm25_chunk,
+            raw_score=12.0,
+            normalized_score=0.8,
+        )
+        return bm25.BM25SearchResult(
+            matches=[match],
+            raw_hits=1,
+            after_threshold=1,
+            max_score=12.0,
+            min_score=12.0,
+        )
 
     async def fake_run_in_threadpool(func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -44,7 +63,7 @@ async def test_bm25_fusion_combines_vector_and_keyword(monkeypatch) -> None:
     monkeypatch.setattr(service, "run_in_threadpool", fake_run_in_threadpool)
     monkeypatch.setattr(service, "_model", DummyEncoder())
     monkeypatch.setattr(service.crud_knowledge_base, "fetch_chunk_candidates_by_embedding", fake_fetch)
-    monkeypatch.setattr(service.crud_knowledge_base, "search_by_bm25", fake_bm25)
+    monkeypatch.setattr(bm25, "fetch_bm25_matches", fake_bm25_matches)
     monkeypatch.setattr(service, "_detect_language", lambda _text, _config: "en")
 
     config = settings.dynamic_settings_defaults()

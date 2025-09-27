@@ -43,6 +43,11 @@ class AdminSettingsUpdate(BaseModel):
     RAG_IVFFLAT_PROBES: int | None = Field(None, ge=1)
     RAG_USE_LINGUA: bool | None = None
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float | None = Field(None, ge=0.0, le=1.0)
+    BM25_ENABLED: bool | None = None
+    BM25_TOP_K: int | None = Field(None, ge=0)
+    BM25_WEIGHT: float | None = Field(None, ge=0.0, le=1.0)
+    BM25_MIN_SCORE: float | None = Field(None, ge=0.0)
+    QUERY_REWRITE_ENABLED: bool | None = None
 
 
 class AdminSettingsResetRequest(BaseModel):

@@ -10,10 +10,28 @@ from sqlalchemy.orm import selectinload
 
 from . import models
 from .schemas import KnowledgeDocumentCreate
+from .tokenizer import tokenize_for_search
 
 
 class CRUDKnowledgeBase:
     """Repository wrapper for knowledge documents and chunks."""
+
+    @staticmethod
+    def _apply_chunk_filters(
+        stmt,
+        filters: Mapping[str, Any] | None,
+    ):
+        payload = filters or {}
+
+        document_ids = payload.get("document_ids")
+        if document_ids:
+            stmt = stmt.where(models.KnowledgeChunk.document_id.in_(document_ids))
+
+        language = payload.get("language")
+        if language:
+            stmt = stmt.where(models.KnowledgeChunk.language == language)
+
+        return stmt
 
     async def create_document(
         self, db: AsyncSession, data: KnowledgeDocumentCreate
@@ -117,6 +135,7 @@ class CRUDKnowledgeBase:
 
         created = 0
         for chunk_index, content, embedding, language in chunks:
+            search_text = tokenize_for_search(content, language)
             db.add(
                 models.KnowledgeChunk(
                     document_id=document_id,
@@ -124,7 +143,7 @@ class CRUDKnowledgeBase:
                     content=content,
                     embedding=np.asarray(embedding),
                     language=language,
-                    search_vector=func.to_tsvector("simple", content),
+                    search_vector=func.to_tsvector("simple", search_text),
                 )
             )
             created += 1
@@ -176,11 +195,14 @@ class CRUDKnowledgeBase:
         limit: int,
         *,
         filters: Mapping[str, Any] | None = None,
+        query_language: str | None = None,
     ) -> list[tuple[models.KnowledgeChunk, float]]:
-        if not query or limit <= 0:
+        normalized_query = tokenize_for_search(query, query_language)
+
+        if not normalized_query or limit <= 0:
             return []
 
-        ts_query = func.plainto_tsquery("simple", query)
+        ts_query = func.plainto_tsquery("simple", normalized_query)
         rank_expr = func.ts_rank_cd(models.KnowledgeChunk.search_vector, ts_query)
 
         stmt = (
@@ -190,14 +212,7 @@ class CRUDKnowledgeBase:
             .where(models.KnowledgeChunk.search_vector.op("@@")(ts_query))
         )
 
-        filters = filters or {}
-        document_ids = filters.get("document_ids")
-        if document_ids:
-            stmt = stmt.where(models.KnowledgeChunk.document_id.in_(document_ids))
-
-        language = filters.get("language")
-        if language:
-            stmt = stmt.where(models.KnowledgeChunk.language == language)
+        stmt = self._apply_chunk_filters(stmt, filters)
 
         stmt = stmt.order_by(rank_expr.desc()).limit(limit)
 

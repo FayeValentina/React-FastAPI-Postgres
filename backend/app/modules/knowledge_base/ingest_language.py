@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import Any, Mapping, TYPE_CHECKING
+from typing import Any, Dict, Mapping, TYPE_CHECKING
 import logging
 
 from app.core.config import settings
@@ -119,6 +119,19 @@ def _heuristic_language(text: str) -> str:
     return "en"
 
 
+def is_cjk_text(text: str | None) -> bool:
+    """Return True when the payload contains CJK (Chinese/Japanese) characters."""
+
+    if not text:
+        return False
+    sample = text.strip()
+    if not sample:
+        return False
+    if _HIRAGANA_RE.search(sample) or _KATAKANA_RE.search(sample):
+        return True
+    return bool(_CJK_RE.search(sample))
+
+
 def detect_language(
     text: str,
     config: Mapping[str, Any] | None = None,
@@ -126,33 +139,8 @@ def detect_language(
 ) -> str:
     """Detect language, normalising to en/zh/ja/code with graceful fallbacks."""
 
-    if not text:
-        return default
-
-    if is_probable_code(text):
-        logger.debug("ingest_language.detect: path=code")
-        return "code"
-
-    if _should_use_lingua(config):
-        detector = _get_lingua_detector()
-        if detector is not None:
-            try:
-                detected = detector.detect_language_of(text)
-                if _Language and detected == _Language.CHINESE:
-                    logger.debug("ingest_language.detect: path=lingua lang=zh")
-                    return "zh"
-                if _Language and detected == _Language.JAPANESE:
-                    logger.debug("ingest_language.detect: path=lingua lang=ja")
-                    return "ja"
-                if _Language and detected == _Language.ENGLISH:
-                    logger.debug("ingest_language.detect: path=lingua lang=en")
-                    return "en"
-            except Exception:  # pragma: no cover - lingua failures fall back to heuristics
-                logger.warning("ingest_language.detect: lingua failed; falling back to heuristics",exc_info=logger.isEnabledFor(logging.DEBUG))
-
-    lang = _heuristic_language(text) or default
-    logger.debug("ingest_language.detect: path=heuristic lang=%s", lang)
-    return lang
+    result = detect_language_meta(text, config=config, default=default)
+    return result["language"]
 
 
 def lingua_status(config: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -164,5 +152,56 @@ def lingua_status(config: Mapping[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-__all__ = ["detect_language", "is_probable_code", "lingua_status"]
+def detect_language_meta(
+    text: str,
+    *,
+    config: Mapping[str, Any] | None = None,
+    default: str = "en",
+) -> Dict[str, Any]:
+    """Return language metadata including ``language`` and ``is_code`` flags."""
 
+    if not text:
+        return {"language": default, "is_code": False}
+
+    if is_probable_code(text):
+        logger.debug("ingest_language.detect: path=code")
+        return {"language": "code", "is_code": True}
+
+    language = None
+
+    if _should_use_lingua(config):
+        detector = _get_lingua_detector()
+        if detector is not None:
+            try:
+                detected = detector.detect_language_of(text)
+            except Exception:
+                logger.warning(
+                    "ingest_language.detect: lingua failed; falling back to heuristics",
+                    exc_info=logger.isEnabledFor(logging.DEBUG),
+                )
+                detected = None
+
+            if _Language and detected == _Language.CHINESE:
+                language = "zh"
+                logger.debug("ingest_language.detect: path=lingua lang=zh")
+            elif _Language and detected == _Language.JAPANESE:
+                language = "ja"
+                logger.debug("ingest_language.detect: path=lingua lang=ja")
+            elif _Language and detected == _Language.ENGLISH:
+                language = "en"
+                logger.debug("ingest_language.detect: path=lingua lang=en")
+
+    if language is None:
+        language = _heuristic_language(text) or default
+        logger.debug("ingest_language.detect: path=heuristic lang=%s", language)
+
+    return {"language": language, "is_code": False}
+
+
+__all__ = [
+    "detect_language",
+    "detect_language_meta",
+    "is_probable_code",
+    "is_cjk_text",
+    "lingua_status",
+]
