@@ -1,6 +1,5 @@
 import logging
 import sys
-from typing import List
 from pathlib import Path
 from loguru import logger
 
@@ -58,51 +57,28 @@ def setup_logging(
     logging.root.addHandler(InterceptHandler())
 
     # 设置要拦截的模块
-    loggers: List[str] = [
-        "uvicorn",
-        "uvicorn.error",
-        "fastapi",
-        "sqlalchemy.engine",
-        "app"  # 确保应用代码的日志也被捕获
-    ]
-    for logger_name in loggers:
-        logging_logger = logging.getLogger(logger_name)
-        logging_logger.handlers = [InterceptHandler()]
-        logging_logger.propagate = False  # 防止日志重复
+    # 清理内置日志配置，交给 loguru 统一处理
+    for name in list(logging.root.manager.loggerDict.keys()):
+        logging_logger = logging.getLogger(name)
+        logging_logger.handlers = []
+        logging_logger.propagate = True
 
-    # 配置 loguru
-    # 主日志格式，包含请求ID
-    log_format = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | " \
-                 "<level>{level: <8}</level> | " \
-                 "{extra[request_id]: <36} | " \
-                 "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | " \
-                 "{message}"
-    
-    # 不包含请求ID的简单格式，当请求ID不存在时使用
-    simple_format = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | " \
-                    "<level>{level: <8}</level> | " \
-                    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | " \
-                    "{message}"
+    def _format_record(record: dict) -> str:
+        record["extra"].setdefault("request_id", "-")
+        return (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "{extra[request_id]: <36} | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+            "{message}\n"
+        )
 
     handlers = [
         {
             "sink": sys.stdout,
             "serialize": json_logs,
             "level": log_level,
-            "format": simple_format,
-            "filter": lambda record: "request_id" not in record["extra"] and record["name"] != "app.api.middleware.logging"
-        },
-        {
-            "sink": sys.stdout,
-            "level": log_level,
-            "format": log_format,
-            "filter": lambda record: "request_id" in record["extra"] and record["name"] != "app.api.middleware.logging"
-        },
-        {
-            "sink": sys.stdout,
-            "level": "INFO",
-            "format": "\n{message}",  # logging 中间件使用简化格式
-            "filter": lambda record: record["name"] == "app.api.middleware.logging"
+            "format": _format_record,
         }
     ]
 
@@ -112,25 +88,19 @@ def setup_logging(
         log_path.parent.mkdir(parents=True, exist_ok=True)
         
         # 根据是否使用 JSON 格式分别配置
-        if json_logs:
-            handlers.append({
-                "sink": str(log_path),
-                "serialize": True,
-                "level": log_level,
-                "rotation": "00:00",  # 每天轮换
-                "retention": "30 days",  # 保留30天
-                "compression": "zip"  # 压缩旧日志
-            })
-        else:
-            handlers.append({
-                "sink": str(log_path),
-                "serialize": False,
-                "level": log_level,
-                "rotation": "00:00",  # 每天轮换
-                "retention": "30 days",  # 保留30天
-                "compression": "zip",  # 压缩旧日志
-                "format": log_format
-            })
+        file_handler = {
+            "sink": str(log_path),
+            "serialize": json_logs,
+            "level": log_level,
+            "rotation": "00:00",  # 每天轮换
+            "retention": "30 days",  # 保留30天
+            "compression": "zip",  # 压缩旧日志
+        }
+
+        if not json_logs:
+            file_handler["format"] = _format_record
+
+        handlers.append(file_handler)
 
     # 配置 loguru
     logger.configure(handlers=handlers)

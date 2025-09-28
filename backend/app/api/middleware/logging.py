@@ -37,72 +37,70 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
         
-        # 标记请求已被记录，避免其他组件重复记录
-        request.state._request_logged = True
-        
         # 检查是否应该跳过日志记录
         if self._should_skip_logging(request):
             return await call_next(request)
             
-        # 记录开始时间
-        start_time = time.time()
-        
-        # 收集请求信息
-        try:
-            request_info = await self._collect_request_info(request)
-        except Exception as e:
-            logger.error(f"Error collecting request info: {str(e)}")
-            request_info = {
-                "method": request.method,
-                "url": str(request.url),
-                "error": f"Error collecting request info: {str(e)}"
-            }
-        
-        response = None
-        try:
-            # 处理请求
-            response = await call_next(request)
-            
-            # 计算请求处理时间
-            duration = round(time.time() - start_time, 3)
-            
-            # 收集响应信息，但不尝试读取流式响应的响应体
+        with logger.contextualize(request_id=request_id):
+            # 记录开始时间
+            start_time = time.time()
+
+            # 收集请求信息
             try:
-                response_info = self._collect_response_info(response, duration)
+                request_info = await self._collect_request_info(request)
             except Exception as e:
-                logger.error(f"Error collecting response info: {str(e)}")
-                response_info = {
-                    "status_code": response.status_code if hasattr(response, "status_code") else 500,
-                    "duration": duration,
-                    "error": f"Error collecting response info: {str(e)}"
+                logger.error(f"Error collecting request info: {str(e)}")
+                request_info = {
+                    "method": request.method,
+                    "url": str(request.url),
+                    "error": f"Error collecting request info: {str(e)}"
                 }
-            
-            # 记录完整请求/响应信息
-            self._log_request_response(request_id, request_info, response_info)
-            
-            # 添加响应时间到响应头
-            if hasattr(response, "headers"):
-                response.headers["X-Process-Time"] = str(duration)
-                response.headers["X-Request-ID"] = request_id
-            
-            return response
-            
-        except Exception as e:
-            # 即使发生错误也记录请求信息和错误详情
-            duration = round(time.time() - start_time, 3)
-            
-            error_info = {
-                "status_code": 500,
-                "duration": duration,
-                "headers": {},
-                "body": str(e),
-                "error": f"{type(e).__name__}: {str(e)}"
-            }
-            
-            self._log_request_response(request_id, request_info, error_info, is_error=True)
-            
-            # 重新抛出异常
-            raise
+
+            response = None
+            try:
+                # 处理请求
+                response = await call_next(request)
+
+                # 计算请求处理时间
+                duration = round(time.time() - start_time, 3)
+
+                # 收集响应信息，但不尝试读取流式响应的响应体
+                try:
+                    response_info = self._collect_response_info(response, duration)
+                except Exception as e:
+                    logger.error(f"Error collecting response info: {str(e)}")
+                    response_info = {
+                        "status_code": response.status_code if hasattr(response, "status_code") else 500,
+                        "duration": duration,
+                        "error": f"Error collecting response info: {str(e)}"
+                    }
+
+                # 记录完整请求/响应信息
+                self._log_request_response(request_id, request_info, response_info)
+
+                # 添加响应时间到响应头
+                if hasattr(response, "headers"):
+                    response.headers["X-Process-Time"] = str(duration)
+                    response.headers["X-Request-ID"] = request_id
+
+                return response
+
+            except Exception as e:
+                # 即使发生错误也记录请求信息和错误详情
+                duration = round(time.time() - start_time, 3)
+
+                error_info = {
+                    "status_code": 500,
+                    "duration": duration,
+                    "headers": {},
+                    "body": str(e),
+                    "error": f"{type(e).__name__}: {str(e)}"
+                }
+
+                self._log_request_response(request_id, request_info, error_info, is_error=True)
+
+                # 重新抛出异常
+                raise
     
     def _should_skip_logging(self, request: Request) -> bool:
         """判断是否应该跳过日志记录"""

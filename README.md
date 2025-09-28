@@ -1,4 +1,4 @@
-# Gemini: Full-Stack RAG Application
+# Full-Stack RAG Application
 
 This project is a sophisticated, full-stack Retrieval-Augmented Generation (RAG) application. It integrates multiple AI models to provide a powerful, language-aware chat experience backed by a dynamic knowledge base. The backend is built with Python (FastAPI) and the frontend with React (TypeScript).
 
@@ -9,7 +9,7 @@ The application can ingest documents, process them into a vector knowledge base,
 - **Retrieval-Augmented Generation (RAG)**: The core of the application. It retrieves relevant information from a knowledge base to provide context-aware answers from LLMs.
 - **Multi-Model AI Integration**:
     - **Embedding Models**: Uses `sentence-transformers` to generate vector embeddings for text.
-    - **LLMs**: Supports both local GGUF models (via a LlamaEdge-like API) and remote APIs like OpenAI and Google Gemini.
+    - **LLMs**: Supports both local GGUF models (via a LlamaEdge-like API) and remote APIs like OpenAI.
     - **NLP Pre-processing**: Utilizes `spaCy` for text processing tasks.
 - **Vector Database**: Leverages PostgreSQL with the `pgvector` extension for efficient similarity search.
 - **Multi-Lingual Support**: Automatically detects user language (English, Chinese, Japanese) and adapts prompts for a localized experience.
@@ -43,7 +43,7 @@ The application follows a decoupled, service-oriented architecture:
 - **AI**: `sentence-transformers`, `spacy`, `openai`, `google-genai`, `torch` (CPU)
 - **Database**: PostgreSQL, Redis
 - **Messaging**: RabbitMQ
-- **Infrastructure**: Docker, Docker Compose
+- **Infrastructure**: Docker, Docker Compose, Nginx
 
 ## Building and Running
 
@@ -63,21 +63,20 @@ The project is fully containerized and managed via Docker Compose.
     ```
 
 2.  **Set up environment variables:**
-    Create a `.env` file by copying the example. This file controls which AI models are downloaded and used.
+    Create a `.env.dev` file by copying the example. This file controls which AI models are downloaded and used.
     ```bash
-    cp .env.example .env
+    cp .env.example .env.dev
     ```
-    Update `.env` with your desired model configurations (e.g., `EMBEDDING_MODEL`, `CHAT_REPO_ID`, `CHAT_FILENAME`).
+    Update `.env.dev` with your desired model configurations (e.g., `EMBEDDING_MODEL`, `CHAT_REPO_ID`, `CHAT_FILENAME`).
 
 3.  **Start the application:**
     ```bash
-    docker-compose up --build
+    docker-compose -f docker-compose.dev.yml up --build
     ```
     On the first run, the `*-init` services will download the specified AI models into a shared Docker volume (`/models`). This may take some time.
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
+- **Frontend & API**: http://localhost/
+- **API Documentation**: http://localhost/docs
 
 ### Model Initialization
 
