@@ -7,7 +7,7 @@ from typing import Any, Callable, Iterable, List, Mapping, Tuple, TypeVar
 
 from fastapi.concurrency import run_in_threadpool
 from app.core.config import settings
-from app.modules.knowledge_base.service import RetrievedChunk
+from app.modules.knowledge_base.retrieval import RetrievedChunk
 try:
     from langdetect import detect  # type: ignore
 except Exception:  # pragma: no cover - graceful fallback if not available

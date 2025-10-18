@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.modules.llm.client import classifier_client
 
 if TYPE_CHECKING:  # pragma: no cover - circular import guard
-    from .strategy import StrategyContext
+    from ..llm.strategy import StrategyContext
 
 
 logger = logging.getLogger(__name__)

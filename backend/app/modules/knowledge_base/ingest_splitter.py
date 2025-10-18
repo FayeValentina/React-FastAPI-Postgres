@@ -15,9 +15,11 @@ from langchain_text_splitters import (  # type: ignore
 from app.core.config import settings
 
 from .ingest_extractor import ExtractedElement
-from .ingest_language import detect_language, detect_language_meta, is_probable_code
-from .language_utils import normalize_language_value
-from .utils import coerce_value
+from .language import (
+    detect_language_meta,
+    normalize_language_value,
+)
+from app.infrastructure.utils.coerce_utils import coerce_value
 
 
 HEADERS_TO_SPLIT_ON = [

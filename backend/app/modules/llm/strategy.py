@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from app.core.config import settings
-from app.modules.knowledge_base import intent_classifier
-from app.modules.knowledge_base.utils import ensure_bool, ensure_float, ensure_int
+from app.modules.llm import intent_classifier
+from app.infrastructure.utils.coerce_utils import ensure_bool, ensure_float, ensure_int
 
 
 logger = logging.getLogger(__name__)

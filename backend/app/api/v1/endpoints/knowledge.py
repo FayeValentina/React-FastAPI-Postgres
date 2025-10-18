@@ -24,14 +24,14 @@ from app.infrastructure.dynamic_settings import (
     get_dynamic_settings_service,
 )
 from app.modules.knowledge_base.bm25 import fetch_bm25_matches
-from app.modules.knowledge_base.ingest_language import detect_language
-from app.modules.knowledge_base.service import (
+from app.modules.knowledge_base.language import detect_language
+from app.modules.knowledge_base.ingestion import (
     ingest_document_content,
     ingest_document_file,
     update_chunk,
     delete_chunk,
 )
-from app.modules.knowledge_base.utils import coerce_float, coerce_int
+from app.infrastructure.utils.coerce_utils import coerce_float, coerce_int
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
