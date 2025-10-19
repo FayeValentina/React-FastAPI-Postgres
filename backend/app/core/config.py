@@ -319,17 +319,14 @@ class Settings(BaseSettings):
     RAG_STRATEGY_ENABLED: bool = Field(default=False)
     RAG_RERANK_ENABLED: bool = Field(default=False)
     RAG_USE_LINGUA: bool = Field(default=False)
-    RAG_STRATEGY_LLM_CLASSIFIER_ENABLED: bool = Field(default=False)
     RAG_RERANK_CANDIDATES: int = Field(default=100)
     RAG_RERANK_SCORE_THRESHOLD: float = Field(default=0.48)
-    RAG_RERANK_MAX_BATCH: int = Field(default=16)
     RAG_TOP_K: int = Field(default=12)
     RAG_MIN_SIM: float = Field(default=0.35)
     RAG_MMR_LAMBDA: float = Field(default=0.55)
     RAG_PER_DOC_LIMIT: int = Field(default=6)
     RAG_OVERSAMPLE: int = Field(default=5)
     RAG_MAX_CANDIDATES: int = Field(default=240)
-    RAG_SAME_LANG_BONUS: float = Field(default=0.12)
     RAG_CONTEXT_TOKEN_BUDGET: int = Field(default=4000)
     RAG_CONTEXT_MAX_EVIDENCE: int = Field(default=28)
     RAG_CHUNK_TARGET_TOKENS_EN: int = Field(default=260)
@@ -340,11 +337,9 @@ class Settings(BaseSettings):
     RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
     RAG_IVFFLAT_PROBES: int = Field(default=10)
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
-    BM25_ENABLED: bool = Field(default=False)
     BM25_TOP_K: int = Field(default=8)
     BM25_WEIGHT: float = Field(default=0.35)
     BM25_MIN_SCORE: float = Field(default=0.0)
-    QUERY_REWRITE_ENABLED: bool = Field(default=False)
     SPACY_MODEL_NAME: str = Field(default="zh_core_web_sm")
 
     model_config = SettingsConfigDict(
@@ -364,31 +359,20 @@ class Settings(BaseSettings):
             "RAG_RERANK_ENABLED": self.RAG_RERANK_ENABLED,
             "RAG_RERANK_CANDIDATES": self.RAG_RERANK_CANDIDATES,
             "RAG_RERANK_SCORE_THRESHOLD": self.RAG_RERANK_SCORE_THRESHOLD,
-            "RAG_RERANK_MAX_BATCH": self.RAG_RERANK_MAX_BATCH,
             "RAG_TOP_K": self.RAG_TOP_K,
             "RAG_MIN_SIM": self.RAG_MIN_SIM,
             "RAG_MMR_LAMBDA": self.RAG_MMR_LAMBDA,
             "RAG_PER_DOC_LIMIT": self.RAG_PER_DOC_LIMIT,
             "RAG_OVERSAMPLE": self.RAG_OVERSAMPLE,
             "RAG_MAX_CANDIDATES": self.RAG_MAX_CANDIDATES,
-            "RAG_SAME_LANG_BONUS": self.RAG_SAME_LANG_BONUS,
             "RAG_CONTEXT_TOKEN_BUDGET": self.RAG_CONTEXT_TOKEN_BUDGET,
             "RAG_CONTEXT_MAX_EVIDENCE": self.RAG_CONTEXT_MAX_EVIDENCE,
-            "RAG_CHUNK_TARGET_TOKENS_EN": self.RAG_CHUNK_TARGET_TOKENS_EN,
-            "RAG_CHUNK_TARGET_TOKENS_CJK": self.RAG_CHUNK_TARGET_TOKENS_CJK,
-            "RAG_CHUNK_TARGET_TOKENS_DEFAULT": self.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
-            "RAG_CHUNK_OVERLAP_RATIO": self.RAG_CHUNK_OVERLAP_RATIO,
-            "RAG_CODE_CHUNK_MAX_LINES": self.RAG_CODE_CHUNK_MAX_LINES,
-            "RAG_CODE_CHUNK_OVERLAP_LINES": self.RAG_CODE_CHUNK_OVERLAP_LINES,
             "RAG_IVFFLAT_PROBES": self.RAG_IVFFLAT_PROBES,
             "RAG_USE_LINGUA": self.RAG_USE_LINGUA,
-            "RAG_STRATEGY_LLM_CLASSIFIER_ENABLED": self.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
             "RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD": self.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
-            "BM25_ENABLED": self.BM25_ENABLED,
             "BM25_TOP_K": self.BM25_TOP_K,
             "BM25_WEIGHT": self.BM25_WEIGHT,
             "BM25_MIN_SCORE": self.BM25_MIN_SCORE,
-            "QUERY_REWRITE_ENABLED": self.QUERY_REWRITE_ENABLED,
         }
 
 settings = Settings()
