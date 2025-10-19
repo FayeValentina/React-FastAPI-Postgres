@@ -380,7 +380,7 @@ services:
     restart: unless-stopped
     scale: ${TASKIQ_WORKER_CONCURRENCY:-2}
     mem_limit: 3G
-    mem_reservation: 1.5G
+    mem_reservation: 1536M
 
   taskiq_scheduler:
     image: react-fastapi-postgres-backend:1.0
