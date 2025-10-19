@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, TypeVar
+from uuid import UUID
 
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
-from app.modules.knowledge_base.service import RetrievedChunk
+from app.modules.knowledge_base.retrieval import RetrievedChunk
+from app.modules.llm import repository
 try:
     from langdetect import detect  # type: ignore
 except Exception:  # pragma: no cover - graceful fallback if not available
@@ -223,3 +227,17 @@ async def prepare_system_and_user(
     """Async wrapper for `_prepare_system_and_user` with optional dynamic config."""
 
     return await run_in_threadpool(_prepare_system_and_user, user_text, similar, config)
+
+
+async def delete_conversation(
+    db: AsyncSession,
+    *,
+    conversation_id: UUID,
+    user_id: int,
+) -> bool:
+    """Delete a conversation and cascade associated messages."""
+    return await repository.delete_conversation(
+        db,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    )

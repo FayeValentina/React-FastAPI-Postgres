@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 import logging
-from typing import Iterable
+from typing import Iterable, Optional
 
 from app.core.config import settings
-from .ingest_language import detect_language_meta, is_cjk_text
+from .language import detect_language_meta, is_cjk_text
 
 try:  # pragma: no cover - optional dependency at runtime
     import spacy
@@ -30,12 +30,24 @@ def _should_use_spacy(text: str, language: str | None) -> bool:
 
 
 @lru_cache(maxsize=1)
-def _load_zh_pipeline() -> Language:
+def _load_zh_pipeline() -> Optional[Language]:
     if spacy is None:
-        raise RuntimeError("spaCy is not installed")
+        logger.debug("spaCy not installed; skipping spaCy tokenisation")
+        return None
     model_name = settings.SPACY_MODEL_NAME
-    logger.info("Loading spaCy pipeline %s for Chinese tokenization", model_name)
-    return spacy.load(model_name)
+    if not model_name:
+        logger.debug("spaCy model name empty; skipping spaCy tokenisation")
+        return None
+    try:
+        logger.info("Loading spaCy pipeline %s for Chinese tokenization", model_name)
+        return spacy.load(model_name)
+    except OSError as exc:
+        logger.warning(
+            "spaCy model %s not available: %s; tokenization will fall back to raw text",
+            model_name,
+            exc,
+        )
+        return None
 
 
 def _iter_tokens(doc: "Language" | None, text: str) -> Iterable[str]:

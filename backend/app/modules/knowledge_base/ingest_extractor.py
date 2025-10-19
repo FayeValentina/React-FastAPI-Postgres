@@ -10,7 +10,7 @@ from charset_normalizer import from_bytes
 from unstructured.documents.elements import Element  # type: ignore
 from unstructured.partition.auto import partition  # type: ignore
 
-from .language_utils import normalize_language_value
+from .language import normalize_language_value
 
 @dataclass(slots=True)
 class ExtractedElement:

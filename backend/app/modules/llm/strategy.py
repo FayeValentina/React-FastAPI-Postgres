@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from app.core.config import settings
-from app.modules.knowledge_base import intent_classifier
-from app.modules.knowledge_base.utils import ensure_bool, ensure_float, ensure_int
+from app.modules.llm import intent_classifier
+from app.infrastructure.utils.coerce_utils import ensure_float, ensure_int
 
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,6 @@ class StrategyContext:
     channel: str = "rest"
     user_role: Optional[str] = None
     metadata: Mapping[str, Any] | None = None
-    query_rewrite_enabled: bool = True
 
     def to_log_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -115,6 +114,7 @@ class StrategyResult:
     error: str | None = None
     classifier: Dict[str, Any] | None = None
     processed_query: str | None = None
+    classifier_result: intent_classifier.ClassificationResult | None = None
 
     def to_log_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -279,71 +279,67 @@ async def resolve_rag_parameters(
     base = dict(base_config)
 
     try:
-        if not base.get("RAG_STRATEGY_ENABLED"):
-            return StrategyResult(config=base, scenario="disabled", context=request_ctx)
-
         classifier_meta: Dict[str, Any] | None = None
+        classifier_result: intent_classifier.ClassificationResult | None = None
         scenario: str | None = None
-
-        rewrite_enabled = ensure_bool(
-            base.get("QUERY_REWRITE_ENABLED"), settings.QUERY_REWRITE_ENABLED
-        )
-        request_ctx.query_rewrite_enabled = rewrite_enabled
-
-        classifier_enabled = ensure_bool(
-            base.get("RAG_STRATEGY_LLM_CLASSIFIER_ENABLED"),
-            settings.RAG_STRATEGY_LLM_CLASSIFIER_ENABLED,
-        )
-
         processed_query_text: str | None = None
+        strategy_enabled = bool(base.get("RAG_STRATEGY_ENABLED"))
 
-        if classifier_enabled:
-            threshold = _bounded_float(
-                base.get("RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD"),
-                settings.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
-                minimum=0.0,
-                maximum=1.0,
+        threshold = _bounded_float(
+            base.get("RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD"),
+            settings.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
+            minimum=0.0,
+            maximum=1.0,
+        )
+
+        classifier_result = await intent_classifier.classify(query, request_ctx)
+        classifier_meta = classifier_result.to_log_dict()
+        classifier_meta["threshold"] = round(threshold, 4)
+        if not classifier_result.fallback and classifier_result.rewritten_query:
+            processed_query_text = classifier_result.rewritten_query
+
+        mapped_scenario, matched_label = _select_llm_scenario(classifier_result)
+
+        if classifier_result.fallback:
+            classifier_meta["applied"] = False
+            logger.warning(
+                "llm classifier fallback; using heuristic classification",
             )
+        elif mapped_scenario and (
+            classifier_result.confidence is None or classifier_result.confidence >= threshold
+        ):
+            scenario = mapped_scenario
+            classifier_meta["applied"] = True
+            if matched_label:
+                classifier_meta["label"] = matched_label
+        elif mapped_scenario:
+            classifier_meta["applied"] = False
+            if matched_label:
+                classifier_meta["label"] = matched_label
+            classifier_meta["cause"] = "low_confidence"
+            logger.warning(
+                "llm classifier confidence %.3f below threshold %.3f; using heuristic",
+                classifier_result.confidence or 0.0,
+                threshold,
+            )
+        else:
+            classifier_meta["applied"] = False
+            if matched_label:
+                classifier_meta["label"] = matched_label
+            classifier_meta["cause"] = "unmapped_label"
 
-            classifier_result = await intent_classifier.classify(query, request_ctx)
-            classifier_meta = classifier_result.to_log_dict()
-            classifier_meta["threshold"] = round(threshold, 4)
-            if (
-                rewrite_enabled
-                and not classifier_result.fallback
-                and classifier_result.rewritten_query
-            ):
-                processed_query_text = classifier_result.rewritten_query
-
-            mapped_scenario, matched_label = _select_llm_scenario(classifier_result)
-
-            if classifier_result.fallback:
-                classifier_meta["applied"] = False
-                logger.warning(
-                    "llm classifier fallback; using heuristic classification",
-                )
-            elif mapped_scenario and (
-                classifier_result.confidence is None or classifier_result.confidence >= threshold
-            ):
-                scenario = mapped_scenario
-                classifier_meta["applied"] = True
-                if matched_label:
-                    classifier_meta["label"] = matched_label
-            elif mapped_scenario:
-                classifier_meta["applied"] = False
-                if matched_label:
-                    classifier_meta["label"] = matched_label
-                classifier_meta["cause"] = "low_confidence"
-                logger.warning(
-                    "llm classifier confidence %.3f below threshold %.3f; using heuristic",
-                    classifier_result.confidence or 0.0,
-                    threshold,
-                )
-            else:
-                classifier_meta["applied"] = False
-                if matched_label:
-                    classifier_meta["label"] = matched_label
-                classifier_meta["cause"] = "unmapped_label"
+        if not strategy_enabled:
+            if not processed_query_text:
+                processed_query_text = None
+            return StrategyResult(
+                config=base,
+                overrides={},
+                scenario="disabled",
+                context=request_ctx,
+                classifier=classifier_meta,
+                processed_query=processed_query_text,
+                classifier_result=classifier_result,
+            )
 
         if scenario is None:
             scenario = _classify_query(query, request_ctx)
@@ -380,7 +376,7 @@ async def resolve_rag_parameters(
         merged = dict(base)
         merged.update(sanitized)
 
-        if not rewrite_enabled or not processed_query_text:
+        if not processed_query_text:
             processed_query_text = None
 
         return StrategyResult(
@@ -390,6 +386,7 @@ async def resolve_rag_parameters(
             context=request_ctx,
             classifier=classifier_meta,
             processed_query=processed_query_text,
+            classifier_result=classifier_result,
         )
 
     except Exception as exc:  # pragma: no cover - safety net

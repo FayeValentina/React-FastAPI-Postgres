@@ -14,11 +14,8 @@ export interface AdminSettingDefinition {
 
 export const FEATURE_TOGGLE_KEYS: AdminSettingKey[] = [
   'RAG_STRATEGY_ENABLED',
-  'RAG_STRATEGY_LLM_CLASSIFIER_ENABLED',
   'RAG_RERANK_ENABLED',
   'RAG_USE_LINGUA',
-  'BM25_ENABLED',
-  'QUERY_REWRITE_ENABLED',
 ];
 
 export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
@@ -26,12 +23,6 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     key: 'RAG_STRATEGY_ENABLED',
     label: '策略层开关',
     description: '控制是否启用基于查询特征的策略层。开启后会动态覆盖 top_k、相似度阈值等核心参数；关闭则使用静态或 Redis 配置。',
-    type: 'boolean',
-  },
-  {
-    key: 'RAG_STRATEGY_LLM_CLASSIFIER_ENABLED',
-    label: 'LLM 查询意图分类器',
-    description: '开启后将调用 LLM 对查询意图进行判定，并在高置信度时覆盖策略场景；关闭则仅依赖启发式分类。',
     type: 'boolean',
   },
   {
@@ -97,12 +88,6 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     type: 'boolean',
   },
   {
-    key: 'BM25_ENABLED',
-    label: 'BM25 关键字检索',
-    description: '开启后会结合 PostgreSQL 全文检索结果与向量召回进行融合，提高关键字匹配能力；关闭则仅依赖向量召回。',
-    type: 'boolean',
-  },
-  {
     key: 'RAG_RERANK_CANDIDATES',
     label: '重排候选数量',
     description: '送入 Cross-Encoder 重排的候选数量。值越大排序更精细但耗时更长；值越小速度快但可能错过相关片段。',
@@ -120,29 +105,12 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     step: 0.01,
   },
   {
-    key: 'RAG_RERANK_MAX_BATCH',
-    label: '重排批处理大小',
-    description: 'Cross-Encoder 推理时的批处理大小。增大可提高吞吐，过大可能导致显存/内存压力；减小可降低单批负载但调度成本上升。',
-    type: 'int',
-    min: 1,
-    max: 128,
-  },
-  {
     key: 'BM25_TOP_K',
     label: 'BM25 候选数量上限',
     description: '参与 BM25 召回的最大片段数。数值越大关键词召回更充分但融合开销更高；数值越小性能更好但可能遗漏相关片段。',
     type: 'int',
     min: 0,
     max: 200,
-  },
-  {
-    key: 'RAG_SAME_LANG_BONUS',
-    label: '同语言奖励 (SAME_LANG_BONUS)',
-    description: '如果检索结果与查询语言一致，将加成该权重。值越大越偏向与查询语言相同的结果；值越小对跨语言内容更开放。',
-    type: 'float',
-    min: 0,
-    max: 5,
-    step: 0.1,
   },
   {
     key: 'RAG_CONTEXT_TOKEN_BUDGET',
@@ -176,50 +144,6 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     step: 0.01,
   },
   {
-    key: 'RAG_CHUNK_TARGET_TOKENS_EN',
-    label: '英文分片目标长度',
-    description: '英文文档分片的目标 token 长度。值越大单片覆盖内容更多但相关度可能下降；值越小分片更细致但数量增加、索引成本变高。',
-    type: 'int',
-    min: 1,
-  },
-  {
-    key: 'RAG_CHUNK_TARGET_TOKENS_CJK',
-    label: '中日韩分片目标长度',
-    description: '中日韩文档分片的目标 token 长度。值越大单片更长、召回覆盖更广但可能引入噪声；值越小粒度更精细但需要更多片段才能涵盖全文。',
-    type: 'int',
-    min: 1,
-  },
-  {
-    key: 'RAG_CHUNK_TARGET_TOKENS_DEFAULT',
-    label: '默认分片目标长度',
-    description: '未显式分类语言时使用的分片目标 token 长度。值越大可以减少分片数量但片内主题可能混杂；值越小分片更集中却会增大索引体积。',
-    type: 'int',
-    min: 1,
-  },
-  {
-    key: 'RAG_CHUNK_OVERLAP_RATIO',
-    label: '分片重叠比例',
-    description: '相邻分片之间的 token 重叠比例，范围 0-1。值越大上下文衔接更完整但索引冗余增加；值越小片段独立性更高但可能割裂语义。',
-    type: 'float',
-    min: 0,
-    max: 1,
-    step: 0.05,
-  },
-  {
-    key: 'RAG_CODE_CHUNK_MAX_LINES',
-    label: '代码分片最大行数',
-    description: '代码类型文档分片的最大行数。值越大单片涵盖的代码块更多但定位精度下降；值越小保留局部语义但可能需要组合多个片段。',
-    type: 'int',
-    min: 1,
-  },
-  {
-    key: 'RAG_CODE_CHUNK_OVERLAP_LINES',
-    label: '代码分片重叠行数',
-    description: '相邻代码分片的重叠行数。值越大上下文连续性更强但片段冗余增加；值越小索引体积更小但函数或代码块可能被拆散。',
-    type: 'int',
-    min: 0,
-  },
-  {
     key: 'RAG_USE_LINGUA',
     label: '启用 Lingua 语言检测',
     description:
@@ -232,12 +156,6 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     description: '向量索引的查询探针数量，直接影响检索性能与速度。值越大检索更准确但查询耗时增加；值越小响应更快但召回率可能下降。',
     type: 'int',
     min: 1,
-  },
-  {
-    key: 'QUERY_REWRITE_ENABLED',
-    label: '查询改写开关',
-    description: '允许后端针对用户查询执行改写或预处理逻辑，以改善召回效果。关闭时使用原始查询文本。',
-    type: 'boolean',
   },
 ];
 

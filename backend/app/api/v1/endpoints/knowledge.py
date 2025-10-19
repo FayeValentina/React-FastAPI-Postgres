@@ -24,14 +24,14 @@ from app.infrastructure.dynamic_settings import (
     get_dynamic_settings_service,
 )
 from app.modules.knowledge_base.bm25 import fetch_bm25_matches
-from app.modules.knowledge_base.ingest_language import detect_language
-from app.modules.knowledge_base.service import (
+from app.modules.knowledge_base.language import detect_language
+from app.modules.knowledge_base.ingestion import (
     ingest_document_content,
     ingest_document_file,
     update_chunk,
     delete_chunk,
 )
-from app.modules.knowledge_base.utils import coerce_float, coerce_int
+from app.infrastructure.utils.coerce_utils import coerce_float, coerce_int
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -183,8 +183,6 @@ async def search_knowledge(
     if not isinstance(config, dict):
         config = settings.dynamic_settings_defaults()
 
-    bm25_enabled = True
-
     bm25_min_score = coerce_float(
         config,
         "BM25_MIN_SCORE",
@@ -208,7 +206,6 @@ async def search_knowledge(
             "top_k": top_k_value,
             "bm25_limit": search_limit,
             "bm25_min_score": bm25_min_score,
-            "bm25_enabled": bm25_enabled,
         },
     )
 

@@ -45,7 +45,7 @@ class KnowledgeChunk(Base):
     )
     chunk_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="文档内块序")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="文本内容")
-    # 384 维向量，需与所选嵌入模型维度一致
+    # 768 维向量，需与所选嵌入模型维度一致
     embedding: Mapped[List[float]] = mapped_column(Vector(dim=768), nullable=False, comment="向量表示")
     language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, comment="块语言/类型")
     search_vector: Mapped[Optional[str]] = mapped_column(
