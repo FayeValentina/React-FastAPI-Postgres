@@ -349,6 +349,9 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - CLASSIFIER_BASE_URL=${CLASSIFIER_BASE_URL}
       - CLASSIFIER_API_KEY=${CLASSIFIER_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - RERANKER_MODEL=${RERANKER_MODEL}
+      - SPACY_MODEL_URL=${SPACY_MODEL_URL}
       - HF_HOME=/models/hf
       - HF_HUB_OFFLINE=1
     depends_on:
@@ -362,8 +365,17 @@ services:
         condition: service_healthy
       embeddings_init:
         condition: service_completed_successfully
+      spacy_init:
+        condition: service_completed_successfully
     command: >
       bash -c "
+        MODEL_URL=\"$${SPACY_MODEL_URL}\" &&
+        MODEL_FILE=$$(basename \"$${MODEL_URL}\") &&
+        if [ -n \"$${MODEL_URL}\" ]; then \
+          echo '安装本地 spaCy 模型...' && \
+          echo \" - pip install /models/$${MODEL_FILE}\" && \
+          pip install /models/$${MODEL_FILE} || true; \
+        fi &&
         echo '等待依赖服务...' &&
         sleep 15 &&
         taskiq worker --fs-discover --tasks-pattern 'app/modules/tasks/workers/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
@@ -379,8 +391,8 @@ services:
       retries: 3
     restart: unless-stopped
     scale: ${TASKIQ_WORKER_CONCURRENCY:-2}
-    mem_limit: 3G
-    mem_reservation: 1536M
+    mem_limit: 4G
+    mem_reservation: 2G
 
   taskiq_scheduler:
     image: react-fastapi-postgres-backend:1.0
