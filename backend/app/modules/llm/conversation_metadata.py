@@ -33,7 +33,6 @@ MAX_TRANSCRIPT_CHARS = 3200
 MAX_TITLE_CHARS = 80
 MAX_SUMMARY_CHARS = 480
 LOG_PREVIEW_CHARS = 512
-REQUEST_TIMEOUT_SECONDS = 30
 
 LANGUAGE_LABELS = {
     "en": "English",
@@ -317,19 +316,16 @@ def _select_system_prompt(result: ClassificationResult) -> str:
 
 async def _call_metadata_model(payload: Dict[str, Any]) -> Dict[str, Any] | None:
     try:
-        response = await asyncio.wait_for(
-            classifier_client.chat.completions.create(
-                model=settings.CLASSIFIER_MODEL,
-                messages=[
-                    {"role": "system", "content": METADATA_SYSTEM_PROMPT},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                ],
-                temperature=0.0,
-                top_p=0.0,
-                max_tokens=256,
-                response_format={"type": "json_object"},
-            ),
-            timeout=REQUEST_TIMEOUT_SECONDS,
+        response = await classifier_client.chat.completions.create(
+            model=settings.CLASSIFIER_MODEL,
+            messages=[
+                {"role": "system", "content": METADATA_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
+            temperature=0.0,
+            top_p=0.0,
+            max_tokens=256,
+            response_format={"type": "json_object"},
         )
     except asyncio.TimeoutError:
         logger.warning("conversation metadata model timed out")
