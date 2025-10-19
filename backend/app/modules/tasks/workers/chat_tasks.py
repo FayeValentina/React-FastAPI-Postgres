@@ -28,8 +28,11 @@ from app.modules.llm.repository import (
     get_conversation_for_user,
     get_recent_messages,
     get_message_by_request_id,
+    update_conversation_metadata as persist_conversation_metadata,
 )
 from app.modules.llm.service import prepare_system_and_user
+from app.modules.llm.intent_classifier import ClassificationResult
+from app.modules.llm.conversation_metadata import generate_conversation_metadata
 from app.modules.knowledge_base.retrieval import search_similar_chunks
 from app.modules.llm.strategy import StrategyContext, resolve_rag_parameters
 
@@ -149,6 +152,87 @@ async def _publish_event(
             "Failed to publish SSE event",
             extra={"conversation_id": str(conversation_id), "event_type": event_type},
         )
+
+
+@broker.task(
+    task_name="refresh_conversation_metadata",
+    queue=CHAT_QUEUE,
+    retry_on_error=True,
+)
+async def refresh_conversation_metadata(
+    conversation_id: str,
+    classifier: dict[str, Any] | None,
+) -> None:
+    try:
+        conversation_uuid = UUID(conversation_id)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid conversation_id for metadata refresh",
+            extra={"conversation_id": conversation_id},
+        )
+        return
+
+    if not isinstance(classifier, dict):
+        logger.debug(
+            "Skipping metadata refresh due to missing classifier payload",
+            extra={"conversation_id": str(conversation_uuid)},
+        )
+        return
+
+    try:
+        classifier_result = ClassificationResult.from_payload(classifier)
+    except Exception:
+        logger.exception(
+            "Failed to deserialize classifier payload",
+            extra={"conversation_id": str(conversation_uuid)},
+        )
+        return
+
+    async with AsyncSessionLocal() as db:
+        try:
+            metadata = await generate_conversation_metadata(
+                db,
+                conversation_id=conversation_uuid,
+                classifier_result=classifier_result,
+            )
+            if metadata is None:
+                await db.rollback()
+                logger.debug(
+                    "Metadata generation skipped (empty result)",
+                    extra={"conversation_id": str(conversation_uuid)},
+                )
+                return
+
+            updated = await persist_conversation_metadata(
+                db,
+                conversation_id=conversation_uuid,
+                title=metadata.title,
+                summary=metadata.summary,
+                system_prompt=metadata.system_prompt,
+            )
+            if not updated:
+                await db.rollback()
+                logger.warning(
+                    "Conversation metadata update skipped (conversation missing)",
+                    extra={"conversation_id": str(conversation_uuid)},
+                )
+                return
+
+            await db.commit()
+            logger.info(
+                "Conversation metadata refreshed",
+                extra={
+                    "conversation_id": str(conversation_uuid),
+                    "title": metadata.title,
+                },
+            )
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "Failed to refresh conversation metadata",
+                extra={"conversation_id": str(conversation_uuid)},
+            )
+            raise
 
 
 @broker.task(
@@ -452,6 +536,13 @@ async def process_chat_message(
                 ],
             )
             await db.commit()
+
+            if strategy and getattr(strategy, "classifier_result", None):
+                classifier_payload = strategy.classifier_result.to_payload()
+                await refresh_conversation_metadata.kiq(
+                    conversation_id=str(conversation_uuid),
+                    classifier=classifier_payload,
+                )
         except Exception:
             await db.rollback()
             await _publish_event(

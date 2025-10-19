@@ -13,7 +13,11 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Add as AddIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Refresh as RefreshIcon,
+  DeleteOutline as DeleteOutlineIcon,
+} from '@mui/icons-material';
 import { ConversationListItem } from '../../types';
 
 interface ChatHistoryListProps {
@@ -24,6 +28,7 @@ interface ChatHistoryListProps {
   onSelect: (conversationId: string) => void;
   onCreateConversation: () => void;
   onRefresh?: () => void;
+  onDelete?: (conversationId: string) => void;
 }
 
 const formatRelative = (isoString: string | undefined): string => {
@@ -53,6 +58,7 @@ export default function ChatHistoryList({
   onSelect,
   onCreateConversation,
   onRefresh,
+  onDelete,
 }: ChatHistoryListProps) {
   const content = useMemo(() => {
     if (loading) {
@@ -90,9 +96,11 @@ export default function ChatHistoryList({
       >
         {conversations.map((conversation) => {
           const isActive = conversation.id === selectedConversationId;
-          const secondary = conversation.last_message_preview
-            ? conversation.last_message_preview
-            : 'No messages yet';
+          const summary = conversation.summary?.trim();
+          const secondary =
+            summary && summary.length > 0
+              ? summary
+              : conversation.last_message_preview || 'No messages yet';
 
           return (
             <ListItemButton
@@ -132,20 +140,40 @@ export default function ChatHistoryList({
                   </Stack>
                 }
                 secondary={
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      mt: 0.5,
-                      maxHeight: 48,
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {secondary}
-                  </Typography>
+                  <Stack spacing={0.75} sx={{ mt: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        maxHeight: 48,
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                      }}
+                    >
+                      {secondary}
+                    </Typography>
+                    {onDelete && (
+                      <Stack direction="row" justifyContent="flex-end">
+                        <Tooltip title="Delete conversation">
+                          <span>
+                            <IconButton
+                              size="small"
+                              edge="end"
+                              disabled={refreshing}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDelete(conversation.id);
+                              }}
+                            >
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Stack>
+                    )}
+                  </Stack>
                 }
               />
             </ListItemButton>
@@ -153,7 +181,7 @@ export default function ChatHistoryList({
         })}
       </List>
     );
-  }, [conversations, loading, onCreateConversation, onSelect, selectedConversationId]);
+  }, [conversations, loading, onCreateConversation, onDelete, onSelect, refreshing, selectedConversationId]);
 
   return (
     <Paper

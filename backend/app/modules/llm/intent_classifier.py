@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, TYPE_CHECKING
 
 from app.core.config import settings
 from app.modules.llm.client import classifier_client
@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 ALLOWED_SCENARIOS = {"broad", "precise", "question", "document_focus", "unknown"}
 
 MAX_REWRITTEN_CHARS = 600
+MAX_REASON_WORDS = 60
+MAX_REASON_CHARS = 320
+MAX_TAGS = 5
+MAX_TAG_LENGTH = 48
+LOG_PREVIEW_CHARS = 512
 
 def _to_snake_lower(s: str) -> str:
     s = (s or "").strip()
@@ -42,13 +47,18 @@ def _clamp01(x: float | None) -> float | None:
     # 保留两位小数（与提示词一致）
     return float(f"{v:.2f}")
 
-def _limit_words(reason: str | None, max_words: int = 60) -> str | None:
-    if not isinstance(reason, str):
+def _sanitize_reason(value: Any) -> str | None:
+    if not isinstance(value, str):
         return None
-    words = reason.strip().split()
-    if len(words) <= max_words:
-        return reason.strip()
-    return " ".join(words[:max_words]).strip()
+    text = value.strip()
+    if not text:
+        return None
+    words = text.split()
+    if len(words) > MAX_REASON_WORDS:
+        text = " ".join(words[:MAX_REASON_WORDS])
+    if len(text) > MAX_REASON_CHARS:
+        text = text[:MAX_REASON_CHARS].rstrip()
+    return text or None
 
 def _sanitize_rewritten_query(value: Any) -> str | None:
     if not isinstance(value, str):
@@ -59,6 +69,16 @@ def _sanitize_rewritten_query(value: Any) -> str | None:
     if len(text) > MAX_REWRITTEN_CHARS:
         text = text[:MAX_REWRITTEN_CHARS].rstrip()
     return text
+
+
+def _preview_text(value: Any, limit: int = LOG_PREVIEW_CHARS) -> str:
+    if not isinstance(value, str):
+        value = str(value)
+    text = value.strip("\n")
+    if len(text) <= limit:
+        return text
+    cutoff = max(1, limit - 1)
+    return text[:cutoff].rstrip() + "…"
 
 
 def _sanitize_parsed_payload(parsed: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,21 +99,10 @@ def _sanitize_parsed_payload(parsed: Dict[str, Any]) -> Dict[str, Any]:
         confidence = 0.5
 
     # reason （<=60 words）
-    reason = parsed.get("reason") if isinstance(parsed.get("reason"), str) else None
-    reason = _limit_words(reason, 60)
+    reason = _sanitize_reason(parsed.get("reason"))
 
     # tags （<=5，去重，小写 snake_case）
-    raw_tags = parsed.get("tags")
-    tags_tuple = _normalize_tags(raw_tags)  # 你现有的：支持 str 或 Iterable
-    norm = []
-    seen = set()
-    for t in tags_tuple:
-        tt = _to_snake_lower(t)
-        if tt and tt not in seen:
-            norm.append(tt)
-            seen.add(tt)
-        if len(norm) >= 5:
-            break
+    norm = list(_normalize_tags(parsed.get("tags")))
 
     rewritten_query = _sanitize_rewritten_query(parsed.get("rewritten_query"))
 
@@ -151,6 +160,9 @@ class ClassificationResult:
     tags: Tuple[str, ...] = ()
     rewritten_query: str | None = None
     raw_response: Dict[str, Any] | None = None
+    request_payload: Dict[str, Any] | None = None
+    parsed_response: Dict[str, Any] | None = None
+    sanitized_response: Dict[str, Any] | None = None
     source: str = "llm"
     fallback: bool = False
     error: str | None = None
@@ -170,25 +182,93 @@ class ClassificationResult:
             if len(preview) > 160:
                 preview = preview[:157].rstrip() + "…"
             payload["rewritten_query"] = preview
+        if self.sanitized_response:
+            payload["sanitized_keys"] = sorted(self.sanitized_response.keys())
+        if self.request_payload:
+            payload["request_payload_keys"] = sorted(self.request_payload.keys())
         if self.fallback:
             payload["fallback"] = True
         if self.error:
             payload["error"] = self.error
         return payload
 
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "scenario": self.scenario,
+            "confidence": self.confidence,
+            "reason": self.reason,
+            "tags": list(self.tags),
+            "rewritten_query": self.rewritten_query,
+            "raw_response": self.raw_response,
+            "request_payload": self.request_payload,
+            "parsed_response": self.parsed_response,
+            "sanitized_response": self.sanitized_response,
+            "source": self.source,
+            "fallback": self.fallback,
+            "error": self.error,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, Any]) -> "ClassificationResult":
+        tags_value = payload.get("tags")
+        if isinstance(tags_value, str):
+            tags_tuple = (tags_value,)
+        elif isinstance(tags_value, Iterable):
+            tags_tuple = tuple(str(item) for item in tags_value if isinstance(item, str))
+        else:
+            tags_tuple = ()
+
+        confidence_value: float | None = None
+        if payload.get("confidence") is not None:
+            try:
+                confidence_value = float(payload.get("confidence"))
+            except (TypeError, ValueError):
+                confidence_value = None
+
+        return cls(
+            scenario=str(payload["scenario"]) if payload.get("scenario") is not None else None,
+            confidence=confidence_value,
+            reason=str(payload["reason"]) if payload.get("reason") is not None else None,
+            tags=tags_tuple,
+            rewritten_query=str(payload["rewritten_query"]) if payload.get("rewritten_query") is not None else None,
+            raw_response=payload.get("raw_response") if isinstance(payload.get("raw_response"), dict) else None,
+            request_payload=payload.get("request_payload") if isinstance(payload.get("request_payload"), dict) else None,
+            parsed_response=payload.get("parsed_response") if isinstance(payload.get("parsed_response"), dict) else None,
+            sanitized_response=payload.get("sanitized_response") if isinstance(payload.get("sanitized_response"), dict) else None,
+            source=str(payload["source"]) if payload.get("source") is not None else "llm",
+            fallback=bool(payload.get("fallback", False)),
+            error=str(payload["error"]) if payload.get("error") is not None else None,
+        )
+
 
 def _normalize_tags(raw: Any) -> Tuple[str, ...]:
+    candidates: list[str] = []
     if isinstance(raw, str):
-        return (raw,)
-    if isinstance(raw, Iterable):
-        normalized = []
+        stripped = raw.strip()
+        if stripped:
+            candidates.append(stripped)
+    elif isinstance(raw, Iterable):
         for item in raw:
             if isinstance(item, str):
                 stripped = item.strip()
                 if stripped:
-                    normalized.append(stripped)
-        return tuple(dict.fromkeys(normalized))
-    return ()
+                    candidates.append(stripped)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        tag = _to_snake_lower(candidate)
+        if not tag:
+            continue
+        if len(tag) > MAX_TAG_LENGTH:
+            tag = tag[:MAX_TAG_LENGTH]
+        if tag in seen:
+            continue
+        normalized.append(tag)
+        seen.add(tag)
+        if len(normalized) >= MAX_TAGS:
+            break
+    return tuple(normalized)
 
 
 def _unwrap_content(content: Any) -> str:
@@ -301,6 +381,8 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
             confidence=None,
             reason=error_label,
             error=str(last_error) if last_error else error_label,
+            raw_response={"error": error_label},
+            request_payload=payload,
             fallback=True,
         )
 
@@ -312,14 +394,16 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
             confidence=None,
             reason="empty_message",
             error="empty_message",
+            request_payload=payload,
             fallback=True,
         )
 
     raw_content = _unwrap_content(choice.message.content)
+    raw_preview = _preview_text(raw_content, LOG_PREVIEW_CHARS)
     logger.info(
         "llm classifier raw response (channel=%s): %s",
         ctx.channel,
-        raw_content,
+        raw_preview,
     )
     
     try:
@@ -344,7 +428,8 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
             confidence=None,
             reason="json_decode_error",
             error=str(exc),
-            raw_response={"raw": raw_content},
+            raw_response={"raw": _preview_text(raw_content)},
+            request_payload=payload,
             fallback=True,
         )
 
@@ -356,14 +441,18 @@ async def classify(query: str, ctx: "StrategyContext") -> ClassificationResult:
     tags = tuple(sanitized["tags"])
     rewritten_query = sanitized["rewritten_query"]
 
-    if not ctx.query_rewrite_enabled:
-        rewritten_query = None
-
     return ClassificationResult(
         scenario=scenario,
         confidence=confidence_value,
         reason=reason,
         tags=tags,
         rewritten_query=rewritten_query,
-        raw_response={"parsed": parsed, "sanitized": sanitized},
+        raw_response={
+            "raw": raw_preview,
+            "parsed": parsed,
+            "sanitized": sanitized,
+        },
+        request_payload=payload,
+        parsed_response=parsed,
+        sanitized_response=sanitized,
     )

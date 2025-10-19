@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
 from app.infrastructure.database.postgres_base import Base
+from app.modules.auth.models import User
 
 
 class Conversation(Base):

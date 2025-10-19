@@ -27,6 +27,9 @@ from .repository import crud_knowledge_base
 
 logger = logging.getLogger(__name__)
 
+LANGUAGE_MATCH_BONUS = 0.12
+RERANK_MAX_BATCH = 16
+
 
 @dataclass(slots=True)
 class RetrievedChunk:
@@ -142,14 +145,13 @@ async def _apply_bm25_fusion(
     vector_candidates: int,
 ) -> dict[str, Any]:
     stats: dict[str, Any] = {
-        "bm25_enabled": rag_config.bm25_enabled,
         "bm25_weight": round(float(rag_config.bm25_weight), 4),
         "vector_candidates": vector_candidates,
     }
 
     normalized_scores: dict[int, float] = {}
 
-    if not (rag_config.bm25_enabled and rag_config.bm25_top_k > 0 and query.strip()):
+    if not (rag_config.bm25_top_k > 0 and query.strip()):
         return stats
 
     search_result = await fetch_bm25_matches(
@@ -179,11 +181,7 @@ async def _apply_bm25_fusion(
 
         embedding_vector = to_numpy_embedding(chunk)
         chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
-        language_bonus_value = (
-            rag_config.language_bonus
-            if q_lang and chunk_lang and chunk_lang == q_lang
-            else 0.0
-        )
+        language_bonus_value = LANGUAGE_MATCH_BONUS if q_lang and chunk_lang and chunk_lang == q_lang else 0.0
         similarity_estimate = max(0.0, float(np.dot(q_emb, embedding_vector)))
         distance_estimate = max(0.0, 1.0 - similarity_estimate)
         combined_base = (1.0 - rag_config.bm25_weight) * similarity_estimate + rag_config.bm25_weight * normalized
@@ -223,7 +221,7 @@ async def _apply_bm25_fusion(
 
     stats["bm25_fused"] = len(normalized_scores)
 
-    if rag_config.bm25_enabled and rag_config.bm25_weight > 0 and candidate_map:
+    if rag_config.bm25_weight > 0 and candidate_map:
         for item in candidate_map.values():
             normalized = normalized_scores.get(item.chunk.id, 0.0)
             base_component = (1.0 - rag_config.bm25_weight) * float(item.vector_score) + rag_config.bm25_weight * normalized
@@ -264,7 +262,7 @@ async def search_similar_chunks(
         (
             "rag_search_params top_k=%s oversample_factor=%s limit_cap=%s effective_limit=%s "
             "min_sim=%.4f mmr_lambda=%.4f per_doc_limit=%s rerank_enabled=%s rerank_candidates=%s "
-            "rerank_threshold=%.4f bm25_enabled=%s bm25_top_k=%s bm25_weight=%.3f bm25_min_score=%.3f"
+            "rerank_threshold=%.4f bm25_top_k=%s bm25_weight=%.3f bm25_min_score=%.3f"
         ),
         top_k,
         rag_config.oversample_factor,
@@ -276,7 +274,6 @@ async def search_similar_chunks(
         rag_config.rerank_enabled,
         rag_config.rerank_candidates,
         rag_config.rerank_score_threshold,
-        rag_config.bm25_enabled,
         rag_config.bm25_top_k,
         rag_config.bm25_weight,
         rag_config.bm25_min_score,
@@ -292,7 +289,7 @@ async def search_similar_chunks(
         language_bonus_value = 0.0
         chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
         if query_language and chunk_lang and chunk_lang == query_language:
-            language_bonus_value = rag_config.language_bonus
+            language_bonus_value = LANGUAGE_MATCH_BONUS
             base_score += language_bonus_value
         embedding_vector = np.array(chunk.embedding, dtype=np.float32)
         candidates.append(
@@ -350,8 +347,8 @@ async def search_similar_chunks(
                 preview = _build_rerank_preview(content)
                 pairs.append([query, preview])
 
-            for batch_pairs in _batched(pairs, rag_config.rerank_max_batch):
-                batch_size = min(rag_config.rerank_max_batch, len(batch_pairs))
+            for batch_pairs in _batched(pairs, RERANK_MAX_BATCH):
+                batch_size = min(RERANK_MAX_BATCH, len(batch_pairs))
                 raw_scores = await run_in_threadpool(
                     reranker.predict,
                     batch_pairs,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Sequence, Tuple
+from typing import Any, Optional, Sequence, Tuple
 from uuid import UUID
 
 from sqlalchemy import Select, func, select, update
@@ -77,7 +77,8 @@ async def list_conversations(
     rows = await db.execute(stmt)
     items: list[tuple[Conversation, Optional[str]]] = []
     for conversation, preview in rows.all():
-        formatted_preview: Optional[str] = preview
+        preview_source: Optional[str] = conversation.summary or preview
+        formatted_preview: Optional[str] = preview_source
         if formatted_preview and len(formatted_preview) > 200:
             formatted_preview = formatted_preview[:200].rstrip() + "…"
         items.append((conversation, formatted_preview))
@@ -230,3 +231,54 @@ async def append_messages(
     await db.flush()
 
     return persisted
+
+
+async def update_conversation_metadata(
+    db: AsyncSession,
+    *,
+    conversation_id: UUID,
+    title: str,
+    summary: str | None,
+    system_prompt: str,
+) -> bool:
+    values: dict[str, Any] = {
+        "title": title,
+        "system_prompt": system_prompt,
+        "updated_at": func.now(),
+    }
+    if summary is not None:
+        values["summary"] = summary
+
+    result = await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(**values)
+        .returning(Conversation.id)
+    )
+
+    updated = result.scalar_one_or_none()
+    if updated is None:
+        return False
+
+    await db.flush()
+    return True
+
+
+async def delete_conversation(
+    db: AsyncSession,
+    *,
+    conversation_id: UUID,
+    user_id: int,
+) -> bool:
+    stmt = (
+        select(Conversation)
+        .where(Conversation.id == conversation_id)
+        .where(Conversation.user_id == user_id)
+    )
+    conversation = await db.scalar(stmt)
+    if conversation is None:
+        return False
+
+    await db.delete(conversation)
+    await db.commit()
+    return True

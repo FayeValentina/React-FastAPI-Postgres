@@ -46,12 +46,9 @@ class RagSearchConfig:
     rerank_enabled: bool
     rerank_candidates: int
     rerank_score_threshold: float
-    rerank_max_batch: int
-    language_bonus: float
     min_sim: float
     mmr_lambda: float
     per_doc_limit: int
-    bm25_enabled: bool
     bm25_top_k: int
     bm25_weight: float
     bm25_min_score: float
@@ -127,19 +124,6 @@ def build_rag_config(
         minimum=0.0,
         maximum=1.0,
     )
-    rerank_max_batch = _read_setting(
-        config_map,
-        "RAG_RERANK_MAX_BATCH",
-        default=settings.RAG_RERANK_MAX_BATCH,
-        caster=int,
-        minimum=1,
-    )
-    language_bonus = _read_setting(
-        config_map,
-        "RAG_SAME_LANG_BONUS",
-        default=settings.RAG_SAME_LANG_BONUS,
-        caster=float,
-    )
     min_sim = _read_setting(
         config_map,
         "RAG_MIN_SIM",
@@ -162,11 +146,6 @@ def build_rag_config(
         default=settings.RAG_PER_DOC_LIMIT,
         caster=int,
         minimum=1,
-    )
-    bm25_enabled = coerce_bool(
-        config_map,
-        "BM25_ENABLED",
-        settings.BM25_ENABLED,
     )
     bm25_top_k = _read_setting(
         config_map,
@@ -198,12 +177,9 @@ def build_rag_config(
         rerank_enabled=rerank_enabled,
         rerank_candidates=rerank_candidates,
         rerank_score_threshold=rerank_score_threshold,
-        rerank_max_batch=rerank_max_batch,
-        language_bonus=language_bonus,
         min_sim=min_sim,
         mmr_lambda=mmr_lambda,
         per_doc_limit=per_doc_limit,
-        bm25_enabled=bm25_enabled,
         bm25_top_k=bm25_top_k,
         bm25_weight=bm25_weight,
         bm25_min_score=bm25_min_score,

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_active_user
@@ -16,6 +16,7 @@ from app.infrastructure.database.postgres_base import get_async_session
 from app.infrastructure.redis.redis_pool import redis_connection_manager
 from app.modules.auth.models import User
 from app.modules.llm import repository as conversation_repository
+from app.modules.llm import service as conversation_service
 from app.modules.llm.schemas import (
     ConversationCreate,
     ConversationListItem,
@@ -75,6 +76,25 @@ async def list_conversations(
         items.append(item)
 
     return ConversationListResponse(items=items, total=total)
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_conversation(
+    conversation_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: Annotated[User, Depends(get_current_active_user)] = None,
+) -> Response:
+    deleted = await conversation_service.delete_conversation(
+        db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

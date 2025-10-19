@@ -221,6 +221,50 @@ export default function ChatPage() {
     [mapApiMessage]
   )
 
+  const handleDeleteConversation = useCallback(
+    async (conversationId: string) => {
+      if (!conversationId) {
+        return
+      }
+      const confirmed = window.confirm('确定要删除该对话吗？此操作无法撤销。')
+      if (!confirmed) {
+        return
+      }
+      setHistoryActionPending(true)
+      try {
+        await api.delete<void>(`/v1/chat/conversations/${conversationId}`)
+        let nextSelectedId: string | null = selectedConversationId
+        setConversations((prev) => {
+          const updated = prev.filter((item) => item.id !== conversationId)
+          if (selectedConversationId === conversationId) {
+            nextSelectedId = updated[0]?.id ?? null
+          }
+          return updated
+        })
+
+        if (selectedConversationId === conversationId) {
+          if (nextSelectedId) {
+            setSelectedConversationId(nextSelectedId)
+            setMessages([])
+            setPagination(null)
+            setMessageError(null)
+            void loadMessages(nextSelectedId)
+          } else {
+            setSelectedConversationId(null)
+            setMessages([])
+            setPagination(null)
+            setMessageError(null)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to delete conversation', error)
+      } finally {
+        setHistoryActionPending(false)
+      }
+    },
+    [loadMessages, selectedConversationId],
+  )
+
   const loadOlderMessages = useCallback(async () => {
     if (!selectedConversationId || !pagination) return
     const { nextBeforeIndex, nextBeforeCreatedAt } = pagination
@@ -682,19 +726,14 @@ export default function ChatPage() {
               mb: 3,
             }}
           >
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={{ xs: 1.5, md: 3 }}
-              alignItems={{ xs: 'stretch', md: 'center' }}
-              justifyContent="space-between"
-            >
+            <Stack spacing={2}>
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 spacing={{ xs: 1, sm: 2 }}
                 alignItems={{ xs: 'stretch', sm: 'center' }}
                 sx={{ flex: 1, minWidth: 0 }}
               >
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 88 }}>
                   Temperature
                 </Typography>
                 <Slider
@@ -720,7 +759,15 @@ export default function ChatPage() {
                   {temperature.toFixed(2)}
                 </Typography>
               </Stack>
-              <Stack direction="column" spacing={0.5} sx={{ minWidth: { md: 220 } }}>
+
+              <Stack
+                spacing={0.5}
+                sx={{
+                  p: { xs: 1, sm: 1.25 },
+                  borderRadius: 1,
+                  bgcolor: 'grey.50',
+                }}
+              >
                 <Typography variant="caption" color="text.secondary">
                   当前会话
                 </Typography>
@@ -734,6 +781,19 @@ export default function ChatPage() {
                   }}
                 >
                   {activeConversation?.title || '新建对话'}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    minHeight: 'auto',
+                  }}
+                >
+                  {activeConversation?.summary || '发送第一条消息开始对话。'}
                 </Typography>
               </Stack>
             </Stack>
@@ -917,6 +977,7 @@ export default function ChatPage() {
           onSelect={handleSelectConversation}
           onCreateConversation={handleCreateConversationClick}
           onRefresh={handleRefreshConversations}
+          onDelete={handleDeleteConversation}
         />
       </Box>
 

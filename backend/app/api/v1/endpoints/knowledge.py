@@ -183,8 +183,6 @@ async def search_knowledge(
     if not isinstance(config, dict):
         config = settings.dynamic_settings_defaults()
 
-    bm25_enabled = True
-
     bm25_min_score = coerce_float(
         config,
         "BM25_MIN_SCORE",
@@ -208,7 +206,6 @@ async def search_knowledge(
             "top_k": top_k_value,
             "bm25_limit": search_limit,
             "bm25_min_score": bm25_min_score,
-            "bm25_enabled": bm25_enabled,
         },
     )
 

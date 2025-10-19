@@ -55,6 +55,7 @@ tiktoken = "^0.7"
 lingua-language-detector = "^1.4"
 spacy = "^3.8.2"
 sse-starlette = "^2.3.5"
+numpy = "^2.3.0"
 
 # --- NLTK 已被移除 ---
 # nltk = "^3.9" 

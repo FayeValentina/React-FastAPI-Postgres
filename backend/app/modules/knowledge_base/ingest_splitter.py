@@ -19,7 +19,6 @@ from .language import (
     detect_language_meta,
     normalize_language_value,
 )
-from app.infrastructure.utils.coerce_utils import coerce_value
 
 
 HEADERS_TO_SPLIT_ON = [
@@ -77,31 +76,14 @@ def _markdown_splitter() -> MarkdownHeaderTextSplitter:
 
 
 def build_chunking_parameters(config: Mapping[str, Any] | None = None) -> ChunkingParameters:
+    """Construct ingestion chunking parameters using static settings."""
     return ChunkingParameters(
-        target_tokens_en=coerce_value(
-            config, "RAG_CHUNK_TARGET_TOKENS_EN", settings.RAG_CHUNK_TARGET_TOKENS_EN, int
-        ),
-        target_tokens_cjk=coerce_value(
-            config, "RAG_CHUNK_TARGET_TOKENS_CJK", settings.RAG_CHUNK_TARGET_TOKENS_CJK, int
-        ),
-        target_tokens_default=coerce_value(
-            config,
-            "RAG_CHUNK_TARGET_TOKENS_DEFAULT",
-            settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
-            int,
-        ),
-        overlap_ratio=coerce_value(
-            config, "RAG_CHUNK_OVERLAP_RATIO", settings.RAG_CHUNK_OVERLAP_RATIO, float
-        ),
-        code_max_lines=coerce_value(
-            config, "RAG_CODE_CHUNK_MAX_LINES", settings.RAG_CODE_CHUNK_MAX_LINES, int
-        ),
-        code_overlap_lines=coerce_value(
-            config,
-            "RAG_CODE_CHUNK_OVERLAP_LINES",
-            settings.RAG_CODE_CHUNK_OVERLAP_LINES,
-            int,
-        ),
+        target_tokens_en=settings.RAG_CHUNK_TARGET_TOKENS_EN,
+        target_tokens_cjk=settings.RAG_CHUNK_TARGET_TOKENS_CJK,
+        target_tokens_default=settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
+        overlap_ratio=settings.RAG_CHUNK_OVERLAP_RATIO,
+        code_max_lines=settings.RAG_CODE_CHUNK_MAX_LINES,
+        code_overlap_lines=settings.RAG_CODE_CHUNK_OVERLAP_LINES,
     )
 
 
