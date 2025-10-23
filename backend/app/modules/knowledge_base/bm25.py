@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Optional
 
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,15 +85,6 @@ async def fetch_bm25_matches(
         max_score=max_score,
         min_score=min_score_value,
     )
-
-
-def best_normalized_score(matches: Iterable[BM25Match]) -> float:
-    """Return the maximum normalized score among matches (0 when empty)."""
-    maximum = 0.0
-    for item in matches:
-        if item.normalized_score > maximum:
-            maximum = item.normalized_score
-    return maximum
 
 
 def to_numpy_embedding(chunk: models.KnowledgeChunk) -> np.ndarray:

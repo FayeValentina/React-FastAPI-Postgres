@@ -75,15 +75,19 @@ def _markdown_splitter() -> MarkdownHeaderTextSplitter:
     return MarkdownHeaderTextSplitter(headers_to_split_on=HEADERS_TO_SPLIT_ON, strip_headers=False)
 
 
-def build_chunking_parameters(config: Mapping[str, Any] | None = None) -> ChunkingParameters:
+def build_chunking_parameters() -> ChunkingParameters:
     """Construct ingestion chunking parameters using static settings."""
+
     return ChunkingParameters(
-        target_tokens_en=settings.RAG_CHUNK_TARGET_TOKENS_EN,
-        target_tokens_cjk=settings.RAG_CHUNK_TARGET_TOKENS_CJK,
-        target_tokens_default=settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT,
-        overlap_ratio=settings.RAG_CHUNK_OVERLAP_RATIO,
-        code_max_lines=settings.RAG_CODE_CHUNK_MAX_LINES,
-        code_overlap_lines=settings.RAG_CODE_CHUNK_OVERLAP_LINES,
+        target_tokens_en=max(1, settings.RAG_CHUNK_TARGET_TOKENS_EN),
+        target_tokens_cjk=max(1, settings.RAG_CHUNK_TARGET_TOKENS_CJK),
+        target_tokens_default=max(1, settings.RAG_CHUNK_TARGET_TOKENS_DEFAULT),
+        overlap_ratio=min(
+            1.0,
+            max(0.0, float(settings.RAG_CHUNK_OVERLAP_RATIO)),
+        ),
+        code_max_lines=max(1, settings.RAG_CODE_CHUNK_MAX_LINES),
+        code_overlap_lines=max(0, settings.RAG_CODE_CHUNK_OVERLAP_LINES),
     )
 
 
@@ -191,16 +195,8 @@ def split_elements(
     *,
     config: Mapping[str, Any] | None = None,
 ) -> List[SplitChunk]:
-    params = build_chunking_parameters(config)
+    params = build_chunking_parameters()
     chunks: List[SplitChunk] = []
-
-    def _resolve_language(text: str, *, default_lang: str) -> str:
-        normalized_default = normalize_language_value(default_lang) or "en"
-        if not text:
-            return normalized_default
-        meta = detect_language_meta(text, config=config, default=normalized_default)
-        normalised = normalize_language_value(meta["language"])
-        return normalised if normalised else normalized_default
 
     for element in elements:
         text = (element.text or "").strip()
@@ -210,18 +206,20 @@ def split_elements(
         base_meta = dict(element.metadata or {})
         meta_lang = normalize_language_value(base_meta.get("language"))
         element_lang = normalize_language_value(element.language)
-        base_language = element_lang or meta_lang
-        if base_language:
-            base_meta.setdefault("language", base_language)
+        if element_lang:
+            base_meta["language"] = element_lang
+        elif meta_lang:
+            base_meta["language"] = meta_lang
 
-        canonical_lang = base_language or _resolve_language(
-            text, default_lang=base_meta.get("language", "en")
-        )
+        default_language = normalize_language_value(base_meta.get("language")) or "en"
+        element_meta = detect_language_meta(text, config=config, default=default_language)
+        detected_lang = normalize_language_value(element_meta["language"]) or default_language
 
-        meta = detect_language_meta(text, config=config, default=canonical_lang)
-        detected_lang = normalize_language_value(meta["language"]) or canonical_lang
-
-        if element.is_code or meta.get("is_code") or detected_lang == "code":
+        if (
+            element.is_code
+            or element_meta.get("is_code")
+            or detected_lang == "code"
+        ):
             base_meta.setdefault("language", "code")
             code_chunks = _split_code(text, params)
             for chunk in code_chunks:
