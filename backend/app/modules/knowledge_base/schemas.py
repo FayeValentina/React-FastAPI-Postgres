@@ -56,11 +56,12 @@ class KnowledgeChunkRead(BaseModel):
 
 
 class KnowledgeChunkUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     content: Optional[str] = Field(None, description="更新后的文本内容")
     chunk_index: Optional[int] = Field(
         None, description="文档内块序，允许为空表示未指定"
     )
-    language: Optional[str] = Field(None, description="块语言，通常自动推断")
 
 
 class KnowledgeSearchRequest(BaseModel):

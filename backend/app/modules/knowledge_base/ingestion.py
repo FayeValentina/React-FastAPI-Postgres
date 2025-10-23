@@ -147,12 +147,7 @@ async def update_chunk(
     if "chunk_index" in updates:
         chunk.chunk_index = updates.get("chunk_index")
 
-    language_changed = False
-    if "language" in updates:
-        chunk.language = updates.get("language")
-        language_changed = True
-
-    needs_persist = content_changed or ("chunk_index" in updates) or language_changed
+    needs_persist = content_changed or ("chunk_index" in updates)
 
     if content_changed:
         embedder = get_embedder()
@@ -164,7 +159,7 @@ async def update_chunk(
         meta = detect_language_meta(stripped or "")
         chunk.language = meta["language"]
 
-    if content_changed or language_changed:
+    if content_changed:
         search_text = tokenize_for_search(chunk.content, chunk.language)
         chunk.search_vector = func.to_tsvector("simple", search_text)
 
