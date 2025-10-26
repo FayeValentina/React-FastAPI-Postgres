@@ -63,6 +63,22 @@ def _element_to_payload(element: Element) -> ExtractedElement | None:
     )
 
 
+def _process_partition_elements(
+    elements: list[Element] | None,
+    *,
+    source_ref: str | None = None,
+) -> list[ExtractedElement]:
+    payloads: List[ExtractedElement] = []
+    for item in elements or []:
+        payload = _element_to_payload(item)
+        if payload is None:
+            continue
+        if source_ref and "source" not in payload.metadata:
+            payload.metadata["source"] = source_ref
+        payloads.append(payload)
+    return payloads
+
+
 def _decode_bytes_to_text(raw: bytes) -> str:
     if not raw:
         return ""
@@ -97,14 +113,7 @@ def extract_from_text(
     except Exception:  # pragma: no cover - fallback to plain text chunk
         return [ExtractedElement(text=text, metadata={"source": source_ref} if source_ref else {})]
 
-    payloads: List[ExtractedElement] = []
-    for item in elements or []:
-        payload = _element_to_payload(item)
-        if payload is not None:
-            if source_ref and "source" not in payload.metadata:
-                payload.metadata["source"] = source_ref
-            payloads.append(payload)
-
+    payloads = _process_partition_elements(elements, source_ref=source_ref)
     if payloads:
         return payloads
 
@@ -136,14 +145,7 @@ def extract_from_bytes(
         metadata = {"source": filename} if filename else {}
         return fallback, [ExtractedElement(text=fallback, metadata=metadata)]
 
-    payloads: List[ExtractedElement] = []
-    for item in elements or []:
-        payload = _element_to_payload(item)
-        if payload is not None:
-            if filename and "source" not in payload.metadata:
-                payload.metadata["source"] = filename
-            payloads.append(payload)
-
+    payloads = _process_partition_elements(elements, source_ref=filename)
     if payloads:
         return fallback, payloads
 

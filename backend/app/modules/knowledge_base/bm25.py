@@ -87,15 +87,6 @@ async def fetch_bm25_matches(
     )
 
 
-def best_normalized_score(matches: Iterable[BM25Match]) -> float:
-    """Return the maximum normalized score among matches (0 when empty)."""
-    maximum = 0.0
-    for item in matches:
-        if item.normalized_score > maximum:
-            maximum = item.normalized_score
-    return maximum
-
-
 def to_numpy_embedding(chunk: models.KnowledgeChunk) -> np.ndarray:
     """Convert chunk embedding to numpy array (float32)."""
     return np.array(chunk.embedding, dtype=np.float32)

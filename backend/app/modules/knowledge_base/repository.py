@@ -4,7 +4,7 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
-from sqlalchemy import delete, select, func
+from sqlalchemy import delete, select, func, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -133,27 +133,37 @@ class CRUDKnowledgeBase:
     ) -> int:
         """Persist a batch of chunks for a document."""
 
-        created = 0
+        records: list[dict[str, Any]] = []
         for chunk_index, content, embedding, language in chunks:
             search_text = tokenize_for_search(content, language)
-            db.add(
-                models.KnowledgeChunk(
-                    document_id=document_id,
-                    chunk_index=chunk_index,
-                    content=content,
-                    embedding=np.asarray(embedding),
-                    language=language,
-                    search_vector=func.to_tsvector("simple", search_text),
-                )
+            vector = np.asarray(embedding).tolist()
+            records.append(
+                {
+                    "document_id": document_id,
+                    "chunk_index": chunk_index,
+                    "content": content,
+                    "embedding": vector,
+                    "language": language,
+                    "search_vector": func.to_tsvector("simple", search_text),
+                }
             )
-            created += 1
+
+        if not records:
+            if commit:
+                await db.commit()
+            else:
+                await db.flush()
+            return 0
+
+        stmt = insert(models.KnowledgeChunk).values(records)
+        await db.execute(stmt)
 
         if commit:
             await db.commit()
         else:
             await db.flush()
 
-        return created
+        return len(records)
 
     async def get_chunk_by_id(
         self, db: AsyncSession, chunk_id: int

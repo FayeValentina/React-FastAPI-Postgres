@@ -22,10 +22,10 @@
 
 ### 文档摄入（`ingestion.py`）
 1. **提取**：`extract_from_bytes` / `extract_from_text` → `ExtractedElement`。
-2. **分割**：`split_elements` 依据动态配置和语言/代码信息生成 `SplitChunk`。
+2. **分割**：`split_elements` 依据静态应用配置并复用语言检测结果，区分文本/代码生成 `SplitChunk`。
 3. **向量化**：`get_embedder().encode` 批量生成归一化向量。
 4. **落库**：`crud_knowledge_base.bulk_create_document_chunks` 与全文检索向量更新。
-5. **更新**：`update_chunk` 自动重算向量与 `search_vector`，同时刷新语言元数据。
+5. **更新**：`update_chunk` 自动重算向量与 `search_vector`，语言完全依赖自动检测维持一致性。
 
 ### 检索（`retrieval.py`）
 1. **加载配置**：`build_rag_config` 根据动态设置和请求 `top_k` 计算检索参数。

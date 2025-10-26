@@ -7,10 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.dynamic_settings import DynamicSettingsService
-
 from . import models
-from .config import DynamicSettingsMapping, resolve_dynamic_settings
 from .embeddings import get_embedder
 from .ingest_extractor import ExtractedElement, extract_from_bytes, extract_from_text
 from .ingest_splitter import SplitChunk, split_elements
@@ -21,11 +18,10 @@ from .tokenizer import tokenize_for_search
 
 async def _split_elements_async(
     elements: list[ExtractedElement],
-    config: DynamicSettingsMapping | None,
 ) -> List[SplitChunk]:
     if not elements:
         return []
-    return await run_in_threadpool(split_elements, elements, config=config)
+    return await run_in_threadpool(split_elements, elements)
 
 
 async def _persist_chunks(
@@ -34,10 +30,8 @@ async def _persist_chunks(
     document_id: int,
     elements: list[ExtractedElement],
     overwrite: bool,
-    dynamic_settings_service: DynamicSettingsService | None,
 ) -> int:
-    config = await resolve_dynamic_settings(dynamic_settings_service)
-    split_chunks = await _split_elements_async(elements, config)
+    split_chunks = await _split_elements_async(elements)
     if not split_chunks:
         if overwrite:
             await crud_knowledge_base.delete_chunks_by_document_id(db, document_id, commit=True)
@@ -70,7 +64,6 @@ async def ingest_document_file(
     upload: UploadFile,
     overwrite: bool = False,
     document: models.KnowledgeDocument | None = None,
-    dynamic_settings_service: DynamicSettingsService | None = None,
 ) -> int:
     """Ingest an uploaded document by extracting, chunking, and storing its elements."""
     if upload is None:
@@ -95,7 +88,6 @@ async def ingest_document_file(
         document_id=document_id,
         elements=elements,
         overwrite=overwrite,
-        dynamic_settings_service=dynamic_settings_service,
     )
 
 
@@ -105,7 +97,6 @@ async def ingest_document_content(
     content: str,
     overwrite: bool = False,
     document: models.KnowledgeDocument | None = None,
-    dynamic_settings_service: DynamicSettingsService | None = None,
 ) -> int:
     """Ingest raw text content provided directly via API."""
     if document is None:
@@ -119,7 +110,6 @@ async def ingest_document_content(
         document_id=document_id,
         elements=elements,
         overwrite=overwrite,
-        dynamic_settings_service=dynamic_settings_service,
     )
 
 
@@ -147,12 +137,7 @@ async def update_chunk(
     if "chunk_index" in updates:
         chunk.chunk_index = updates.get("chunk_index")
 
-    language_changed = False
-    if "language" in updates:
-        chunk.language = updates.get("language")
-        language_changed = True
-
-    needs_persist = content_changed or ("chunk_index" in updates) or language_changed
+    chunk_index_changed = "chunk_index" in updates
 
     if content_changed:
         embedder = get_embedder()
@@ -164,9 +149,10 @@ async def update_chunk(
         meta = detect_language_meta(stripped or "")
         chunk.language = meta["language"]
 
-    if content_changed or language_changed:
         search_text = tokenize_for_search(chunk.content, chunk.language)
         chunk.search_vector = func.to_tsvector("simple", search_text)
+
+    needs_persist = content_changed or chunk_index_changed
 
     if needs_persist:
         await crud_knowledge_base.persist_chunk(db, chunk)

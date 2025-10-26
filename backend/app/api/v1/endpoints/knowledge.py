@@ -88,7 +88,6 @@ async def ingest_content(
     document_id: int,
     body: KnowledgeDocumentIngestRequest,
     db: AsyncSession = Depends(get_async_session),
-    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_content(
@@ -97,7 +96,6 @@ async def ingest_content(
             body.content,
             overwrite=body.overwrite,
             document=doc,
-            dynamic_settings_service=dynamic_settings_service,
         )
 
     return await _ingest_document(document_id, db, _operation)
@@ -109,7 +107,6 @@ async def ingest_content_upload(
     file: UploadFile = File(...),
     overwrite: bool = Form(False),
     db: AsyncSession = Depends(get_async_session),
-    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_file(
@@ -118,7 +115,6 @@ async def ingest_content_upload(
             file,
             overwrite=overwrite,
             document=doc,
-            dynamic_settings_service=dynamic_settings_service,
         )
 
     return await _ingest_document(

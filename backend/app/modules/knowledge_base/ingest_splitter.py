@@ -75,8 +75,8 @@ def _markdown_splitter() -> MarkdownHeaderTextSplitter:
     return MarkdownHeaderTextSplitter(headers_to_split_on=HEADERS_TO_SPLIT_ON, strip_headers=False)
 
 
-def build_chunking_parameters(config: Mapping[str, Any] | None = None) -> ChunkingParameters:
-    """Construct ingestion chunking parameters using static settings."""
+def build_chunking_parameters() -> ChunkingParameters:
+    """Construct ingestion chunking parameters using application settings."""
     return ChunkingParameters(
         target_tokens_en=settings.RAG_CHUNK_TARGET_TOKENS_EN,
         target_tokens_cjk=settings.RAG_CHUNK_TARGET_TOKENS_CJK,
@@ -188,19 +188,20 @@ def _markdown_sections(text: str, base_metadata: Mapping[str, Any]) -> Iterable[
 
 def split_elements(
     elements: Iterable[ExtractedElement],
-    *,
-    config: Mapping[str, Any] | None = None,
 ) -> List[SplitChunk]:
-    params = build_chunking_parameters(config)
+    params = build_chunking_parameters()
     chunks: List[SplitChunk] = []
 
-    def _resolve_language(text: str, *, default_lang: str) -> str:
+    detection_cache: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def _detect_with_cache(text: str, default_lang: str | None) -> dict[str, Any]:
         normalized_default = normalize_language_value(default_lang) or "en"
-        if not text:
-            return normalized_default
-        meta = detect_language_meta(text, config=config, default=normalized_default)
-        normalised = normalize_language_value(meta["language"])
-        return normalised if normalised else normalized_default
+        key = (text, normalized_default)
+        cached = detection_cache.get(key)
+        if cached is None:
+            cached = detect_language_meta(text, default=normalized_default)
+            detection_cache[key] = cached
+        return cached
 
     for element in elements:
         text = (element.text or "").strip()
@@ -214,14 +215,14 @@ def split_elements(
         if base_language:
             base_meta.setdefault("language", base_language)
 
-        canonical_lang = base_language or _resolve_language(
-            text, default_lang=base_meta.get("language", "en")
-        )
+        base_default = base_language or base_meta.get("language") or "en"
+        element_meta = _detect_with_cache(text, base_default)
+        detected_lang = normalize_language_value(element_meta["language"])
+        normalized_default = normalize_language_value(base_default) or "en"
+        canonical_lang = base_language or detected_lang or normalized_default
+        base_meta.setdefault("language", canonical_lang)
 
-        meta = detect_language_meta(text, config=config, default=canonical_lang)
-        detected_lang = normalize_language_value(meta["language"]) or canonical_lang
-
-        if element.is_code or meta.get("is_code") or detected_lang == "code":
+        if element.is_code or element_meta.get("is_code") or canonical_lang == "code":
             base_meta.setdefault("language", "code")
             code_chunks = _split_code(text, params)
             for chunk in code_chunks:
@@ -235,7 +236,7 @@ def split_elements(
                 )
             continue
 
-        default_section_lang = "en" if detected_lang == "code" else (detected_lang or "en")
+        default_section_lang = "en" if canonical_lang == "code" else (canonical_lang or "en")
 
         for section_text, metadata in _markdown_sections(text, base_meta):
             section_meta = dict(metadata)
@@ -244,9 +245,7 @@ def split_elements(
                 or normalize_language_value(section_meta.get("language"))
                 or default_section_lang
             )
-            section_info = detect_language_meta(
-                section_text, config=config, default=section_default
-            )
+            section_info = _detect_with_cache(section_text, section_default)
             section_lang = normalize_language_value(section_info["language"]) or section_default
             section_meta.setdefault("language", section_lang)
 
