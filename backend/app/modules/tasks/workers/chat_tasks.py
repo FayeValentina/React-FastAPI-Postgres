@@ -407,7 +407,6 @@ async def process_chat_message(
                 db,
                 effective_query,
                 top_k_value,
-                dynamic_settings_service=dynamic_settings_service,
                 config=strategy_config,
             )
         except Exception:
