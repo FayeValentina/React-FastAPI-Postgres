@@ -179,10 +179,10 @@ async def search_knowledge(
     if not isinstance(config, dict):
         config = settings.dynamic_settings_defaults()
 
-    bm25_min_score = coerce_float(
+    bm25_min_rank = coerce_float(
         config,
-        "BM25_MIN_SCORE",
-        settings.BM25_MIN_SCORE,
+        "BM25_MIN_RANK",
+        settings.BM25_MIN_RANK,
         minimum=0.0,
     )
     default_bm25_top_k = coerce_int(
@@ -201,7 +201,7 @@ async def search_knowledge(
         extra={
             "top_k": top_k_value,
             "bm25_limit": search_limit,
-            "bm25_min_score": bm25_min_score,
+            "bm25_min_rank": bm25_min_rank,
         },
     )
 
@@ -209,7 +209,7 @@ async def search_knowledge(
         db,
         payload.query,
         search_limit,
-        min_score=bm25_min_score,
+        min_rank=bm25_min_rank,
         language=language,
     )
 

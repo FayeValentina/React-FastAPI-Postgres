@@ -136,8 +136,8 @@ export const ADMIN_SETTING_DEFINITIONS: AdminSettingDefinition[] = [
     step: 0.01,
   },
   {
-    key: 'BM25_MIN_SCORE',
-    label: 'BM25 最小得分阈值',
+    key: 'BM25_MIN_RANK',
+    label: 'BM25 最小 rank 阈值（ts_rank_cd）',
     description: 'BM25 原始得分低于该阈值的候选会被忽略，用于过滤低质量关键字命中。',
     type: 'float',
     min: 0,

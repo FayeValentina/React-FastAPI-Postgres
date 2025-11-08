@@ -14,13 +14,14 @@ from .tokenizer import tokenize_for_search
 
 
 class CRUDKnowledgeBase:
-    """Repository wrapper for knowledge documents and chunks."""
+    """知识库文档和块的存储库包装器。"""
 
     @staticmethod
     def _apply_chunk_filters(
         stmt,
         filters: Mapping[str, Any] | None,
     ):
+        """应用块过滤器。"""
         payload = filters or {}
 
         document_ids = payload.get("document_ids")
@@ -36,7 +37,7 @@ class CRUDKnowledgeBase:
     async def create_document(
         self, db: AsyncSession, data: KnowledgeDocumentCreate
     ) -> models.KnowledgeDocument:
-        """Persist a new knowledge document (without commit)."""
+        """持久化一个新的知识库文档（不提交）。"""
         doc = models.KnowledgeDocument(
             source_type=data.source_type,
             source_ref=data.source_ref,
@@ -53,7 +54,7 @@ class CRUDKnowledgeBase:
         return doc
 
     async def delete_document(self, db: AsyncSession, document_id: int) -> None:
-        """Remove a document and cascade to its chunks."""
+        """删除一个文档并级联删除其块。"""
         await db.execute(
             delete(models.KnowledgeDocument).where(models.KnowledgeDocument.id == document_id)
         )
@@ -62,6 +63,7 @@ class CRUDKnowledgeBase:
     async def get_all_documents(
         self, db: AsyncSession, skip: int = 0, limit: int = 100
     ) -> list[models.KnowledgeDocument]:
+        """获取所有文档。"""
         stmt = (
             select(models.KnowledgeDocument)
             .order_by(models.KnowledgeDocument.created_at.desc())
@@ -74,11 +76,13 @@ class CRUDKnowledgeBase:
     async def get_document_by_id(
         self, db: AsyncSession, document_id: int
     ) -> Optional[models.KnowledgeDocument]:
+        """按 ID 获取文档。"""
         return await db.get(models.KnowledgeDocument, document_id)
 
     async def update_document_metadata(
         self, db: AsyncSession, document_id: int, updates: dict
     ) -> Optional[models.KnowledgeDocument]:
+        """更新文档元数据。"""
         doc = await db.get(models.KnowledgeDocument, document_id)
         if not doc:
             return None
@@ -106,6 +110,7 @@ class CRUDKnowledgeBase:
     async def get_chunks_by_document_id(
         self, db: AsyncSession, document_id: int
     ) -> list[models.KnowledgeChunk]:
+        """按文档 ID 获取块。"""
         stmt = (
             select(models.KnowledgeChunk)
             .where(models.KnowledgeChunk.document_id == document_id)
@@ -114,9 +119,23 @@ class CRUDKnowledgeBase:
         result = await db.scalars(stmt)
         return result.all()
 
+    async def get_max_chunk_index(
+        self,
+        db: AsyncSession,
+        document_id: int,
+    ) -> int:
+        """获取指定文档当前的最大 chunk_index，若不存在则返回 -1。"""
+        stmt = select(func.max(models.KnowledgeChunk.chunk_index)).where(
+            models.KnowledgeChunk.document_id == document_id
+        )
+        result = await db.execute(stmt)
+        max_index = result.scalar_one_or_none()
+        return -1 if max_index is None else int(max_index)
+
     async def delete_chunks_by_document_id(
         self, db: AsyncSession, document_id: int, *, commit: bool = False
     ) -> None:
+        """按文档 ID 删除块。"""
         await db.execute(
             delete(models.KnowledgeChunk).where(models.KnowledgeChunk.document_id == document_id)
         )
@@ -131,7 +150,7 @@ class CRUDKnowledgeBase:
         *,
         commit: bool = True,
     ) -> int:
-        """Persist a batch of chunks for a document."""
+        """为一个文档持久化一批块。"""
 
         records: list[dict[str, Any]] = []
         for chunk_index, content, embedding, language in chunks:
@@ -168,16 +187,19 @@ class CRUDKnowledgeBase:
     async def get_chunk_by_id(
         self, db: AsyncSession, chunk_id: int
     ) -> Optional[models.KnowledgeChunk]:
+        """按 ID 获取块。"""
         return await db.get(models.KnowledgeChunk, chunk_id)
 
     async def persist_chunk(
         self, db: AsyncSession, chunk: models.KnowledgeChunk
     ) -> models.KnowledgeChunk:
+        """持久化一个块。"""
         await db.commit()
         await db.refresh(chunk)
         return chunk
 
     async def delete_chunk(self, db: AsyncSession, chunk: models.KnowledgeChunk) -> None:
+        """删除一个块。"""
         await db.delete(chunk)
         await db.commit()
 
@@ -187,6 +209,7 @@ class CRUDKnowledgeBase:
         query_embedding: np.ndarray,
         limit: int,
     ):
+        """通过嵌入获取块候选项。"""
         distance_expr = models.KnowledgeChunk.embedding.cosine_distance(query_embedding)
         stmt = (
             select(models.KnowledgeChunk, distance_expr.label("distance"))
@@ -206,7 +229,9 @@ class CRUDKnowledgeBase:
         *,
         filters: Mapping[str, Any] | None = None,
         query_language: str | None = None,
+        min_rank: float | None = None
     ) -> list[tuple[models.KnowledgeChunk, float]]:
+        """通过 BM25 进行搜索。"""
         normalized_query = tokenize_for_search(query, query_language)
 
         if not normalized_query or limit <= 0:
@@ -221,6 +246,10 @@ class CRUDKnowledgeBase:
             .where(models.KnowledgeChunk.search_vector.isnot(None))
             .where(models.KnowledgeChunk.search_vector.op("@@")(ts_query))
         )
+
+        # 绝对阈值（稳定语义）在数据库侧进行 gating
+        if min_rank is not None:
+            stmt = stmt.where(rank_expr >= min_rank)
 
         stmt = self._apply_chunk_filters(stmt, filters)
 
