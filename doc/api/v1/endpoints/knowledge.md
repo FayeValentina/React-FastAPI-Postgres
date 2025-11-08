@@ -48,9 +48,9 @@
 - **响应模型**: `list[KnowledgeChunkRead]`。
 
 ### `PATCH /chunks/{chunk_id}`
-- **功能**: 更新单个知识区块的内容或元数据。
-- **请求体**: `KnowledgeChunkUpdate`。
-- **逻辑**: 调用 `knowledge_base_service.update_chunk`。如果区块的 `content` 发生变化，该服务会自动重新计算其嵌入向量和全文检索向量。
+- **功能**: 更新单个知识区块的文本内容或块序。
+- **请求体**: `KnowledgeChunkUpdate`（仅 `content` 与 `chunk_index` 字段）。
+- **逻辑**: 调用 `knowledge_base_service.update_chunk`。当 `content` 发生变化时会自动重算嵌入、语言及全文检索向量。
 
 ### `DELETE /chunks/{chunk_id}`
 - **功能**: 删除单个知识区块。

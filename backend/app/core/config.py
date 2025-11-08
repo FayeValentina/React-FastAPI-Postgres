@@ -339,7 +339,8 @@ class Settings(BaseSettings):
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
     BM25_TOP_K: int = Field(default=8)
     BM25_WEIGHT: float = Field(default=0.35)
-    BM25_MIN_SCORE: float = Field(default=0.0)
+    # 新：以 Postgres 原始 ts_rank_cd 作为绝对阈值（用于数据库侧 gating）
+    BM25_MIN_RANK: float = Field(default=0.0)
     SPACY_MODEL_NAME: str = Field(default="zh_core_web_sm")
 
     model_config = SettingsConfigDict(
@@ -372,7 +373,8 @@ class Settings(BaseSettings):
             "RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD": self.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
             "BM25_TOP_K": self.BM25_TOP_K,
             "BM25_WEIGHT": self.BM25_WEIGHT,
-            "BM25_MIN_SCORE": self.BM25_MIN_SCORE,
+            # 新键：推荐前端/运维改用 BM25_MIN_RANK
+            "BM25_MIN_RANK": self.BM25_MIN_RANK,
         }
 
 settings = Settings()

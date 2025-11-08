@@ -88,7 +88,6 @@ async def ingest_content(
     document_id: int,
     body: KnowledgeDocumentIngestRequest,
     db: AsyncSession = Depends(get_async_session),
-    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_content(
@@ -97,7 +96,6 @@ async def ingest_content(
             body.content,
             overwrite=body.overwrite,
             document=doc,
-            dynamic_settings_service=dynamic_settings_service,
         )
 
     return await _ingest_document(document_id, db, _operation)
@@ -109,7 +107,6 @@ async def ingest_content_upload(
     file: UploadFile = File(...),
     overwrite: bool = Form(False),
     db: AsyncSession = Depends(get_async_session),
-    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_file(
@@ -118,7 +115,6 @@ async def ingest_content_upload(
             file,
             overwrite=overwrite,
             document=doc,
-            dynamic_settings_service=dynamic_settings_service,
         )
 
     return await _ingest_document(
@@ -183,10 +179,10 @@ async def search_knowledge(
     if not isinstance(config, dict):
         config = settings.dynamic_settings_defaults()
 
-    bm25_min_score = coerce_float(
+    bm25_min_rank = coerce_float(
         config,
-        "BM25_MIN_SCORE",
-        settings.BM25_MIN_SCORE,
+        "BM25_MIN_RANK",
+        settings.BM25_MIN_RANK,
         minimum=0.0,
     )
     default_bm25_top_k = coerce_int(
@@ -205,7 +201,7 @@ async def search_knowledge(
         extra={
             "top_k": top_k_value,
             "bm25_limit": search_limit,
-            "bm25_min_score": bm25_min_score,
+            "bm25_min_rank": bm25_min_rank,
         },
     )
 
@@ -213,7 +209,7 @@ async def search_knowledge(
         db,
         payload.query,
         search_limit,
-        min_score=bm25_min_score,
+        min_rank=bm25_min_rank,
         language=language,
     )
 

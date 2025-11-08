@@ -36,7 +36,8 @@ class AdminSettingsUpdate(BaseModel):
     RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float | None = Field(None, ge=0.0, le=1.0)
     BM25_TOP_K: int | None = Field(None, ge=0)
     BM25_WEIGHT: float | None = Field(None, ge=0.0, le=1.0)
-    BM25_MIN_SCORE: float | None = Field(None, ge=0.0)
+    # 新：Postgres 原始 ts_rank_cd 绝对阈值（推荐使用）
+    BM25_MIN_RANK: float | None = Field(None, ge=0.0)
 
 
 class AdminSettingsResetRequest(BaseModel):
