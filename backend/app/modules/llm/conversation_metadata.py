@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.modules.llm.client import classifier_client
-from app.modules.llm.intent_classifier import ClassificationResult
+from app.modules.llm.intent_classifier import RouterDecision
 from app.modules.llm import repository
 
 try:  # pragma: no cover - optional dependency
@@ -96,38 +96,7 @@ def _get_system_prompt_templates() -> Dict[str, str]:
             templates[normalized_key] = normalized_value
     return templates
 
-TAG_PROMPT_MAP: Dict[str, str] = {
-    "troubleshooting": "question_troubleshooting",
-    "incident": "question_troubleshooting",
-    "diagnostics": "question_troubleshooting",
-    "compare": "broad_overview",
-    "overview": "broad_overview",
-    "summary": "broad_overview",
-    "procedural": "precise_instruction",
-    "precise": "precise_instruction",
-    "definition": "precise_instruction",
-    "document_focus": "document_focus",
-    "document": "document_focus",
-    "analysis": "analysis_reasoning",
-    "root_cause": "analysis_reasoning",
-    "code": "coding_help",
-    "coding": "coding_help",
-    "api_usage": "coding_help",
-    "refactor": "coding_help",
-    "brainstorm": "brainstorming",
-    "creative": "brainstorming",
-    "ideas": "brainstorming",
-    "translation": "translation_localization",
-    "localization": "translation_localization",
-}
 
-SCENARIO_PROMPT_MAP: Dict[str, str] = {
-    "question": "question_troubleshooting",
-    "document_focus": "document_focus",
-    "broad": "broad_overview",
-    "precise": "precise_instruction",
-    "analysis": "analysis_reasoning",
-}
 
 METADATA_SYSTEM_PROMPT = (
     "You generate metadata for chat conversations.\n"
@@ -170,7 +139,7 @@ def _normalize_language_code(raw: str | None) -> str:
     return "en"
 
 
-def _detect_language(messages: Sequence["Message"], classifier_result: ClassificationResult) -> str:
+def _detect_language(messages: Sequence["Message"], classifier_result: RouterDecision) -> str:
     candidates: List[str] = []
 
     for message in reversed(messages):
@@ -179,8 +148,8 @@ def _detect_language(messages: Sequence["Message"], classifier_result: Classific
             if len(candidates) >= 2:
                 break
 
-    if not candidates and classifier_result.rewritten_query:
-        candidates.append(classifier_result.rewritten_query)
+    if not candidates and classifier_result.search_query:
+        candidates.append(classifier_result.search_query)
 
     request_payload = classifier_result.request_payload or {}
     query_text = request_payload.get("query")
@@ -295,23 +264,10 @@ def _unwrap_message_content(content: Any) -> str:
     return str(content or "")
 
 
-def _select_system_prompt(result: ClassificationResult) -> str:
+def _select_system_prompt(result: RouterDecision) -> str:
     templates = _get_system_prompt_templates()
-    tags = [tag.lower() for tag in result.tags]
-    for tag in tags:
-        template_key = TAG_PROMPT_MAP.get(tag)
-        if template_key:
-            candidate = templates.get(template_key)
-            if candidate:
-                return candidate
-
-    scenario = (result.scenario or "").lower()
-    template_key = SCENARIO_PROMPT_MAP.get(scenario)
-    if template_key:
-        candidate = templates.get(template_key)
-        if candidate:
-            return candidate
-
+    if result.mode == "search":
+        return templates.get("document_focus", SYSTEM_PROMPT_TEMPLATES["document_focus"])
     return templates.get("unknown_fallback", SYSTEM_PROMPT_TEMPLATES["unknown_fallback"])
 
 
@@ -351,8 +307,8 @@ async def _call_metadata_model(payload: Dict[str, Any]) -> Dict[str, Any] | None
     logger.debug(
         "conversation metadata payload summary: language=%s scenario=%s tags=%s transcript=%s",
         payload.get("language_code"),
-        payload.get("classifier", {}).get("scenario"),
-        payload.get("classifier", {}).get("tags"),
+        payload.get("router", {}).get("mode"),
+        payload.get("router", {}).get("reason"),
         transcript_preview,
     )
 
@@ -372,7 +328,7 @@ async def generate_conversation_metadata(
     db: AsyncSession,
     *,
     conversation_id: UUID,
-    classifier_result: ClassificationResult,
+    classifier_result: RouterDecision,
     message_limit: int = MAX_MESSAGES_FOR_METADATA,
 ) -> ConversationMetadataUpdate | None:
     messages = await repository.get_recent_messages(
@@ -382,34 +338,31 @@ async def generate_conversation_metadata(
     )
 
     transcript = _format_transcript(messages)
-    if not transcript and not classifier_result.rewritten_query:
+    if not transcript and not classifier_result.search_query:
         logger.debug("conversation metadata skipped: empty transcript and no rewritten query")
         return None
 
     language_code = _detect_language(messages, classifier_result)
     language_label = LANGUAGE_LABELS.get(language_code, "English")
 
-    classifier_payload = {
-        "scenario": classifier_result.scenario or "unknown",
-        "tags": list(classifier_result.tags),
-        "confidence": classifier_result.confidence,
+    router_payload = {
+        "mode": classifier_result.mode,
         "reason": classifier_result.reason,
-        "rewritten_query": classifier_result.rewritten_query,
+        "search_query": classifier_result.search_query,
     }
 
     request_payload = {
         "language_code": language_code,
         "language_label": language_label,
-        "classifier": classifier_payload,
+        "router": router_payload,
         "transcript": transcript,
     }
 
     logger.debug(
-        "conversation metadata request prepared: conversation_id=%s language=%s scenario=%s tags=%s",
+        "conversation metadata request prepared: conversation_id=%s language=%s mode=%s",
         conversation_id,
         language_code,
-        classifier_payload["scenario"],
-        classifier_payload["tags"],
+        router_payload["mode"],
     )
 
     parsed = await _call_metadata_model(request_payload)

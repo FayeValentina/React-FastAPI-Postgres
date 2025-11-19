@@ -55,7 +55,7 @@ async def _persist_chunks(
     texts = [chunk.content for chunk in split_chunks]
     # 在线程池中为所有文本块生成嵌入向量
     vectors = await run_in_threadpool(embedder.encode, texts, normalize_embeddings=True)
-    
+
     payloads = []
     # 为每个块准备持久化所需的数据
     for idx, (chunk, vector) in enumerate(zip(split_chunks, vectors)):

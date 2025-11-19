@@ -315,32 +315,9 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = Field(default="gemini-2.5-flash-lite")
     CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
-    RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-base")
-    RAG_STRATEGY_ENABLED: bool = Field(default=False)
-    RAG_RERANK_ENABLED: bool = Field(default=False)
-    RAG_USE_LINGUA: bool = Field(default=False)
-    RAG_RERANK_CANDIDATES: int = Field(default=100)
-    RAG_RERANK_SCORE_THRESHOLD: float = Field(default=0.48)
-    RAG_TOP_K: int = Field(default=12)
-    RAG_MIN_SIM: float = Field(default=0.35)
-    RAG_MMR_LAMBDA: float = Field(default=0.55)
-    RAG_PER_DOC_LIMIT: int = Field(default=6)
-    RAG_OVERSAMPLE: int = Field(default=5)
-    RAG_MAX_CANDIDATES: int = Field(default=240)
-    RAG_CONTEXT_TOKEN_BUDGET: int = Field(default=4000)
-    RAG_CONTEXT_MAX_EVIDENCE: int = Field(default=28)
-    RAG_CHUNK_TARGET_TOKENS_EN: int = Field(default=260)
-    RAG_CHUNK_TARGET_TOKENS_CJK: int = Field(default=420)
-    RAG_CHUNK_TARGET_TOKENS_DEFAULT: int = Field(default=320)
-    RAG_CHUNK_OVERLAP_RATIO: float = Field(default=0.15)
-    RAG_CODE_CHUNK_MAX_LINES: int = Field(default=40)
-    RAG_CODE_CHUNK_OVERLAP_LINES: int = Field(default=6)
-    RAG_IVFFLAT_PROBES: int = Field(default=10)
-    RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float = Field(default=0.6)
-    BM25_TOP_K: int = Field(default=8)
-    BM25_WEIGHT: float = Field(default=0.35)
-    # 新：以 Postgres 原始 ts_rank_cd 作为绝对阈值（用于数据库侧 gating）
-    BM25_MIN_RANK: float = Field(default=0.0)
+    RAG_TOP_K: int = Field(default=60)
+    BM25_TOP_K: int = Field(default=50)
+    BM25_MIN_RANK: float = Field(default=0.05)
     SPACY_MODEL_NAME: str = Field(default="zh_core_web_sm")
 
     model_config = SettingsConfigDict(
@@ -356,24 +333,8 @@ class Settings(BaseSettings):
     def dynamic_settings_defaults(self) -> dict[str, Any]:
         """Return the default dynamic settings that can be overridden via Redis."""
         return {
-            "RAG_STRATEGY_ENABLED": self.RAG_STRATEGY_ENABLED,
-            "RAG_RERANK_ENABLED": self.RAG_RERANK_ENABLED,
-            "RAG_RERANK_CANDIDATES": self.RAG_RERANK_CANDIDATES,
-            "RAG_RERANK_SCORE_THRESHOLD": self.RAG_RERANK_SCORE_THRESHOLD,
             "RAG_TOP_K": self.RAG_TOP_K,
-            "RAG_MIN_SIM": self.RAG_MIN_SIM,
-            "RAG_MMR_LAMBDA": self.RAG_MMR_LAMBDA,
-            "RAG_PER_DOC_LIMIT": self.RAG_PER_DOC_LIMIT,
-            "RAG_OVERSAMPLE": self.RAG_OVERSAMPLE,
-            "RAG_MAX_CANDIDATES": self.RAG_MAX_CANDIDATES,
-            "RAG_CONTEXT_TOKEN_BUDGET": self.RAG_CONTEXT_TOKEN_BUDGET,
-            "RAG_CONTEXT_MAX_EVIDENCE": self.RAG_CONTEXT_MAX_EVIDENCE,
-            "RAG_IVFFLAT_PROBES": self.RAG_IVFFLAT_PROBES,
-            "RAG_USE_LINGUA": self.RAG_USE_LINGUA,
-            "RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD": self.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
             "BM25_TOP_K": self.BM25_TOP_K,
-            "BM25_WEIGHT": self.BM25_WEIGHT,
-            # 新键：推荐前端/运维改用 BM25_MIN_RANK
             "BM25_MIN_RANK": self.BM25_MIN_RANK,
         }
 

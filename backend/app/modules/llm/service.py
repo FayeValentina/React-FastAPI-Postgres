@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, List, Mapping, Tuple, TypeVar
+from typing import Any, Iterable, List, Mapping, Tuple, TypeVar
 from uuid import UUID
 
 from fastapi.concurrency import run_in_threadpool
@@ -19,27 +19,6 @@ except Exception:  # pragma: no cover - graceful fallback if not available
 
 
 SUPPORTED = {"en", "zh", "ja"}
-
-T = TypeVar("T")
-
-
-def _coerce_setting(
-    config: Mapping[str, Any] | None,
-    key: str,
-    default: T,
-    caster: Callable[[Any], T],
-) -> T:
-    """Fetch a dynamic configuration value with type coercion and fallbacks."""
-
-    if not isinstance(config, Mapping):
-        return default
-
-    candidate = config.get(key, default)
-    try:
-        return caster(candidate)
-    except (TypeError, ValueError):
-        return default
-
 
 @dataclass(frozen=True)
 class PromptBundle:
@@ -70,44 +49,14 @@ def _normalize_lang(text: str) -> str:
     return lang
 
 
-def _estimate_context_tokens(text: str, lang: str | None) -> int:
-    if not text:
-        return 0
-    lang = (lang or "en").lower()
-    stripped = text.strip()
-    if not stripped:
-        return 0
-    if lang == "code":
-        return max(1, len(stripped.splitlines()) * 5)
-    if lang == "en":
-        return max(1, len(stripped.split()))
-    if lang in {"zh", "ja"}:
-        return max(1, len(stripped))
-    return max(1, len(stripped) // 4 + 1)
+
 
 
 def _build_context(
     similar: Iterable[RetrievedChunk],
     lang: str,
-    config: Mapping[str, Any] | None,
 ) -> str:
-    max_items = max(
-        1,
-        _coerce_setting(
-            config,
-            "RAG_CONTEXT_MAX_EVIDENCE",
-            settings.RAG_CONTEXT_MAX_EVIDENCE,
-            int,
-        ),
-    )
-    budget_value = _coerce_setting(
-        config,
-        "RAG_CONTEXT_TOKEN_BUDGET",
-        settings.RAG_CONTEXT_TOKEN_BUDGET,
-        int,
-    )
-    budget = max(200, budget_value)
-    tokens_used = 0
+    max_items = max(1, settings.RAG_TOP_K)
     entries: List[str] = []
 
     for idx, item in enumerate(similar or [], start=1):
@@ -132,12 +81,9 @@ def _build_context(
         cite_key = f"CITE{idx}"
         entry = f"[{cite_key}] {header}\n{content}"
 
-        entry_tokens = _estimate_context_tokens(header, chunk_lang) + _estimate_context_tokens(content, chunk_lang)
-        if entries and tokens_used + entry_tokens > budget:
-            break
-
         entries.append(entry)
-        tokens_used += entry_tokens
+        if idx >= max_items:
+            break
 
     return "\n\n".join(entries)
 
@@ -202,14 +148,13 @@ def _localized_prompts(lang: str) -> PromptBundle:
 def _prepare_system_and_user(
     user_text: str,
     similar: Iterable[RetrievedChunk],
-    config: Mapping[str, Any] | None,
 ) -> Tuple[str, str]:
     """Build localized prompts together with formatted evidence and fallbacks."""
 
     lang = _normalize_lang(user_text)
     bundle = _localized_prompts(lang)
     evidence_list = list(similar or [])
-    context = _build_context(evidence_list, lang, config) if evidence_list else ""
+    context = _build_context(evidence_list, lang) if evidence_list else ""
 
     if context:
         final_user = bundle.context_template.format(context=context, user_text=user_text)
@@ -226,7 +171,7 @@ async def prepare_system_and_user(
 ) -> Tuple[str, str]:
     """Async wrapper for `_prepare_system_and_user` with optional dynamic config."""
 
-    return await run_in_threadpool(_prepare_system_and_user, user_text, similar, config)
+    return await run_in_threadpool(_prepare_system_and_user, user_text, similar)
 
 
 async def delete_conversation(

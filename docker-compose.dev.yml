@@ -355,7 +355,7 @@ services:
         fi &&
         echo '等待依赖服务...' &&
         sleep 10 &&
-        poetry run taskiq worker --fs-discover --tasks-pattern 'app/modules/tasks/workers/*.py' app.broker:broker --reload --log-level ${LOG_LEVEL:-INFO}
+        poetry run taskiq worker --fs-discover --tasks-pattern 'app/modules/**/task.py' app.broker:broker --reload --log-level ${LOG_LEVEL:-INFO}
       "
     scale: ${TASKIQ_WORKER_CONCURRENCY:-2}
     networks:

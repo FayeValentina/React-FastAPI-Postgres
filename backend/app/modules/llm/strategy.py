@@ -1,88 +1,10 @@
 from __future__ import annotations
 
-import logging
-import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional
 
 from app.core.config import settings
 from app.modules.llm import intent_classifier
-from app.infrastructure.utils.coerce_utils import ensure_float, ensure_int
-
-
-logger = logging.getLogger(__name__)
-
-
-def _positive_int(value: Any, fallback: int) -> int:
-    candidate = ensure_int(value, fallback)
-    return candidate if candidate > 0 else fallback
-
-
-def _non_negative_int(value: Any, fallback: int) -> int:
-    candidate = ensure_int(value, fallback)
-    return candidate if candidate >= 0 else fallback
-
-
-def _bounded_float(
-    value: Any,
-    fallback: float,
-    *,
-    minimum: float | None = None,
-    maximum: float | None = None,
-) -> float:
-    return ensure_float(value, fallback, minimum=minimum, maximum=maximum)
-
-
-_INT_DEFAULTS: Dict[str, int] = {
-    "RAG_PER_DOC_LIMIT": settings.RAG_PER_DOC_LIMIT,
-    "RAG_OVERSAMPLE": settings.RAG_OVERSAMPLE,
-    "RAG_MAX_CANDIDATES": settings.RAG_MAX_CANDIDATES,
-    "RAG_RERANK_CANDIDATES": settings.RAG_RERANK_CANDIDATES,
-    "RAG_CONTEXT_MAX_EVIDENCE": settings.RAG_CONTEXT_MAX_EVIDENCE,
-    "RAG_CONTEXT_TOKEN_BUDGET": settings.RAG_CONTEXT_TOKEN_BUDGET,
-}
-
-_FLOAT_DEFAULTS: Dict[str, float] = {
-    "RAG_MIN_SIM": settings.RAG_MIN_SIM,
-    "RAG_RERANK_SCORE_THRESHOLD": settings.RAG_RERANK_SCORE_THRESHOLD,
-}
-
-
-LLM_SCENARIO_MAP: Dict[str, str] = {
-    "broad": "broad",
-    "overview": "broad",
-    "summary": "broad",
-    "compare": "broad",
-    "comparison": "broad",
-    "precise": "precise",
-    "specific": "precise",
-    "lookup": "precise",
-    "procedural": "precise",
-    "step_by_step": "precise",
-    "question": "question",
-    "qa": "question",
-    "troubleshooting": "question",
-    "diagnosis": "question",
-    "document_focus": "document_focus",
-    "document": "document_focus",
-    "doc": "document_focus",
-    "default": "default",
-}
-
-
-def _select_llm_scenario(result: intent_classifier.ClassificationResult) -> Tuple[str | None, str | None]:
-    candidates: list[str] = []
-    if result.scenario:
-        candidates.append(result.scenario.lower())
-    candidates.extend(tag.lower() for tag in result.tags)
-
-    for label in candidates:
-        mapped = LLM_SCENARIO_MAP.get(label)
-        if mapped:
-            return mapped, label
-    if candidates:
-        return None, candidates[0]
-    return None, None
 
 
 @dataclass(slots=True)
@@ -108,166 +30,25 @@ class StrategyContext:
 @dataclass(slots=True)
 class StrategyResult:
     config: Dict[str, Any]
-    overrides: Dict[str, Any] = field(default_factory=dict)
-    scenario: str = "default"
-    context: StrategyContext | None = None
-    error: str | None = None
-    classifier: Dict[str, Any] | None = None
+    router_decision: intent_classifier.RouterDecision
     processed_query: str | None = None
-    classifier_result: intent_classifier.ClassificationResult | None = None
-
-    def to_log_dict(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
-            "scenario": self.scenario,
-            "overrides": self.overrides,
-        }
-        if self.context:
-            payload["context"] = self.context.to_log_dict()
-        if self.error:
-            payload["error"] = self.error
-        if self.classifier:
-            payload["classifier"] = self.classifier
-        if self.processed_query:
-            preview = self.processed_query
-            if len(preview) > 160:
-                preview = preview[:157].rstrip() + "…"
-            payload["processed_query"] = preview
-        return payload
+    scenario: str = field(default="search")
 
 
-def _classify_query(query: str, ctx: StrategyContext) -> str:
-    normalized = (query or "").strip().lower()
-    if not normalized:
-        return "empty"
+def _resolve_top_k(
+    base_config: Mapping[str, Any],
+    requested: Optional[int],
+) -> int:
+    base = base_config.get("RAG_TOP_K", settings.RAG_TOP_K)
+    try:
+        base_value = int(base)
+    except (TypeError, ValueError):
+        base_value = settings.RAG_TOP_K
 
-    if ctx.document_id is not None:
-        return "document_focus"
+    if requested is None:
+        return max(1, base_value)
 
-    broad_keywords = {"overview", "introduce", "introduce all", "列表", "介绍", "总结", "all", "全部"}
-    if any(token in normalized for token in broad_keywords):
-        return "broad"
-
-    words = re.findall(r"\w+", normalized)
-    if len(words) >= 12:
-        return "broad"
-
-    precise_hints = ('"', "'", "`", "::", "/", "\\", "#", ".")
-    if len(words) <= 4 or any(hint in normalized for hint in precise_hints):
-        return "precise"
-
-    if "?" in normalized:
-        return "question"
-
-    return "default"
-
-
-def _apply_scenario(
-    scenario: str,
-    base_top_k: int,
-    base_per_doc: int,
-    base_min_sim: float,
-    base_oversample: int,
-    base_max_candidates: int,
-    base_rerank_candidates: int,
-    base_context_max_evidence: int,
-    base_context_budget: int,
-    ctx: StrategyContext,
-) -> Dict[str, Any]:
-    request_top_k = (
-        _positive_int(ctx.top_k_request, base_top_k)
-        if ctx.top_k_request is not None
-        else base_top_k
-    )
-    overrides: Dict[str, Any] = {}
-
-    if scenario == "broad":
-        top_k_target = max(base_top_k, request_top_k, 10)
-        top_k_target = min(top_k_target + 4, 16)
-        overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 5)
-        overrides["RAG_MIN_SIM"] = max(0.2, base_min_sim - 0.1)
-        overrides["RAG_OVERSAMPLE"] = max(base_oversample, top_k_target)
-        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 12)
-        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
-            base_context_max_evidence, max(20, top_k_target)
-        )
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3200)
-    elif scenario == "precise":
-        top_k_target = min(max(base_top_k, request_top_k, 9), 14)
-        overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 4)
-        overrides["RAG_MIN_SIM"] = min(0.9, max(base_min_sim, 0.55))
-        oversample_target = max(base_oversample, max(6, top_k_target // 2 + 2))
-        overrides["RAG_OVERSAMPLE"] = oversample_target
-        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 14)
-        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
-            base_context_max_evidence, max(20, top_k_target + 4)
-        )
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 2800)
-    elif scenario == "document_focus":
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 8)
-        top_k_target = min(max(base_top_k, request_top_k, 10), 18)
-        overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_MIN_SIM"] = min(0.85, max(base_min_sim, 0.6))
-        overrides["RAG_OVERSAMPLE"] = max(base_oversample, max(6, top_k_target // 2))
-        max_candidates_target = max(base_max_candidates, top_k_target * 14)
-        overrides["RAG_MAX_CANDIDATES"] = max_candidates_target
-        rerank_target = max(
-            base_rerank_candidates,
-            min(max_candidates_target, max(top_k_target * 7, 100)),
-        )
-        overrides["RAG_RERANK_CANDIDATES"] = rerank_target
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
-            base_context_max_evidence, max(22, top_k_target)
-        )
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3200)
-    elif scenario == "question":
-        top_k_target = min(max(base_top_k, request_top_k + 2, 10), 16)
-        overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 5)
-        overrides["RAG_OVERSAMPLE"] = max(base_oversample, max(6, top_k_target // 2 + 2))
-        overrides["RAG_MAX_CANDIDATES"] = max(base_max_candidates, top_k_target * 12)
-        overrides["RAG_RERANK_CANDIDATES"] = max(base_rerank_candidates, top_k_target * 6)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
-            base_context_max_evidence, max(20, top_k_target)
-        )
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3000)
-    else:
-        top_k_target = min(max(base_top_k, request_top_k, 8), 16)
-        overrides["RAG_TOP_K"] = top_k_target
-        overrides["RAG_PER_DOC_LIMIT"] = max(base_per_doc, 4)
-        overrides["RAG_CONTEXT_MAX_EVIDENCE"] = max(
-            base_context_max_evidence, max(18, top_k_target)
-        )
-        overrides["RAG_CONTEXT_TOKEN_BUDGET"] = max(base_context_budget, 3000)
-
-    return overrides
-
-
-def _sanitize_overrides(base: Mapping[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
-    sanitized: Dict[str, Any] = {}
-    for key, value in overrides.items():
-        if key == "RAG_TOP_K":
-            current = _positive_int(base.get(key), settings.RAG_TOP_K)
-            candidate = min(_positive_int(value, current), 50)
-            if candidate != current:
-                sanitized[key] = candidate
-        elif key in _INT_DEFAULTS:
-            current = _non_negative_int(base.get(key), _INT_DEFAULTS[key])
-            candidate = _non_negative_int(value, current)
-            if candidate != current:
-                sanitized[key] = candidate
-        elif key in _FLOAT_DEFAULTS:
-            minimum, maximum = (0.0, 0.99) if key == "RAG_MIN_SIM" else (0.0, 1.0)
-            current = _bounded_float(base.get(key), _FLOAT_DEFAULTS[key], minimum=minimum, maximum=maximum)
-            candidate = _bounded_float(value, current, minimum=minimum, maximum=maximum)
-            if candidate != current:
-                sanitized[key] = round(candidate, 4)
-        else:
-            sanitized[key] = value
-    return sanitized
+    return max(1, max(base_value, requested))
 
 
 async def resolve_rag_parameters(
@@ -276,119 +57,18 @@ async def resolve_rag_parameters(
     *,
     request_ctx: StrategyContext,
 ) -> StrategyResult:
-    base = dict(base_config)
+    decision = await intent_classifier.route_query(query, request_ctx)
+    top_k = _resolve_top_k(base_config, request_ctx.top_k_request)
+    merged = {"RAG_TOP_K": top_k}
 
-    try:
-        classifier_meta: Dict[str, Any] | None = None
-        classifier_result: intent_classifier.ClassificationResult | None = None
-        scenario: str | None = None
-        processed_query_text: str | None = None
-        strategy_enabled = bool(base.get("RAG_STRATEGY_ENABLED"))
+    processed_query = decision.search_query if decision.mode == "search" else query
 
-        threshold = _bounded_float(
-            base.get("RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD"),
-            settings.RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD,
-            minimum=0.0,
-            maximum=1.0,
-        )
+    return StrategyResult(
+        config=merged,
+        router_decision=decision,
+        processed_query=processed_query,
+        scenario=decision.mode,
+    )
 
-        classifier_result = await intent_classifier.classify(query, request_ctx)
-        classifier_meta = classifier_result.to_log_dict()
-        classifier_meta["threshold"] = round(threshold, 4)
-        if not classifier_result.fallback and classifier_result.rewritten_query:
-            processed_query_text = classifier_result.rewritten_query
 
-        mapped_scenario, matched_label = _select_llm_scenario(classifier_result)
-
-        if classifier_result.fallback:
-            classifier_meta["applied"] = False
-            logger.warning(
-                "llm classifier fallback; using heuristic classification",
-            )
-        elif mapped_scenario and (
-            classifier_result.confidence is None or classifier_result.confidence >= threshold
-        ):
-            scenario = mapped_scenario
-            classifier_meta["applied"] = True
-            if matched_label:
-                classifier_meta["label"] = matched_label
-        elif mapped_scenario:
-            classifier_meta["applied"] = False
-            if matched_label:
-                classifier_meta["label"] = matched_label
-            classifier_meta["cause"] = "low_confidence"
-            logger.warning(
-                "llm classifier confidence %.3f below threshold %.3f; using heuristic",
-                classifier_result.confidence or 0.0,
-                threshold,
-            )
-        else:
-            classifier_meta["applied"] = False
-            if matched_label:
-                classifier_meta["label"] = matched_label
-            classifier_meta["cause"] = "unmapped_label"
-
-        if not strategy_enabled:
-            if not processed_query_text:
-                processed_query_text = None
-            return StrategyResult(
-                config=base,
-                overrides={},
-                scenario="disabled",
-                context=request_ctx,
-                classifier=classifier_meta,
-                processed_query=processed_query_text,
-                classifier_result=classifier_result,
-            )
-
-        if scenario is None:
-            scenario = _classify_query(query, request_ctx)
-
-        base_top_k = _positive_int(base.get("RAG_TOP_K"), settings.RAG_TOP_K)
-        base_per_doc = _non_negative_int(base.get("RAG_PER_DOC_LIMIT"), settings.RAG_PER_DOC_LIMIT)
-        base_min_sim = _bounded_float(base.get("RAG_MIN_SIM"), settings.RAG_MIN_SIM, minimum=0.0, maximum=1.0)
-        base_oversample = _positive_int(base.get("RAG_OVERSAMPLE"), settings.RAG_OVERSAMPLE)
-        base_max_candidates = _positive_int(base.get("RAG_MAX_CANDIDATES"), settings.RAG_MAX_CANDIDATES)
-        base_rerank_candidates = _positive_int(base.get("RAG_RERANK_CANDIDATES"), settings.RAG_RERANK_CANDIDATES)
-        base_context_max_evidence = _positive_int(
-            base.get("RAG_CONTEXT_MAX_EVIDENCE"),
-            settings.RAG_CONTEXT_MAX_EVIDENCE,
-        )
-        base_context_budget = _positive_int(
-            base.get("RAG_CONTEXT_TOKEN_BUDGET"),
-            settings.RAG_CONTEXT_TOKEN_BUDGET,
-        )
-
-        overrides = _apply_scenario(
-            scenario,
-            base_top_k,
-            base_per_doc,
-            base_min_sim,
-            base_oversample,
-            base_max_candidates,
-            base_rerank_candidates,
-            base_context_max_evidence,
-            base_context_budget,
-            request_ctx,
-        )
-        sanitized = _sanitize_overrides(base, overrides)
-
-        merged = dict(base)
-        merged.update(sanitized)
-
-        if not processed_query_text:
-            processed_query_text = None
-
-        return StrategyResult(
-            config=merged,
-            overrides=sanitized,
-            scenario=scenario,
-            context=request_ctx,
-            classifier=classifier_meta,
-            processed_query=processed_query_text,
-            classifier_result=classifier_result,
-        )
-
-    except Exception as exc:  # pragma: no cover - safety net
-        logger.warning("resolve_rag_parameters failed: %s", exc, exc_info=logger.isEnabledFor(logging.DEBUG))
-        return StrategyResult(config=base, scenario="error", context=request_ctx, error=str(exc))
+__all__ = ["StrategyContext", "StrategyResult", "resolve_rag_parameters"]

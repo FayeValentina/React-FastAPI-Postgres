@@ -27,7 +27,7 @@ from app.modules.llm.schemas import (
     MessageListResponse,
     MessageResponse,
 )
-from app.modules.tasks.workers.chat_tasks import process_chat_message
+from app.modules.llm.task import process_chat_message
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
