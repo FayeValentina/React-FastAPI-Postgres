@@ -117,15 +117,15 @@ async def get_conversation_messages(
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    page_size = max(1, min(limit or 50, 100))
     messages = await conversation_repository.list_messages(
         db,
         conversation_id=conversation_id,
-        limit=page_size,
+        limit=limit,
         before_message_index=before_message_index,
         before_created_at=before_created_at,
     )
 
+    page_size = limit or 50
     message_payload = [MessageResponse.from_orm(msg) for msg in messages]
 
     has_more = len(messages) == page_size
