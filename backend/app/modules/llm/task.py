@@ -111,20 +111,6 @@ def ensure_int(value: Any, fallback: Optional[int] = None) -> Optional[int]:
         return fallback
 
 
-def clamp_temperature(value: Optional[float], *, fallback: float | None = None) -> float:
-    candidate: float
-    if value is None:
-        candidate = float(fallback if fallback is not None else 0.7)
-    else:
-        try:
-            candidate = float(value)
-        except (TypeError, ValueError):
-            candidate = float(fallback if fallback is not None else 0.7)
-
-    candidate = max(0.0, min(2.0, candidate))
-    return candidate
-
-
 async def _publish_event(
     redis_client,
     channel: str,
@@ -247,23 +233,12 @@ async def process_chat_message(
     content: str,
     *,
     model: Optional[str] = None,
-    temperature: Optional[float] = None,
+    temperature: Optional[float] = 0.7,
     system_prompt_override: Optional[str] = None,
-    top_k: Optional[int] = None,
+    top_k: Optional[int] = settings.RAG_TOP_K,
 ) -> None:
-    try:
-        request_uuid = UUID(request_id) if request_id else uuid4()
-    except (TypeError, ValueError):
-        request_uuid = uuid4()
-
-    try:
-        conversation_uuid = UUID(conversation_id)
-    except (TypeError, ValueError):
-        logger.error(
-            "Invalid conversation_id received for chat task",
-            extra={"conversation_id": conversation_id, "request_id": request_id},
-        )
-        return
+    request_uuid = UUID(request_id)
+    conversation_uuid = UUID(conversation_id)
 
     try:
         redis_client = await redis_connection_manager.get_client()
@@ -351,7 +326,7 @@ async def process_chat_message(
         except Exception:
             base_config = settings.dynamic_settings_defaults()
 
-        requested_top_k = ensure_int(top_k)
+        requested_top_k = top_k
         strategy_ctx = StrategyContext(
             top_k_request=requested_top_k,
             channel="task",
@@ -513,7 +488,7 @@ async def process_chat_message(
         fallback_temperature = (
             conversation.temperature if conversation.temperature is not None else 0.7
         )
-        effective_temperature = clamp_temperature(temperature, fallback=fallback_temperature)
+        effective_temperature = temperature if temperature is not None else fallback_temperature
 
         llm_messages = [{"role": "system", "content": merged_system_prompt}] + history_payload + [
             {"role": "user", "content": wrapped_user_text}
