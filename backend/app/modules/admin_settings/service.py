@@ -41,11 +41,7 @@ class AdminSettingsService:
         effective = await dynamic_settings_service.get_all()
 
         redis_status: Literal["ok", "unavailable"] = "ok"
-        try:
-            overrides = await dynamic_settings_service.get_overrides()
-        except Exception:
-            overrides = {}
-            redis_status = "unavailable"
+        overrides = await dynamic_settings_service.get_overrides()
 
         metadata = await dynamic_settings_service.get_metadata()
         updated_at = (

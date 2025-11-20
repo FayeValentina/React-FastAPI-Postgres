@@ -169,12 +169,7 @@ async def search_knowledge(
     db: AsyncSession = Depends(get_async_session),
     dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
-    try:
-        config = await dynamic_settings_service.get_all()
-    except Exception:
-        config = settings.dynamic_settings_defaults()
-    if not isinstance(config, dict):
-        config = settings.dynamic_settings_defaults()
+    config = await dynamic_settings_service.get_all()
 
     bm25_config = build_bm25_config(config, requested_top_k=payload.top_k)
     top_k_value = bm25_config.top_k
@@ -222,10 +217,6 @@ async def search_knowledge(
 
 @router.get("/documents/{document_id}/chunks", response_model=list[KnowledgeChunkRead])
 async def list_document_chunks(document_id: int, db: AsyncSession = Depends(get_async_session)):
-    # 确认文档存在
-    exist = await db.get(models.KnowledgeDocument, document_id)
-    if not exist:
-        raise HTTPException(status_code=404, detail="Document not found")
     chunks = await crud_knowledge_base.get_chunks_by_document_id(db, document_id)
     return chunks
 
@@ -237,12 +228,6 @@ async def patch_chunk(
     db: AsyncSession = Depends(get_async_session),
 ):
     updates = payload.model_dump(exclude_unset=True)
-    if not updates:
-        chunk = await db.get(models.KnowledgeChunk, chunk_id)
-        if not chunk:
-            raise HTTPException(status_code=404, detail="Chunk not found")
-        return chunk
-
     chunk = await update_chunk(db, chunk_id, updates)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
