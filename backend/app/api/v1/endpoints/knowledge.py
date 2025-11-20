@@ -23,6 +23,7 @@ from app.infrastructure.dynamic_settings import (
     DynamicSettingsService,
     get_dynamic_settings_service,
 )
+from app.modules.knowledge_base.config import build_bm25_config
 from app.modules.knowledge_base.bm25 import fetch_bm25_matches
 from app.modules.knowledge_base.language import detect_language
 from app.modules.knowledge_base.ingestion import (
@@ -31,7 +32,6 @@ from app.modules.knowledge_base.ingestion import (
     update_chunk,
     delete_chunk,
 )
-from app.infrastructure.utils.coerce_utils import coerce_float, coerce_int
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -169,9 +169,6 @@ async def search_knowledge(
     db: AsyncSession = Depends(get_async_session),
     dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
-    top_k_value = max(1, min(payload.top_k, 100))
-    language = detect_language(payload.query, None)
-
     try:
         config = await dynamic_settings_service.get_all()
     except Exception:
@@ -179,29 +176,17 @@ async def search_knowledge(
     if not isinstance(config, dict):
         config = settings.dynamic_settings_defaults()
 
-    bm25_min_rank = coerce_float(
-        config,
-        "BM25_MIN_RANK",
-        settings.BM25_MIN_RANK,
-        minimum=0.0,
-    )
-    default_bm25_top_k = coerce_int(
-        config,
-        "BM25_TOP_K",
-        settings.BM25_TOP_K,
-        minimum=1,
-        maximum=100,
-    )
-    bm25_limit = default_bm25_top_k
-    bm25_limit = max(1, min(100, bm25_limit))
-    search_limit = min(100, max(bm25_limit, top_k_value))
+    bm25_config = build_bm25_config(config, requested_top_k=payload.top_k)
+    top_k_value = bm25_config.top_k
+    search_limit = bm25_config.search_limit
+    language = detect_language(payload.query, None)
 
     logger.info(
         "knowledge_search_bm25",
         extra={
             "top_k": top_k_value,
             "bm25_limit": search_limit,
-            "bm25_min_rank": bm25_min_rank,
+            "bm25_min_rank": bm25_config.min_rank,
         },
     )
 
@@ -209,7 +194,7 @@ async def search_knowledge(
         db,
         payload.query,
         search_limit,
-        min_rank=bm25_min_rank,
+        min_rank=bm25_config.min_rank,
         language=language,
     )
 

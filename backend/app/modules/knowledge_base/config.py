@@ -22,6 +22,15 @@ class RagSearchConfig:
     top_k: int
 
 
+@dataclass(slots=True)
+class BM25SearchConfig:
+    """Configuration bundle for BM25-only search scenarios."""
+
+    top_k: int
+    search_limit: int
+    min_rank: float
+
+
 def _read_setting(
     config_map: DynamicSettingsMapping | None,
     key: str,
@@ -73,5 +82,42 @@ def build_rag_config(
     return RagSearchConfig(top_k=effective)
 
 
+def build_bm25_config(
+    config_map: DynamicSettingsMapping | None,
+    *,
+    requested_top_k: int,
+) -> BM25SearchConfig:
+    """Construct BM25 search configuration from dynamic settings and request caps."""
+
+    base_top_k = max(1, min(requested_top_k, 100))
+    config_top_k = _read_setting(
+        config_map,
+        "BM25_TOP_K",
+        default=settings.BM25_TOP_K,
+        caster=int,
+        minimum=1,
+        maximum=100,
+    )
+    search_limit = min(100, max(base_top_k, config_top_k))
+    min_rank = _read_setting(
+        config_map,
+        "BM25_MIN_RANK",
+        default=settings.BM25_MIN_RANK,
+        caster=float,
+        minimum=0.0,
+    )
+    return BM25SearchConfig(
+        top_k=base_top_k,
+        search_limit=search_limit,
+        min_rank=min_rank,
+    )
+
+
 # 导出模块内的主要类和函数
-__all__ = ["DynamicSettingsMapping", "RagSearchConfig", "build_rag_config"]
+__all__ = [
+    "BM25SearchConfig",
+    "DynamicSettingsMapping",
+    "RagSearchConfig",
+    "build_bm25_config",
+    "build_rag_config",
+]
