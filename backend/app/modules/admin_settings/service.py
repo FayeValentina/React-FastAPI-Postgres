@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Dict, Literal
-
-from fastapi import HTTPException, status
 
 from app.infrastructure.dynamic_settings import DynamicSettingsService
 from .schemas import AdminSettingsResponse, AdminSettingsUpdate
@@ -23,17 +20,6 @@ class AdminSettingsService:
             normalized[key] = value
         return normalized
 
-    @staticmethod
-    def _parse_updated_at(raw: Any) -> datetime | None:
-        if isinstance(raw, datetime):
-            return raw
-        if isinstance(raw, str):
-            try:
-                return datetime.fromisoformat(raw)
-            except ValueError:
-                return None
-        return None
-
     async def read_settings(
         self, dynamic_settings_service: DynamicSettingsService
     ) -> AdminSettingsResponse:
@@ -44,9 +30,7 @@ class AdminSettingsService:
         overrides = await dynamic_settings_service.get_overrides()
 
         metadata = await dynamic_settings_service.get_metadata()
-        updated_at = (
-            self._parse_updated_at(metadata.get("updated_at")) if metadata else None
-        )
+        updated_at = metadata.get("updated_at") if metadata else None
 
         normalized_overrides = self._normalize_overrides(overrides, defaults)
 
@@ -63,14 +47,7 @@ class AdminSettingsService:
         payload: AdminSettingsUpdate,
         dynamic_settings_service: DynamicSettingsService,
     ) -> AdminSettingsResponse:
-        updates = payload.model_dump(exclude_none=True)
-        if not updates:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No settings provided",
-            )
-
-        await dynamic_settings_service.update(updates)
+        await dynamic_settings_service.update(payload.model_dump(exclude_none=True))
         return await self.read_settings(dynamic_settings_service)
 
     async def reset_settings(
@@ -78,16 +55,10 @@ class AdminSettingsService:
         dynamic_settings_service: DynamicSettingsService,
         keys: list[str] | None = None,
     ) -> AdminSettingsResponse:
-        try:
-            if keys:
-                await dynamic_settings_service.reset(keys)
-            else:
-                await dynamic_settings_service.reset()
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
+        if keys:
+            await dynamic_settings_service.reset(keys)
+        else:
+            await dynamic_settings_service.reset()
 
         return await self.read_settings(dynamic_settings_service)
 

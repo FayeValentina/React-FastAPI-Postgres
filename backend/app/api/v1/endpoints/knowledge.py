@@ -92,7 +92,6 @@ async def ingest_content(
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_content(
             db,
-            document_id,
             body.content,
             overwrite=body.overwrite,
             document=doc,
@@ -111,10 +110,9 @@ async def ingest_content_upload(
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_file(
             db,
-            document_id,
             file,
-            overwrite=overwrite,
             document=doc,
+            overwrite=overwrite,
         )
 
     return await _ingest_document(
