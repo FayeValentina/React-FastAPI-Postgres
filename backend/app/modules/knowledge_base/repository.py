@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 import numpy as np
 
@@ -15,24 +15,6 @@ from .tokenizer import tokenize_for_search
 
 class CRUDKnowledgeBase:
     """知识库文档和块的存储库包装器。"""
-
-    @staticmethod
-    def _apply_chunk_filters(
-        stmt,
-        filters: Mapping[str, Any] | None,
-    ):
-        """应用块过滤器。"""
-        payload = filters or {}
-
-        document_ids = payload.get("document_ids")
-        if document_ids:
-            stmt = stmt.where(models.KnowledgeChunk.document_id.in_(document_ids))
-
-        language = payload.get("language")
-        if language:
-            stmt = stmt.where(models.KnowledgeChunk.language == language)
-
-        return stmt
 
     async def create_document(
         self, db: AsyncSession, data: KnowledgeDocumentCreate
@@ -227,7 +209,6 @@ class CRUDKnowledgeBase:
         query: str,
         limit: int,
         *,
-        filters: Mapping[str, Any] | None = None,
         query_language: str | None = None,
         min_rank: float | None = None
     ) -> list[tuple[models.KnowledgeChunk, float]]:
@@ -250,8 +231,6 @@ class CRUDKnowledgeBase:
         # 绝对阈值（稳定语义）在数据库侧进行 gating
         if min_rank is not None:
             stmt = stmt.where(rank_expr >= min_rank)
-
-        stmt = self._apply_chunk_filters(stmt, filters)
 
         stmt = stmt.order_by(rank_expr.desc()).limit(limit)
 

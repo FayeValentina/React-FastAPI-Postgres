@@ -35,7 +35,6 @@ async def fetch_bm25_matches(
     *,
     min_rank: float | None = None,
     language: Optional[str] = None,
-    filters: Optional[dict] = None,
 ) -> BM25SearchResult:
     """执行 BM25 搜索，返回匹配项和摘要统计信息。"""
     # 如果 top_k 小于等于 0 或者查询为空，则返回空结果
@@ -47,7 +46,6 @@ async def fetch_bm25_matches(
         db,
         query,
         top_k,
-        filters=filters or {},
         query_language=language,
         min_rank=min_rank,
     )

@@ -83,7 +83,6 @@ async def _bm25_candidates(
         top_k,
         min_rank=0.0,
         language="",
-        filters={},
     )
 
     scores: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
