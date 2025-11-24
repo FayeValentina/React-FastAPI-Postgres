@@ -73,15 +73,18 @@ async def _bm25_candidates(
     db: AsyncSession,
     query: str,
     top_k: int,
+    config: DynamicSettingsMapping,
 ) -> Dict[int, tuple["models.KnowledgeChunk", float, float]]:
     if not query.strip():
         return {}
 
+    bm25_config = build_bm25_config(config, requested_top_k=top_k)
+
     search_result = await fetch_bm25_matches(
         db,
         query,
-        top_k,
-        min_rank=0.0,
+        bm25_config.search_limit,
+        min_rank=bm25_config.min_rank,
         language="",
     )
 
@@ -147,7 +150,7 @@ async def search_similar_chunks(
         effective_top_k,
         query_lang,
     )
-    bm25_hits = await _bm25_candidates(db, query, effective_top_k)
+    bm25_hits = await _bm25_candidates(db, query, effective_top_k, config)
 
     merged = _merge_candidates(vector_hits, bm25_hits, query_lang)
 

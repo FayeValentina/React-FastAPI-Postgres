@@ -9,7 +9,6 @@ from typing import Any, Iterable, List, Mapping
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
-    TokenTextSplitter,
 )
 
 from .ingest_extractor import ExtractedElement
@@ -23,7 +22,6 @@ HEADERS_TO_SPLIT_ON = [
 DEFAULT_ENCODING = "cl100k_base"
 MAX_CHUNK_TOKENS = 2000
 CHUNK_OVERLAP = 200
-CODE_TOKENS_PER_LINE = 12
 
 
 @dataclass(slots=True)
@@ -31,7 +29,6 @@ class SplitChunk:
     content: str
     language: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    is_code: bool = False
 
 
 @lru_cache(maxsize=1)
@@ -45,28 +42,6 @@ def _text_splitter() -> RecursiveCharacterTextSplitter:
         chunk_overlap=CHUNK_OVERLAP,
         encoding_name=DEFAULT_ENCODING,
     )
-
-
-def _code_splitter() -> TokenTextSplitter:
-    return TokenTextSplitter(
-        encoding_name=DEFAULT_ENCODING,
-        chunk_size=max(512, CODE_TOKENS_PER_LINE * MAX_CHUNK_TOKENS // 8),
-        chunk_overlap=CODE_TOKENS_PER_LINE * 2,
-        keep_separator=False,
-    )
-
-
-def _split_code(text: str) -> List[str]:
-    stripped = text.strip("\n")
-    if not stripped:
-        return []
-
-    splitter = _code_splitter()
-    try:
-        pieces = [frag.strip("\n") for frag in splitter.split_text(stripped) if frag.strip()]
-    except Exception:
-        pieces = [stripped]
-    return pieces or [stripped]
 
 
 def _split_text(text: str) -> List[str]:
@@ -113,18 +88,6 @@ def split_elements(
             continue
 
         base_meta = dict(element.metadata or {})
-        if element.is_code:
-            for chunk in _split_code(text):
-                chunks.append(
-                    SplitChunk(
-                        content=chunk,
-                        language=None,
-                        metadata=dict(base_meta),
-                        is_code=True,
-                    )
-                )
-            continue
-
         for section_text, metadata in _markdown_sections(text, base_meta):
             section_meta = dict(metadata)
             for part in _split_text(section_text):
@@ -133,7 +96,6 @@ def split_elements(
                         content=part,
                         language=None,
                         metadata=dict(section_meta),
-                        is_code=False,
                     )
                 )
 

@@ -315,6 +315,7 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = Field(default="gemini-2.5-flash-lite")
     CLASSIFIER_MODEL: str = Field(default_factory=lambda: os.getenv("CLASSIFIER_FILENAME", "gemma-3-4b-it-q4_0.gguf"))
     EMBEDDING_MODEL: str = Field(default="intfloat/multilingual-e5-base")
+    EMBEDDING_DIM: int = Field(default=768)
     RAG_TOP_K: int = Field(default=60)
     BM25_TOP_K: int = Field(default=50)
     BM25_MIN_RANK: float = Field(default=0.05)

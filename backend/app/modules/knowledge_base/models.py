@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from pgvector.sqlalchemy import Vector
 
+from app.core.config import settings
 from app.infrastructure.database.postgres_base import Base
 
 
@@ -48,8 +49,11 @@ class KnowledgeChunk(Base):
     )
     chunk_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="文档内块的序号")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="文本内容")
-    # 768 维向量，需与所选嵌入模型维度一致
-    embedding: Mapped[List[float]] = mapped_column(Vector(dim=768), nullable=False, comment="嵌入向量表示")
+    embedding: Mapped[List[float]] = mapped_column(
+        Vector(dim=settings.EMBEDDING_DIM),
+        nullable=False,
+        comment="嵌入向量表示",
+    )
     language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, comment="块语言或类型")
     search_vector: Mapped[Optional[str]] = mapped_column(
         TSVECTOR(), nullable=True, comment="用于全文检索的 tsvector"

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func
@@ -10,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import models
 from .embeddings import get_embedder
 from .ingest_extractor import ExtractedElement, extract_from_bytes, extract_from_text
-from .ingest_splitter import SplitChunk, split_elements
+from .ingest_splitter import split_elements
 from .language import detect_language_meta
 from .repository import crud_knowledge_base
 from .tokenizer import tokenize_for_search
@@ -18,7 +16,7 @@ from .tokenizer import tokenize_for_search
 
 async def _split_elements_async(
     elements: list[ExtractedElement],
-) -> List[SplitChunk]:
+) -> list:
     """异步地将提取的元素分割成块。"""
     if not elements:
         return []
@@ -108,8 +106,8 @@ async def ingest_document_file(
 async def ingest_document_content(
     db: AsyncSession,
     content: str,
-    overwrite: bool = False,
     document: models.KnowledgeDocument,
+    overwrite: bool = False,
 ) -> int:
     """摄入通过 API 直接提供的原始文本内容。"""
 
