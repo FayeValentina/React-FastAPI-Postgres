@@ -15,11 +15,7 @@ from app.core.config import settings
 from app.modules.llm.client import classifier_client
 from app.modules.llm.intent_classifier import RouterDecision
 from app.modules.llm import repository
-
-try:  # pragma: no cover - optional dependency
-    from langdetect import detect  # type: ignore
-except Exception:  # pragma: no cover - graceful fallback when unavailable
-    detect = None  # type: ignore
+from app.modules.knowledge_base.language import detect_language
 
 if TYPE_CHECKING:  # pragma: no cover - typing aid
     from app.modules.llm.models import Message
@@ -42,37 +38,9 @@ LANGUAGE_LABELS = {
 }
 
 SYSTEM_PROMPT_TEMPLATES: Dict[str, str] = {
-    "question_troubleshooting": (
-        "You are an expert troubleshooting assistant. Ask for missing details, reason step-by-step, "
-        "and provide actionable fixes grounded in verified knowledge."
-    ),
-    "precise_instruction": (
-        "You are a concise technical assistant. Provide exact instructions or factual answers with clear steps "
-        "or code snippets when helpful."
-    ),
-    "broad_overview": (
-        "You deliver high-level overviews and comparisons. Summarize key points, highlight trade-offs, "
-        "and keep explanations accessible."
-    ),
     "document_focus": (
         "Act as a retrieval-grounded assistant. Only reference the supplied document(s); cite relevant sections "
         "and avoid fabricating external facts."
-    ),
-    "analysis_reasoning": (
-        "You are a critical analyst. Decompose problems, evaluate alternatives, and explain your reasoning "
-        "transparently before concluding."
-    ),
-    "coding_help": (
-        "You are a senior software engineer. Produce idiomatic, well-commented code, explain the approach, "
-        "and point out potential pitfalls or tests."
-    ),
-    "brainstorming": (
-        "You are a creative collaborator. Generate diverse, high-quality ideas, explore variations, "
-        "and note constraints or next steps."
-    ),
-    "translation_localization": (
-        "You are a professional translator. Preserve meaning, tone, and domain-specific terminology while "
-        "adapting content to the target locale."
     ),
     "unknown_fallback": (
         "Default to a helpful AI assistant. Clarify the user’s intent when needed and keep responses accurate, "
@@ -127,18 +95,6 @@ def _truncate(text: str, limit: int) -> str:
 def _normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
-
-def _normalize_language_code(raw: str | None) -> str:
-    value = (raw or "").strip().lower()
-    if value.startswith("zh"):
-        return "zh"
-    if value.startswith("ja"):
-        return "ja"
-    if value.startswith("en"):
-        return "en"
-    return "en"
-
-
 def _detect_language(messages: Sequence["Message"], classifier_result: RouterDecision) -> str:
     candidates: List[str] = []
 
@@ -162,18 +118,17 @@ def _detect_language(messages: Sequence["Message"], classifier_result: RouterDec
             if len(candidates) >= 4:
                 break
 
-    if detect is None:
-        return "en"
-
     for text in candidates:
-        try:
-            sample = text[:512] if len(text) > 512 else text
-            language = detect(sample)
-        except Exception:
-            continue
-        normalized = _normalize_language_code(language)
-        if normalized in LANGUAGE_LABELS:
-            return normalized
+        detected = (detect_language(text, default="en") or "en").lower()
+        if detected == "code":
+            detected = "en"
+        if detected.startswith("zh"):
+            return "zh"
+        if detected.startswith("ja"):
+            return "ja"
+        if detected.startswith("en"):
+            return "en"
+
     return "en"
 
 

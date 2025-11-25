@@ -15,17 +15,6 @@ class StrategyContext:
     user_role: Optional[str] = None
     metadata: Mapping[str, Any] | None = None
 
-    def to_log_dict(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
-            "channel": self.channel,
-            "top_k_request": self.top_k_request,
-            "document_id": self.document_id,
-            "user_role": self.user_role,
-        }
-        if self.metadata:
-            payload["metadata_keys"] = sorted(self.metadata.keys())
-        return payload
-
 
 @dataclass(slots=True)
 class StrategyResult:

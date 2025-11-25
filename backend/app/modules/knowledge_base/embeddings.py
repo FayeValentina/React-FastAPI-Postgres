@@ -38,13 +38,5 @@ def get_embedder() -> SentenceTransformer:
             _EMBEDDER = SentenceTransformer(model_name)
     return _EMBEDDER
 
-
-def reset_models_for_tests() -> None:
-    """测试工具，用于清除缓存的模型实例。"""
-    global _EMBEDDER
-    with _EMBEDDER_LOCK:
-        _EMBEDDER = None
-
-
 # 导出模块内的主要函数
-__all__ = ["get_embedder", "reset_models_for_tests"]
+__all__ = ["get_embedder"]

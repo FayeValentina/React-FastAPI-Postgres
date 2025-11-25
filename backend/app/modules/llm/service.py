@@ -10,15 +10,9 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.modules.knowledge_base.language import detect_language
 from app.modules.knowledge_base.retrieval import RetrievedChunk
 from app.modules.llm import repository
-try:
-    from langdetect import detect  # type: ignore
-except Exception:  # pragma: no cover - graceful fallback if not available
-    detect = None  # type: ignore
-
-
-SUPPORTED = {"en", "zh", "ja"}
 
 @dataclass(frozen=True)
 class PromptBundle:
@@ -28,25 +22,13 @@ class PromptBundle:
 
 
 def _normalize_lang(text: str) -> str:
-    """Detect language and normalize to one of {en, zh, ja}; default 'en'."""
-    lang = "en"
-    if not text:
-        return lang
-    try:
-        if detect is None:
-            return lang
-        raw = (detect(text) or "").lower()
-        if raw.startswith("zh"):
-            lang = "zh"
-        elif raw.startswith("ja"):
-            lang = "ja"
-        elif raw.startswith("en"):
-            lang = "en"
-        else:
-            lang = "en"
-    except Exception:
-        lang = "en"
-    return lang
+    """Normalize language to {en, zh, ja} using shared KB heuristics."""
+    normalized = (detect_language(text or "", default="en") or "en").lower()
+    if normalized.startswith("zh"):
+        return "zh"
+    if normalized.startswith("ja"):
+        return "ja"
+    return "en"
 
 
 

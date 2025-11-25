@@ -24,8 +24,6 @@ class BM25SearchResult:
     matches: list[BM25Match]  # 匹配结果列表
     raw_hits: int  # 原始命中数量
     after_threshold: int  # 应用阈值后的命中数量
-    max_score: float | None = None  # 最高原始分数
-    min_score: float | None = None  # 最低原始分数
 
 
 async def fetch_bm25_matches(
@@ -86,6 +84,4 @@ async def fetch_bm25_matches(
         raw_hits=len(rows),
         # gating 已在数据库层完成，此处 after_threshold 与 raw_hits 一致
         after_threshold=len(rows),
-        max_score=max_score,
-        min_score=min_score_value,
     )
