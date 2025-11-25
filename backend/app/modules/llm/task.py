@@ -473,7 +473,6 @@ async def process_chat_message(
         base_system_prompt, wrapped_user_text = await prepare_system_and_user(
             content,
             similar,
-            config=strategy_config,
         )
 
         merged_system_prompt = _merge_system_prompts(

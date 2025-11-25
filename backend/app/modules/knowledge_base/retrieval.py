@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import models
 from .bm25 import fetch_bm25_matches
-from .config import DynamicSettingsMapping, RagSearchConfig, build_rag_config
+from .config import (
+    DynamicSettingsMapping,
+    RagSearchConfig,
+    build_bm25_config,
+    build_rag_config,
+)
 from .embeddings import get_embedder
 from .language import detect_language
 from .repository import crud_knowledge_base
@@ -69,27 +74,44 @@ async def _vector_candidates(
     return items
 
 
+async def bm25_search(
+    db: AsyncSession,
+    query: str,
+    *,
+    requested_top_k: int,
+    config: DynamicSettingsMapping,
+    query_language: str | None = None,
+):
+    if not query.strip():
+        return BM25SearchResult(matches=[], raw_hits=0, after_threshold=0), build_bm25_config(config, requested_top_k=requested_top_k)
+
+    bm25_config = build_bm25_config(config, requested_top_k=requested_top_k)
+    result = await fetch_bm25_matches(
+        db,
+        query,
+        bm25_config.search_limit,
+        min_rank=bm25_config.min_rank,
+        language=query_language,
+    )
+    return result, bm25_config
+
+
 async def _bm25_candidates(
     db: AsyncSession,
     query: str,
     top_k: int,
     config: DynamicSettingsMapping,
 ) -> Dict[int, tuple["models.KnowledgeChunk", float, float]]:
-    if not query.strip():
-        return {}
-
-    bm25_config = build_bm25_config(config, requested_top_k=top_k)
-
-    search_result = await fetch_bm25_matches(
+    result, bm25_config = await bm25_search(
         db,
         query,
-        bm25_config.search_limit,
-        min_rank=bm25_config.min_rank,
-        language="",
+        requested_top_k=top_k,
+        config=config,
+        query_language="",
     )
 
     scores: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
-    for match in search_result.matches:
+    for match in result.matches:
         scores[match.chunk.id] = (match.chunk, match.normalized_score, match.raw_score)
     return scores
 
@@ -167,4 +189,4 @@ async def search_similar_chunks(
     return trimmed
 
 
-__all__ = ["RetrievedChunk", "search_similar_chunks"]
+__all__ = ["RetrievedChunk", "search_similar_chunks", "bm25_search"]

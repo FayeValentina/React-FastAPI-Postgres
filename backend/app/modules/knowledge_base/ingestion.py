@@ -91,7 +91,6 @@ async def ingest_document_file(
         extract_from_bytes,
         raw,
         filename=filename,
-        content_type=content_type,
     )
 
     # 持久化提取出的块

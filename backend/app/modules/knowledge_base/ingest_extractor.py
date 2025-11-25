@@ -48,7 +48,6 @@ def extract_from_bytes(
     raw: bytes,
     *,
     filename: str | None = None,
-    content_type: str | None = None,  # kept for signature compatibility
 ) -> tuple[str, list[ExtractedElement]]:
     """Decode text files into ExtractedElements; only text payloads are supported."""
     decoded = _decode_bytes_to_text(raw)

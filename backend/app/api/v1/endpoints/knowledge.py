@@ -23,9 +23,8 @@ from app.infrastructure.dynamic_settings import (
     DynamicSettingsService,
     get_dynamic_settings_service,
 )
-from app.modules.knowledge_base.config import build_bm25_config
-from app.modules.knowledge_base.bm25 import fetch_bm25_matches
 from app.modules.knowledge_base.language import detect_language
+from app.modules.knowledge_base.retrieval import bm25_search
 from app.modules.knowledge_base.ingestion import (
     ingest_document_content,
     ingest_document_file,
@@ -168,30 +167,24 @@ async def search_knowledge(
     dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
     config = await dynamic_settings_service.get_all()
-
-    bm25_config = build_bm25_config(config, requested_top_k=payload.top_k)
-    top_k_value = bm25_config.top_k
-    search_limit = bm25_config.search_limit
     language = detect_language(payload.query, None)
 
     logger.info(
         "knowledge_search_bm25",
         extra={
-            "top_k": top_k_value,
-            "bm25_limit": search_limit,
-            "bm25_min_rank": bm25_config.min_rank,
+            "top_k": payload.top_k,
         },
     )
 
-    search_result = await fetch_bm25_matches(
+    search_result, bm25_config = await bm25_search(
         db,
         payload.query,
-        search_limit,
-        min_rank=bm25_config.min_rank,
-        language=language,
+        requested_top_k=payload.top_k,
+        config=config,
+        query_language=language,
     )
 
-    matches = search_result.matches[:top_k_value]
+    matches = search_result.matches[:bm25_config.top_k]
     response: list[KnowledgeSearchResult] = []
     for match in matches:
         chunk = match.chunk

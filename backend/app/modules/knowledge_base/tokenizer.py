@@ -5,7 +5,7 @@ import logging
 from typing import Iterable, Optional
 
 from app.core.config import settings
-from .language import detect_language_meta, is_cjk_text
+from .language import detect_language_meta
 import spacy
 from spacy.language import Language
 

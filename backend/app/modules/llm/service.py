@@ -149,9 +149,8 @@ def _prepare_system_and_user(
 async def prepare_system_and_user(
     user_text: str,
     similar: Iterable[RetrievedChunk],
-    config: Mapping[str, Any] | None = None,
 ) -> Tuple[str, str]:
-    """Async wrapper for `_prepare_system_and_user` with optional dynamic config."""
+    """Async wrapper for `_prepare_system_and_user`."""
 
     return await run_in_threadpool(_prepare_system_and_user, user_text, similar)
 
