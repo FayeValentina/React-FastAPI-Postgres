@@ -14,6 +14,7 @@ from app.modules.knowledge_base.language import detect_language
 from app.modules.knowledge_base.retrieval import RetrievedChunk
 from app.modules.llm import repository
 
+
 @dataclass(frozen=True)
 class PromptBundle:
     system: str
@@ -31,9 +32,6 @@ def _normalize_lang(text: str) -> str:
     return "en"
 
 
-
-
-
 def _build_context(
     similar: Iterable[RetrievedChunk],
     lang: str,
@@ -48,7 +46,6 @@ def _build_context(
         content = (chunk.content or "").strip()
         if not content:
             continue
-        chunk_lang = (chunk.language or lang).lower() if getattr(chunk, "language", None) else lang
 
         meta_parts: List[str] = []
         doc = getattr(chunk, "document", None)
@@ -139,7 +136,9 @@ def _prepare_system_and_user(
     context = _build_context(evidence_list, lang) if evidence_list else ""
 
     if context:
-        final_user = bundle.context_template.format(context=context, user_text=user_text)
+        final_user = bundle.context_template.format(
+            context=context, user_text=user_text
+        )
     else:
         final_user = bundle.missing_template.format(user_text=user_text)
 

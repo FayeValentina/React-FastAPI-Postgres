@@ -18,7 +18,7 @@ from app.modules.knowledge_base.schemas import (
 )
 from app.modules.knowledge_base import models
 from app.modules.knowledge_base.repository import crud_knowledge_base
-from app.modules.knowledge_base.retrieval import bm25_search
+from app.modules.knowledge_base.retrieval import bm25_search, vector_search
 from app.modules.knowledge_base.ingestion import (
     ingest_document_content,
     ingest_document_file,
@@ -163,35 +163,59 @@ async def search_knowledge(
         "knowledge_search_bm25",
         extra={
             "top_k": payload.top_k,
+            "use_bm25": payload.use_bm25,
         },
     )
 
-    search_result = await bm25_search(
-        db,
-        payload.query,
-        requested_top_k=payload.top_k,
-    )
+    results: list[KnowledgeSearchResult] = []
 
-    matches = search_result.matches[: payload.top_k]
-    response: list[KnowledgeSearchResult] = []
-    for match in matches:
-        chunk = match.chunk
-        response.append(
-            KnowledgeSearchResult(
-                id=chunk.id,
-                document_id=chunk.document_id,
-                chunk_index=chunk.chunk_index,
-                content=chunk.content,
-                language=getattr(chunk, "language", None),
-                created_at=chunk.created_at,
-                score=float(match.normalized_score),
-                similarity=float(match.normalized_score),
-                bm25_score=float(match.raw_score),
-                retrieval_source="bm25",
-            )
+    if payload.use_bm25:
+        search_result = await bm25_search(
+            db,
+            payload.query,
+            requested_top_k=payload.top_k,
         )
 
-    return response
+        for match in search_result.matches:
+            chunk = match.chunk
+            results.append(
+                KnowledgeSearchResult(
+                    id=chunk.id,
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    language=getattr(chunk, "language", None),
+                    created_at=chunk.created_at,
+                    score=float(match.normalized_score),
+                    similarity=float(match.normalized_score),
+                    bm25_score=float(match.raw_score),
+                    retrieval_source="bm25",
+                )
+            )
+    else:
+        vector_matches = await vector_search(
+            db,
+            payload.query,
+            top_k=payload.top_k,
+        )
+        for item in vector_matches:
+            chunk = item.chunk
+            results.append(
+                KnowledgeSearchResult(
+                    id=chunk.id,
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    language=getattr(chunk, "language", None),
+                    created_at=chunk.created_at,
+                    score=float(item.score),
+                    similarity=float(item.similarity),
+                    bm25_score=None,
+                    retrieval_source=item.retrieval_source,
+                )
+            )
+
+    return results
 
 
 @router.get("/documents/{document_id}/chunks", response_model=list[KnowledgeChunkRead])

@@ -154,8 +154,17 @@ async def bm25_search(
     """Perform BM25 keyword search.
     执行 BM25 关键词搜索。
     """
+    return await _bm25_candidates(db, query, requested_top_k)
+
+
+async def _bm25_candidates(
+    db: AsyncSession,
+    query: str,
+    top_k: int,
+) -> BM25SearchResult:
+    """Fetch BM25 results with normalization."""
     config_map = await _load_dynamic_settings()
-    bm25_config = build_bm25_config(config_map, requested_top_k=requested_top_k)
+    bm25_config = build_bm25_config(config_map, requested_top_k=top_k)
     if not query.strip():
         return BM25SearchResult(matches=[], raw_hits=0, after_threshold=0)
 
@@ -169,23 +178,6 @@ async def bm25_search(
     )
 
     return _normalize_bm25_rows(rows)
-
-
-async def _bm25_candidates(
-    db: AsyncSession,
-    query: str,
-    top_k: int,
-) -> Dict[int, tuple["models.KnowledgeChunk", float, float]]:
-    """Fetch candidates using BM25 search.
-    使用 BM25 搜索获取候选者。
-    """
-    result = await bm25_search(db, query, requested_top_k=top_k)
-
-    scores: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
-    for match in result.matches:
-        # 存储块、归一化得分和原始得分
-        scores[match.chunk.id] = (match.chunk, match.normalized_score, match.raw_score)
-    return scores
 
 
 def _merge_candidates(
@@ -249,7 +241,11 @@ async def hybrid_search(
         effective_top_k,
     )
     # 获取 BM25 检索候选者
-    bm25_hits = await _bm25_candidates(db, query, effective_top_k)
+    bm25_result = await _bm25_candidates(db, query, effective_top_k)
+
+    bm25_hits: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
+    for match in bm25_result.matches:
+        bm25_hits[match.chunk.id] = (match.chunk, match.normalized_score, match.raw_score)
 
     # 合并结果
     merged = _merge_candidates(vector_hits, bm25_hits)
