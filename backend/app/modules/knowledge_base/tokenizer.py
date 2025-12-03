@@ -5,14 +5,9 @@ import logging
 from typing import Iterable, Optional
 
 from app.core.config import settings
-from .language import detect_language_meta, is_cjk_text
-
-try:  # pragma: no cover - optional dependency at runtime
-    import spacy
-    from spacy.language import Language
-except Exception:  # pragma: no cover - graceful fallback when spaCy unavailable
-    spacy = None
-    Language = None  # type: ignore
+from .language import detect_language_meta
+import spacy
+from spacy.language import Language
 
 
 logger = logging.getLogger(__name__)
@@ -28,10 +23,7 @@ def _should_use_spacy(text: str, language: str | None) -> bool:
     meta = detect_language_meta(text, default=lang or "en")
     candidate = (meta.get("language") or "").lower()
     # 如果检测到的语言是中文或日文，则使用 spaCy
-    if candidate in {"zh", "ja"}:
-        return True
-    # 如果文本包含中日韩字符，则使用 spaCy
-    return is_cjk_text(text)
+    return candidate in {"zh", "ja"}
 
 
 @lru_cache(maxsize=1)

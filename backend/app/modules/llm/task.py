@@ -31,9 +31,9 @@ from app.modules.llm.repository import (
     update_conversation_metadata as persist_conversation_metadata,
 )
 from app.modules.llm.service import prepare_system_and_user
-from app.modules.llm.intent_classifier import ClassificationResult
+from app.modules.llm.intent_classifier import RouterDecision
 from app.modules.llm.conversation_metadata import generate_conversation_metadata
-from app.modules.knowledge_base.retrieval import search_similar_chunks
+from app.modules.knowledge_base.retrieval import hybrid_search
 from app.modules.llm.strategy import StrategyContext, resolve_rag_parameters
 
 logger = logging.getLogger(__name__)
@@ -111,20 +111,6 @@ def ensure_int(value: Any, fallback: Optional[int] = None) -> Optional[int]:
         return fallback
 
 
-def clamp_temperature(value: Optional[float], *, fallback: float | None = None) -> float:
-    candidate: float
-    if value is None:
-        candidate = float(fallback if fallback is not None else 0.7)
-    else:
-        try:
-            candidate = float(value)
-        except (TypeError, ValueError):
-            candidate = float(fallback if fallback is not None else 0.7)
-
-    candidate = max(0.0, min(2.0, candidate))
-    return candidate
-
-
 async def _publish_event(
     redis_client,
     channel: str,
@@ -180,7 +166,7 @@ async def refresh_conversation_metadata(
         return
 
     try:
-        classifier_result = ClassificationResult.from_payload(classifier)
+        classifier_result = RouterDecision.from_payload(classifier)
     except Exception:
         logger.exception(
             "Failed to deserialize classifier payload",
@@ -247,23 +233,12 @@ async def process_chat_message(
     content: str,
     *,
     model: Optional[str] = None,
-    temperature: Optional[float] = None,
+    temperature: Optional[float] = 0.7,
     system_prompt_override: Optional[str] = None,
-    top_k: Optional[int] = None,
+    top_k: Optional[int] = settings.RAG_TOP_K,
 ) -> None:
-    try:
-        request_uuid = UUID(request_id) if request_id else uuid4()
-    except (TypeError, ValueError):
-        request_uuid = uuid4()
-
-    try:
-        conversation_uuid = UUID(conversation_id)
-    except (TypeError, ValueError):
-        logger.error(
-            "Invalid conversation_id received for chat task",
-            extra={"conversation_id": conversation_id, "request_id": request_id},
-        )
-        return
+    request_uuid = UUID(request_id)
+    conversation_uuid = UUID(conversation_id)
 
     try:
         redis_client = await redis_connection_manager.get_client()
@@ -351,7 +326,7 @@ async def process_chat_message(
         except Exception:
             base_config = settings.dynamic_settings_defaults()
 
-        requested_top_k = ensure_int(top_k)
+        requested_top_k = top_k
         strategy_ctx = StrategyContext(
             top_k_request=requested_top_k,
             channel="task",
@@ -371,23 +346,87 @@ async def process_chat_message(
                 extra={"conversation_id": conversation_id, "request_id": request_id},
             )
             strategy = None
-            strategy_config = dict(base_config)
+            strategy_config = {"RAG_TOP_K": settings.RAG_TOP_K}
+
+        decision = strategy.router_decision if strategy else None
+
+        await _publish_event(
+            redis_client,
+            channel_name,
+            "progress",
+            conversation_id=conversation_uuid,
+            request_id=request_uuid,
+            stage="router",
+            mode=decision.mode if decision else None,
+        )
+
+        if decision and decision.mode == "chat":
+            assistant_message = decision.reply or ASSISTANT_FALLBACK_MESSAGE
+
+            await _publish_event(
+                redis_client,
+                channel_name,
+                "citations",
+                conversation_id=conversation_uuid,
+                request_id=request_uuid,
+                citations=[],
+            )
+            if assistant_message:
+                await _publish_event(
+                    redis_client,
+                    channel_name,
+                    "delta",
+                    conversation_id=conversation_uuid,
+                    request_id=request_uuid,
+                    content=assistant_message,
+                )
+            try:
+                await append_messages(
+                    db,
+                    conversation_id=conversation_uuid,
+                    request_id=request_uuid,
+                    entries=[
+                        ("user", content),
+                        ("assistant", assistant_message),
+                    ],
+                )
+                await db.commit()
+
+                if strategy and getattr(strategy, "router_decision", None):
+                    classifier_payload = strategy.router_decision.to_payload()
+                    await refresh_conversation_metadata.kiq(
+                        conversation_id=str(conversation_uuid),
+                        classifier=classifier_payload,
+                    )
+            except Exception:
+                await db.rollback()
+                await _publish_event(
+                    redis_client,
+                    channel_name,
+                    "error",
+                    conversation_id=conversation_uuid,
+                    request_id=request_uuid,
+                    message="persist_failed",
+                )
+                logger.exception(
+                    "Failed to persist chat transcript",
+                    extra={"conversation_id": conversation_id, "request_id": request_id},
+                )
+                return
+
+            await _publish_event(
+                redis_client,
+                channel_name,
+                "done",
+                conversation_id=conversation_uuid,
+                request_id=request_uuid,
+                token_usage=None,
+            )
+            return
 
         raw_top_k = strategy_config.get("RAG_TOP_K")
         strategy_top_k = ensure_int(raw_top_k, fallback=settings.RAG_TOP_K)
-
-        if requested_top_k and requested_top_k > 0:
-            top_k_value = requested_top_k
-            if strategy_top_k and strategy_top_k > 0:
-                top_k_value = max(top_k_value, strategy_top_k)
-        else:
-            top_k_value = strategy_top_k if strategy_top_k and strategy_top_k > 0 else settings.RAG_TOP_K
-
-        max_candidates = ensure_int(strategy_config.get("RAG_MAX_CANDIDATES"), fallback=settings.RAG_MAX_CANDIDATES)
-        if max_candidates and max_candidates > 0:
-            top_k_value = min(top_k_value, max_candidates)
-
-        top_k_value = max(1, top_k_value)
+        top_k_value = strategy_top_k if strategy_top_k and strategy_top_k > 0 else settings.RAG_TOP_K
 
         await _publish_event(
             redis_client,
@@ -398,16 +437,13 @@ async def process_chat_message(
             stage="retrieval",
         )
 
-        effective_query = content
-        if strategy and getattr(strategy, "processed_query", None):
-            effective_query = strategy.processed_query
+        effective_query = strategy.processed_query if strategy and strategy.processed_query else content
 
         try:
-            similar = await search_similar_chunks(
+            similar = await hybrid_search(
                 db,
                 effective_query,
                 top_k_value,
-                config=strategy_config,
             )
         except Exception:
             logger.exception(
@@ -436,7 +472,6 @@ async def process_chat_message(
         base_system_prompt, wrapped_user_text = await prepare_system_and_user(
             content,
             similar,
-            config=strategy_config,
         )
 
         merged_system_prompt = _merge_system_prompts(
@@ -451,7 +486,7 @@ async def process_chat_message(
         fallback_temperature = (
             conversation.temperature if conversation.temperature is not None else 0.7
         )
-        effective_temperature = clamp_temperature(temperature, fallback=fallback_temperature)
+        effective_temperature = temperature if temperature is not None else fallback_temperature
 
         llm_messages = [{"role": "system", "content": merged_system_prompt}] + history_payload + [
             {"role": "user", "content": wrapped_user_text}
@@ -536,8 +571,8 @@ async def process_chat_message(
             )
             await db.commit()
 
-            if strategy and getattr(strategy, "classifier_result", None):
-                classifier_payload = strategy.classifier_result.to_payload()
+            if strategy and getattr(strategy, "router_decision", None):
+                classifier_payload = strategy.router_decision.to_payload()
                 await refresh_conversation_metadata.kiq(
                     conversation_id=str(conversation_uuid),
                     classifier=classifier_payload,

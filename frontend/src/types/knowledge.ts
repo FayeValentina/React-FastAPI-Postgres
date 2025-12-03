@@ -47,6 +47,7 @@ export interface KnowledgeChunkUpdate {
 export interface KnowledgeSearchRequest {
   query: string;
   top_k?: number; // default 5 on backend
+  use_bm25?: boolean; // default true on backend
 }
 
 export interface KnowledgeSearchResult {

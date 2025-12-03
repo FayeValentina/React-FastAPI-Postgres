@@ -65,6 +65,9 @@ class KnowledgeChunkUpdate(BaseModel):
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="检索的查询文本")
     top_k: int = Field(5, ge=1, le=50, description="返回最相似的结果数量（1-50）")
+    use_bm25: bool = Field(
+        True, description="是否使用 BM25 关键词检索（false 时使用向量检索）"
+    )
 
 
 class KnowledgeSearchResult(BaseModel):

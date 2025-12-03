@@ -5,6 +5,8 @@ import {
   Card,
   CardContent,
   Divider,
+  FormControlLabel,
+  Switch,
   Stack,
   TextField,
   Typography,
@@ -13,7 +15,7 @@ import { Search as SearchIcon } from '@mui/icons-material';
 import { KnowledgeSearchResult } from '../../types';
 
 interface KnowledgeSearchProps {
-  onSearch: (query: string, topK: number) => Promise<void> | void;
+  onSearch: (query: string, topK: number, useBm25: boolean) => Promise<void> | void;
   results: KnowledgeSearchResult[];
   loading?: boolean;
 }
@@ -21,10 +23,11 @@ interface KnowledgeSearchProps {
 const KnowledgeSearch: React.FC<KnowledgeSearchProps> = ({ onSearch, results, loading }) => {
   const [query, setQuery] = useState('');
   const [topK, setTopK] = useState(5);
+  const [useBm25, setUseBm25] = useState(true);
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    onSearch(query.trim(), Math.max(1, Math.min(50, Number(topK) || 5)));
+    onSearch(query.trim(), Math.max(1, Math.min(50, Number(topK) || 5)), useBm25);
   };
 
   return (
@@ -45,6 +48,17 @@ const KnowledgeSearch: React.FC<KnowledgeSearchProps> = ({ onSearch, results, lo
           inputProps={{ min: 1, max: 50 }}
           onChange={(e) => setTopK(Number(e.target.value))}
           sx={{ width: { xs: '100%', sm: 120 } }}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={useBm25}
+              onChange={(e) => setUseBm25(e.target.checked)}
+              color="primary"
+            />
+          }
+          label={useBm25 ? 'BM25' : '向量'}
+          sx={{ ml: { sm: 1 } }}
         />
         <Button
           variant="contained"
@@ -84,4 +98,3 @@ const KnowledgeSearch: React.FC<KnowledgeSearchProps> = ({ onSearch, results, lo
 };
 
 export default KnowledgeSearch;
-

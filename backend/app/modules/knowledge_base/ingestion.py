@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func
@@ -18,7 +16,7 @@ from .tokenizer import tokenize_for_search
 
 async def _split_elements_async(
     elements: list[ExtractedElement],
-) -> List[SplitChunk]:
+) -> list[SplitChunk]:
     """异步地将提取的元素分割成块。"""
     if not elements:
         return []
@@ -55,7 +53,7 @@ async def _persist_chunks(
     texts = [chunk.content for chunk in split_chunks]
     # 在线程池中为所有文本块生成嵌入向量
     vectors = await run_in_threadpool(embedder.encode, texts, normalize_embeddings=True)
-    
+
     payloads = []
     # 为每个块准备持久化所需的数据
     for idx, (chunk, vector) in enumerate(zip(split_chunks, vectors)):
@@ -77,34 +75,27 @@ async def _persist_chunks(
 
 async def ingest_document_file(
     db: AsyncSession,
-    document_id: int,
     upload: UploadFile,
+    document: models.KnowledgeDocument,
     overwrite: bool = False,
-    document: models.KnowledgeDocument | None = None,
 ) -> int:
     """通过提取、分块和存储元素来摄入上传的文档文件。"""
-    if upload is None:
-        raise ValueError("缺少文件")
 
     raw = await upload.read()
-    if document is None:
-        document = await crud_knowledge_base.get_document_by_id(db, document_id)
 
-    filename = upload.filename or (document.source_ref if document else None)
-    content_type = upload.content_type
+    filename = upload.filename or document.source_ref
 
     # 在线程池中从文件字节中提取元素
     _, elements = await run_in_threadpool(
         extract_from_bytes,
         raw,
         filename=filename,
-        content_type=content_type,
     )
 
     # 持久化提取出的块
     return await _persist_chunks(
         db,
-        document_id=document_id,
+        document_id=document.id,
         elements=elements,
         overwrite=overwrite,
     )
@@ -112,23 +103,20 @@ async def ingest_document_file(
 
 async def ingest_document_content(
     db: AsyncSession,
-    document_id: int,
     content: str,
+    document: models.KnowledgeDocument,
     overwrite: bool = False,
-    document: models.KnowledgeDocument | None = None,
 ) -> int:
     """摄入通过 API 直接提供的原始文本内容。"""
-    if document is None:
-        document = await crud_knowledge_base.get_document_by_id(db, document_id)
 
-    source_ref = document.source_ref if document and document.source_ref else None
+    source_ref = document.source_ref if document.source_ref else None
     # 在线程池中从文本内容中提取元素
     elements = await run_in_threadpool(extract_from_text, content or "", source_ref=source_ref)
 
     # 持久化提取出的块
     return await _persist_chunks(
         db,
-        document_id=document_id,
+        document_id=document.id,
         elements=elements,
         overwrite=overwrite,
     )

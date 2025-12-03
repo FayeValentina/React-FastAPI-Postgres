@@ -140,8 +140,6 @@ def test_admin_settings_get_returns_defaults(
     assert data["overrides"] == {}
     assert "RAG_TOP_K" in data["defaults"]
     assert data["effective"]["RAG_TOP_K"] == data["defaults"]["RAG_TOP_K"]
-    assert "RAG_IVFFLAT_PROBES" in data["defaults"]
-    assert data["effective"]["RAG_IVFFLAT_PROBES"] == data["defaults"]["RAG_IVFFLAT_PROBES"]
     assert data["updated_at"] is None
 
 
@@ -156,16 +154,13 @@ def test_admin_settings_update_overrides_values(
 
     response = client.put(
         "/api/v1/admin/settings",
-        json={"RAG_TOP_K": 7, "RAG_MIN_SIM": 0.55, "RAG_IVFFLAT_PROBES": 24},
+        json={"RAG_TOP_K": 70},
     )
 
     assert response.status_code == 200
     data = response.json()
 
-    assert data["overrides"]["RAG_TOP_K"] == 7
-    assert data["effective"]["RAG_TOP_K"] == 7
-    assert data["effective"]["RAG_MIN_SIM"] == pytest.approx(0.55)
-    assert data["effective"]["RAG_IVFFLAT_PROBES"] == 24
-    assert data["overrides"]["RAG_IVFFLAT_PROBES"] == 24
+    assert data["overrides"]["RAG_TOP_K"] == 70
+    assert data["effective"]["RAG_TOP_K"] == 70
     assert data["redis_status"] == "ok"
     assert data["updated_at"] is not None

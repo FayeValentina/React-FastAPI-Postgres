@@ -378,7 +378,7 @@ services:
         fi &&
         echo '等待依赖服务...' &&
         sleep 15 &&
-        taskiq worker --fs-discover --tasks-pattern 'app/modules/tasks/workers/*.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
+        taskiq worker --fs-discover --tasks-pattern 'app/modules/**/task.py' app.broker:broker --log-level ${LOG_LEVEL:-WARNING}
       "
     networks:
       - prodNetWork

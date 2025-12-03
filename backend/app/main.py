@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     try:
         # 自动发现并注册所有任务
         from app.infrastructure.tasks.task_registry_decorators import auto_discover_tasks
-        auto_discover_tasks()
+        auto_discover_tasks("app.modules")
         logger.info("任务自动注册完成")
         
         # 启动时

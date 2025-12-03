@@ -20,24 +20,7 @@ class AdminSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     RAG_TOP_K: int | None = Field(None, ge=1, le=100)
-    RAG_STRATEGY_ENABLED: bool | None = None
-    RAG_MIN_SIM: float | None = Field(None, ge=0.0, le=1.0)
-    RAG_MMR_LAMBDA: float | None = Field(None, ge=0.0, le=1.0)
-    RAG_PER_DOC_LIMIT: int | None = Field(None, ge=0)
-    RAG_OVERSAMPLE: int | None = Field(None, ge=1)
-    RAG_MAX_CANDIDATES: int | None = Field(None, ge=1)
-    RAG_RERANK_ENABLED: bool | None = None
-    RAG_RERANK_CANDIDATES: int | None = Field(None, ge=1)
-    RAG_RERANK_SCORE_THRESHOLD: float | None = Field(None, ge=0.0, le=1.0)
-    RAG_CONTEXT_TOKEN_BUDGET: int | None = Field(None, ge=0)
-    RAG_CONTEXT_MAX_EVIDENCE: int | None = Field(None, ge=0)
-    RAG_IVFFLAT_PROBES: int | None = Field(None, ge=1)
-    RAG_USE_LINGUA: bool | None = None
-    RAG_STRATEGY_LLM_CLASSIFIER_CONFIDENCE_THRESHOLD: float | None = Field(None, ge=0.0, le=1.0)
-    BM25_TOP_K: int | None = Field(None, ge=0)
-    BM25_WEIGHT: float | None = Field(None, ge=0.0, le=1.0)
-    # 新：Postgres 原始 ts_rank_cd 绝对阈值（推荐使用）
-    BM25_MIN_RANK: float | None = Field(None, ge=0.0)
+    # Only the retrieval breadth is admin configurable now.
 
 
 class AdminSettingsResetRequest(BaseModel):
