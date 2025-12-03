@@ -9,7 +9,6 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import models
-from .bm25 import fetch_bm25_matches
 from .config import (
     DynamicSettingsMapping,
     RagSearchConfig,
@@ -24,25 +23,80 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class RetrievedChunk:
-    """Lightweight container returned to the chat layer."""
+class BM25Match:
+    """BM25 匹配结果的数据类"""
 
-    chunk: "models.KnowledgeChunk"
-    score: float
-    similarity: float
-    retrieval_source: str
-    vector_score: float = 0.0
-    bm25_score: float = 0.0
+    chunk: models.KnowledgeChunk
+    raw_score: float
+    normalized_score: float
+
+
+@dataclass(slots=True)
+class BM25SearchResult:
+    """BM25 搜索结果的数据类"""
+
+    matches: list[BM25Match]
+    raw_hits: int
+    after_threshold: int
+
+
+@dataclass(slots=True)
+class RetrievedChunk:
+    """Lightweight container returned to the chat layer.
+    返回给聊天层的轻量级容器。
+    """
+
+    chunk: "models.KnowledgeChunk"  # 知识块对象
+    score: float  # 最终得分
+    similarity: float  # 相似度得分
+    retrieval_source: str  # 检索来源 (vector, bm25, hybrid)
+    vector_score: float = 0.0  # 向量检索得分
+    bm25_score: float = 0.0  # BM25 检索得分
 
 
 def _language_bonus(query_lang: str, chunk_lang: str) -> float:
+    """Calculate language match bonus.
+    计算语言匹配奖励。
+    """
     if not query_lang or not chunk_lang:
         return 0.0
+    # 如果查询语言和块语言一致，给予 0.05 的加分
     return 0.05 if query_lang == chunk_lang else 0.0
 
 
-def _effective_top_k(config: RagSearchConfig) -> int:
-    return max(1, config.top_k)
+
+
+
+def _normalize_bm25_rows(
+    rows: list[tuple["models.KnowledgeChunk", float]],
+) -> BM25SearchResult:
+    """将数据库返回的 BM25 结果归一化为 0-1 区间。"""
+    if not rows:
+        return BM25SearchResult(matches=[], raw_hits=0, after_threshold=0)
+
+    raw_scores = [float(score or 0.0) for _, score in rows]
+    max_score = max(raw_scores)
+    min_score_value = min(raw_scores)
+    denom = max(max_score - min_score_value, 1e-6)
+
+    matches: list[BM25Match] = []
+    for chunk, score in rows:
+        normalized = 1.0 if denom <= 1e-6 else max(
+            0.0, min(1.0, (score - min_score_value) / denom)
+        )
+        matches.append(
+            BM25Match(
+                chunk=chunk,
+                raw_score=score,
+                normalized_score=normalized,
+            )
+        )
+
+    return BM25SearchResult(
+        matches=matches,
+        raw_hits=len(rows),
+        after_threshold=len(rows),
+    )
 
 
 async def _vector_candidates(
@@ -51,6 +105,10 @@ async def _vector_candidates(
     top_k: int,
     query_lang: str,
 ) -> Dict[int, RetrievedChunk]:
+    """Fetch candidates using vector similarity search.
+    使用向量相似度搜索获取候选者。
+    """
+    # 获取两倍于 top_k 的候选者以进行重排序/过滤
     rows = await crud_knowledge_base.fetch_chunk_candidates_by_embedding(
         db,
         query_embedding,
@@ -59,6 +117,7 @@ async def _vector_candidates(
     items: Dict[int, RetrievedChunk] = {}
     for chunk, distance in rows:
         distance_val = float(distance)
+        # 将距离转换为相似度 (假设余弦距离)
         similarity = max(0.0, 1.0 - distance_val)
         chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
         bonus = _language_bonus(query_lang, chunk_lang)
@@ -82,18 +141,22 @@ async def bm25_search(
     config: DynamicSettingsMapping,
     query_language: str | None = None,
 ):
+    """Perform BM25 keyword search.
+    执行 BM25 关键词搜索。
+    """
     if not query.strip():
         return BM25SearchResult(matches=[], raw_hits=0, after_threshold=0), build_bm25_config(config, requested_top_k=requested_top_k)
 
     bm25_config = build_bm25_config(config, requested_top_k=requested_top_k)
-    result = await fetch_bm25_matches(
+    rows = await crud_knowledge_base.search_by_bm25(
         db,
         query,
         bm25_config.search_limit,
+        query_language=query_language,
         min_rank=bm25_config.min_rank,
-        language=query_language,
     )
-    return result, bm25_config
+
+    return _normalize_bm25_rows(rows), bm25_config
 
 
 async def _bm25_candidates(
@@ -102,7 +165,10 @@ async def _bm25_candidates(
     top_k: int,
     config: DynamicSettingsMapping,
 ) -> Dict[int, tuple["models.KnowledgeChunk", float, float]]:
-    result, bm25_config = await bm25_search(
+    """Fetch candidates using BM25 search.
+    使用 BM25 搜索获取候选者。
+    """
+    result, _bm25_config = await bm25_search(
         db,
         query,
         requested_top_k=top_k,
@@ -112,6 +178,7 @@ async def _bm25_candidates(
 
     scores: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
     for match in result.matches:
+        # 存储块、归一化得分和原始得分
         scores[match.chunk.id] = (match.chunk, match.normalized_score, match.raw_score)
     return scores
 
@@ -121,18 +188,24 @@ def _merge_candidates(
     bm25_hits: Dict[int, tuple["models.KnowledgeChunk", float, float]],
     query_lang: str,
 ) -> List[RetrievedChunk]:
+    """Merge vector and BM25 candidates (Hybrid Search).
+    合并向量和 BM25 候选者 (混合搜索)。
+    """
     merged: Dict[int, RetrievedChunk] = dict(vector_hits)
 
     for chunk_id, (chunk, normalized, raw_score) in bm25_hits.items():
         if chunk_id in merged:
+            # 如果在向量结果中已存在，更新为混合模式
             item = merged[chunk_id]
             item.bm25_score = raw_score
             item.retrieval_source = "hybrid"
+            # 取向量得分和 BM25 归一化得分的最大值作为基础得分
             candidate = max(item.vector_score, normalized)
             chunk_lang = (item.chunk.language or "").lower() if getattr(item.chunk, "language", None) else ""
             item.score = candidate + _language_bonus(query_lang, chunk_lang)
             item.similarity = max(item.similarity, normalized)
         else:
+            # 如果仅在 BM25 结果中，添加为新条目
             chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
             bonus = _language_bonus(query_lang, chunk_lang)
             merged[chunk_id] = RetrievedChunk(
@@ -147,18 +220,15 @@ def _merge_candidates(
     return list(merged.values())
 
 
-async def search_similar_chunks(
+async def vector_search(
     db: AsyncSession,
     query: str,
+    *,
     top_k: int,
-    config: DynamicSettingsMapping,
 ) -> List[RetrievedChunk]:
-    """Fetch a generous batch of candidates via vector + BM25 and let Gemini digest them."""
+    """仅使用向量相似度的检索接口。"""
     if top_k <= 0 or not query.strip():
         return []
-
-    rag_config = build_rag_config(config, requested_top_k=top_k)
-    effective_top_k = _effective_top_k(rag_config)
 
     embedder = get_embedder()
     query_embedding = (
@@ -166,16 +236,50 @@ async def search_similar_chunks(
     )[0]
 
     query_lang = detect_language(query)
+    vector_hits = await _vector_candidates(db, query_embedding, top_k, query_lang)
+    results = list(vector_hits.values())
+    results.sort(key=lambda item: item.score, reverse=True)
+    return results[:top_k]
+
+
+async def hybrid_search(
+    db: AsyncSession,
+    query: str,
+    top_k: int,
+    config: DynamicSettingsMapping,
+) -> List[RetrievedChunk]:
+    """Fetch a generous batch of candidates via vector + BM25 and let Gemini digest them.
+    通过向量 + BM25 获取大量候选者，并让 Gemini 进行处理。
+    """
+    if top_k <= 0 or not query.strip():
+        return []
+
+    rag_config = build_rag_config(config, requested_top_k=top_k)
+    effective_top_k = rag_config.top_k
+
+    # 生成查询向量
+    embedder = get_embedder()
+    query_embedding = (
+        await run_in_threadpool(embedder.encode, [query], normalize_embeddings=True)
+    )[0]
+
+    # 检测查询语言
+    query_lang = detect_language(query)
+    
+    # 获取向量检索候选者
     vector_hits = await _vector_candidates(
         db,
         query_embedding,
         effective_top_k,
         query_lang,
     )
+    # 获取 BM25 检索候选者
     bm25_hits = await _bm25_candidates(db, query, effective_top_k, config)
 
+    # 合并结果
     merged = _merge_candidates(vector_hits, bm25_hits, query_lang)
 
+    # 按得分排序并截断
     merged.sort(key=lambda item: item.score, reverse=True)
     trimmed = merged[:effective_top_k]
 
@@ -189,4 +293,11 @@ async def search_similar_chunks(
     return trimmed
 
 
-__all__ = ["RetrievedChunk", "search_similar_chunks", "bm25_search"]
+__all__ = [
+    "BM25Match",
+    "BM25SearchResult",
+    "RetrievedChunk",
+    "bm25_search",
+    "vector_search",
+    "hybrid_search",
+]

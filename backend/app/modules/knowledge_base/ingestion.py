@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import models
 from .embeddings import get_embedder
 from .ingest_extractor import ExtractedElement, extract_from_bytes, extract_from_text
-from .ingest_splitter import split_elements
+from .ingest_splitter import SplitChunk, split_elements
 from .language import detect_language_meta
 from .repository import crud_knowledge_base
 from .tokenizer import tokenize_for_search
@@ -16,7 +16,7 @@ from .tokenizer import tokenize_for_search
 
 async def _split_elements_async(
     elements: list[ExtractedElement],
-) -> list:
+) -> list[SplitChunk]:
     """异步地将提取的元素分割成块。"""
     if not elements:
         return []
@@ -84,7 +84,6 @@ async def ingest_document_file(
     raw = await upload.read()
 
     filename = upload.filename or document.source_ref
-    content_type = upload.content_type
 
     # 在线程池中从文件字节中提取元素
     _, elements = await run_in_threadpool(

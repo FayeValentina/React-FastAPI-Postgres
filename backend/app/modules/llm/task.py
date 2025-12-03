@@ -33,7 +33,7 @@ from app.modules.llm.repository import (
 from app.modules.llm.service import prepare_system_and_user
 from app.modules.llm.intent_classifier import RouterDecision
 from app.modules.llm.conversation_metadata import generate_conversation_metadata
-from app.modules.knowledge_base.retrieval import search_similar_chunks
+from app.modules.knowledge_base.retrieval import hybrid_search
 from app.modules.llm.strategy import StrategyContext, resolve_rag_parameters
 
 logger = logging.getLogger(__name__)
@@ -440,7 +440,7 @@ async def process_chat_message(
         effective_query = strategy.processed_query if strategy and strategy.processed_query else content
 
         try:
-            similar = await search_similar_chunks(
+            similar = await hybrid_search(
                 db,
                 effective_query,
                 top_k_value,
