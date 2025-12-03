@@ -444,7 +444,6 @@ async def process_chat_message(
                 db,
                 effective_query,
                 top_k_value,
-                config=strategy_config,
             )
         except Exception:
             logger.exception(

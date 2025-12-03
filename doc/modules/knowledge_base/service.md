@@ -29,7 +29,7 @@
 
 ### 检索（`retrieval.py`）
 1. **加载配置**：`build_rag_config` 根据动态设置和请求 `top_k` 计算检索参数。
-2. **向量召回**：调用 `crud_knowledge_base.fetch_chunk_candidates_by_embedding`。
+2. **向量召回**：调用 `crud_knowledge_base.search_by_vector`。
 3. **BM25 融合**：`_apply_bm25_fusion` 在向量候选基础上注入全文检索得分。
 4. **重排**：若启用，使用 `get_reranker()` 运行 CrossEncoder，结合粗排得分得到最终 `score`。
 5. **MMR**：`_mmr_select` 在相关性与多样性之间权衡输出最终候选集。

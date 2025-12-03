@@ -27,7 +27,6 @@ class BM25SearchConfig:
     """Configuration bundle for BM25-only search scenarios."""
 
     top_k: int
-    search_limit: int
     min_rank: float
 
 
@@ -87,18 +86,9 @@ def build_bm25_config(
     *,
     requested_top_k: int,
 ) -> BM25SearchConfig:
-    """Construct BM25 search configuration from dynamic settings and request caps."""
+    """Construct BM25 search configuration from request caps and dynamic min_rank."""
 
-    base_top_k = max(1, min(requested_top_k, 100))
-    config_top_k = _read_setting(
-        config_map,
-        "BM25_TOP_K",
-        default=settings.BM25_TOP_K,
-        caster=int,
-        minimum=1,
-        maximum=100,
-    )
-    search_limit = min(100, max(base_top_k, config_top_k))
+    top_k = max(1, min(requested_top_k, 100))
     min_rank = _read_setting(
         config_map,
         "BM25_MIN_RANK",
@@ -107,8 +97,7 @@ def build_bm25_config(
         minimum=0.0,
     )
     return BM25SearchConfig(
-        top_k=base_top_k,
-        search_limit=search_limit,
+        top_k=top_k,
         min_rank=min_rank,
     )
 

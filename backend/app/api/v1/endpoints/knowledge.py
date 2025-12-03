@@ -4,7 +4,6 @@ from typing import Awaitable, Callable, Dict
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.knowledge_base.schemas import (
     KnowledgeDocumentCreate,
@@ -19,11 +18,6 @@ from app.modules.knowledge_base.schemas import (
 )
 from app.modules.knowledge_base import models
 from app.modules.knowledge_base.repository import crud_knowledge_base
-from app.infrastructure.dynamic_settings import (
-    DynamicSettingsService,
-    get_dynamic_settings_service,
-)
-from app.modules.knowledge_base.language import detect_language
 from app.modules.knowledge_base.retrieval import bm25_search
 from app.modules.knowledge_base.ingestion import (
     ingest_document_content,
@@ -164,11 +158,7 @@ async def patch_document(
 async def search_knowledge(
     payload: KnowledgeSearchRequest,
     db: AsyncSession = Depends(get_async_session),
-    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
-    config = await dynamic_settings_service.get_all()
-    language = detect_language(payload.query, None)
-
     logger.info(
         "knowledge_search_bm25",
         extra={
@@ -176,15 +166,13 @@ async def search_knowledge(
         },
     )
 
-    search_result, bm25_config = await bm25_search(
+    search_result = await bm25_search(
         db,
         payload.query,
         requested_top_k=payload.top_k,
-        config=config,
-        query_language=language,
     )
 
-    matches = search_result.matches[:bm25_config.top_k]
+    matches = search_result.matches[: payload.top_k]
     response: list[KnowledgeSearchResult] = []
     for match in matches:
         chunk = match.chunk

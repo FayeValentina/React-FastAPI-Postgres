@@ -4,22 +4,33 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List
 
+import asyncio
 import numpy as np
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.infrastructure.dynamic_settings import get_dynamic_settings_service
+
 from . import models
-from .config import (
-    DynamicSettingsMapping,
-    RagSearchConfig,
-    build_bm25_config,
-    build_rag_config,
-)
+from .config import build_bm25_config, build_rag_config
 from .embeddings import get_embedder
 from .language import detect_language
 from .repository import crud_knowledge_base
 
 logger = logging.getLogger(__name__)
+
+
+async def _load_dynamic_settings():
+    """Load dynamic settings with a defensive fallback."""
+    service = get_dynamic_settings_service()
+    try:
+        return await service.get_all()
+    except Exception as exc:
+        if isinstance(exc, asyncio.CancelledError):
+            raise
+        logger.exception("Falling back to default dynamic settings during retrieval")
+        return settings.dynamic_settings_defaults()
 
 
 @dataclass(slots=True)
@@ -54,19 +65,6 @@ class RetrievedChunk:
     bm25_score: float = 0.0  # BM25 检索得分
 
 
-def _language_bonus(query_lang: str, chunk_lang: str) -> float:
-    """Calculate language match bonus.
-    计算语言匹配奖励。
-    """
-    if not query_lang or not chunk_lang:
-        return 0.0
-    # 如果查询语言和块语言一致，给予 0.05 的加分
-    return 0.05 if query_lang == chunk_lang else 0.0
-
-
-
-
-
 def _normalize_bm25_rows(
     rows: list[tuple["models.KnowledgeChunk", float]],
 ) -> BM25SearchResult:
@@ -98,128 +96,6 @@ def _normalize_bm25_rows(
         after_threshold=len(rows),
     )
 
-
-async def _vector_candidates(
-    db: AsyncSession,
-    query_embedding: np.ndarray,
-    top_k: int,
-    query_lang: str,
-) -> Dict[int, RetrievedChunk]:
-    """Fetch candidates using vector similarity search.
-    使用向量相似度搜索获取候选者。
-    """
-    # 获取两倍于 top_k 的候选者以进行重排序/过滤
-    rows = await crud_knowledge_base.fetch_chunk_candidates_by_embedding(
-        db,
-        query_embedding,
-        top_k * 2,
-    )
-    items: Dict[int, RetrievedChunk] = {}
-    for chunk, distance in rows:
-        distance_val = float(distance)
-        # 将距离转换为相似度 (假设余弦距离)
-        similarity = max(0.0, 1.0 - distance_val)
-        chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
-        bonus = _language_bonus(query_lang, chunk_lang)
-        score = similarity + bonus
-        items[chunk.id] = RetrievedChunk(
-            chunk=chunk,
-            score=score,
-            similarity=similarity,
-            retrieval_source="vector",
-            vector_score=similarity,
-            bm25_score=0.0,
-        )
-    return items
-
-
-async def bm25_search(
-    db: AsyncSession,
-    query: str,
-    *,
-    requested_top_k: int,
-    config: DynamicSettingsMapping,
-    query_language: str | None = None,
-):
-    """Perform BM25 keyword search.
-    执行 BM25 关键词搜索。
-    """
-    if not query.strip():
-        return BM25SearchResult(matches=[], raw_hits=0, after_threshold=0), build_bm25_config(config, requested_top_k=requested_top_k)
-
-    bm25_config = build_bm25_config(config, requested_top_k=requested_top_k)
-    rows = await crud_knowledge_base.search_by_bm25(
-        db,
-        query,
-        bm25_config.search_limit,
-        query_language=query_language,
-        min_rank=bm25_config.min_rank,
-    )
-
-    return _normalize_bm25_rows(rows), bm25_config
-
-
-async def _bm25_candidates(
-    db: AsyncSession,
-    query: str,
-    top_k: int,
-    config: DynamicSettingsMapping,
-) -> Dict[int, tuple["models.KnowledgeChunk", float, float]]:
-    """Fetch candidates using BM25 search.
-    使用 BM25 搜索获取候选者。
-    """
-    result, _bm25_config = await bm25_search(
-        db,
-        query,
-        requested_top_k=top_k,
-        config=config,
-        query_language="",
-    )
-
-    scores: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
-    for match in result.matches:
-        # 存储块、归一化得分和原始得分
-        scores[match.chunk.id] = (match.chunk, match.normalized_score, match.raw_score)
-    return scores
-
-
-def _merge_candidates(
-    vector_hits: Dict[int, RetrievedChunk],
-    bm25_hits: Dict[int, tuple["models.KnowledgeChunk", float, float]],
-    query_lang: str,
-) -> List[RetrievedChunk]:
-    """Merge vector and BM25 candidates (Hybrid Search).
-    合并向量和 BM25 候选者 (混合搜索)。
-    """
-    merged: Dict[int, RetrievedChunk] = dict(vector_hits)
-
-    for chunk_id, (chunk, normalized, raw_score) in bm25_hits.items():
-        if chunk_id in merged:
-            # 如果在向量结果中已存在，更新为混合模式
-            item = merged[chunk_id]
-            item.bm25_score = raw_score
-            item.retrieval_source = "hybrid"
-            # 取向量得分和 BM25 归一化得分的最大值作为基础得分
-            candidate = max(item.vector_score, normalized)
-            chunk_lang = (item.chunk.language or "").lower() if getattr(item.chunk, "language", None) else ""
-            item.score = candidate + _language_bonus(query_lang, chunk_lang)
-            item.similarity = max(item.similarity, normalized)
-        else:
-            # 如果仅在 BM25 结果中，添加为新条目
-            chunk_lang = (chunk.language or "").lower() if getattr(chunk, "language", None) else ""
-            bonus = _language_bonus(query_lang, chunk_lang)
-            merged[chunk_id] = RetrievedChunk(
-                chunk=chunk,
-                score=normalized + bonus,
-                similarity=normalized,
-                retrieval_source="bm25",
-                vector_score=0.0,
-                bm25_score=raw_score,
-            )
-
-    return list(merged.values())
-
-
 async def vector_search(
     db: AsyncSession,
     query: str,
@@ -235,18 +111,120 @@ async def vector_search(
         await run_in_threadpool(embedder.encode, [query], normalize_embeddings=True)
     )[0]
 
-    query_lang = detect_language(query)
-    vector_hits = await _vector_candidates(db, query_embedding, top_k, query_lang)
+    vector_hits = await _vector_candidates(db, query_embedding, top_k)
     results = list(vector_hits.values())
     results.sort(key=lambda item: item.score, reverse=True)
     return results[:top_k]
+
+async def _vector_candidates(
+    db: AsyncSession,
+    query_embedding: np.ndarray,
+    top_k: int,
+) -> Dict[int, RetrievedChunk]:
+    """Fetch candidates using vector similarity search.
+    使用向量相似度搜索获取候选者。
+    """
+    rows = await crud_knowledge_base.search_by_vector(
+        db,
+        query_embedding,
+        top_k,
+    )
+    items: Dict[int, RetrievedChunk] = {}
+    for chunk, distance in rows:
+        distance_val = float(distance)
+        # 将距离转换为相似度 (假设余弦距离)
+        similarity = max(0.0, 1.0 - distance_val)
+        items[chunk.id] = RetrievedChunk(
+            chunk=chunk,
+            score=similarity,
+            similarity=similarity,
+            retrieval_source="vector",
+            vector_score=similarity,
+            bm25_score=0.0,
+        )
+    return items
+
+
+async def bm25_search(
+    db: AsyncSession,
+    query: str,
+    *,
+    requested_top_k: int,
+) -> BM25SearchResult:
+    """Perform BM25 keyword search.
+    执行 BM25 关键词搜索。
+    """
+    config_map = await _load_dynamic_settings()
+    bm25_config = build_bm25_config(config_map, requested_top_k=requested_top_k)
+    if not query.strip():
+        return BM25SearchResult(matches=[], raw_hits=0, after_threshold=0)
+
+    query_language = detect_language(query)
+    rows = await crud_knowledge_base.search_by_bm25(
+        db,
+        query,
+        bm25_config.top_k,
+        query_language=query_language,
+        min_rank=bm25_config.min_rank,
+    )
+
+    return _normalize_bm25_rows(rows)
+
+
+async def _bm25_candidates(
+    db: AsyncSession,
+    query: str,
+    top_k: int,
+) -> Dict[int, tuple["models.KnowledgeChunk", float, float]]:
+    """Fetch candidates using BM25 search.
+    使用 BM25 搜索获取候选者。
+    """
+    result = await bm25_search(db, query, requested_top_k=top_k)
+
+    scores: Dict[int, tuple["models.KnowledgeChunk", float, float]] = {}
+    for match in result.matches:
+        # 存储块、归一化得分和原始得分
+        scores[match.chunk.id] = (match.chunk, match.normalized_score, match.raw_score)
+    return scores
+
+
+def _merge_candidates(
+    vector_hits: Dict[int, RetrievedChunk],
+    bm25_hits: Dict[int, tuple["models.KnowledgeChunk", float, float]],
+) -> List[RetrievedChunk]:
+    """Merge vector and BM25 candidates (Hybrid Search).
+    合并向量和 BM25 候选者 (混合搜索)。
+    """
+    merged: Dict[int, RetrievedChunk] = dict(vector_hits)
+
+    for chunk_id, (chunk, normalized, raw_score) in bm25_hits.items():
+        if chunk_id in merged:
+            # 如果在向量结果中已存在，更新为混合模式
+            item = merged[chunk_id]
+            item.bm25_score = raw_score
+            item.retrieval_source = "hybrid"
+            # 取向量得分和 BM25 归一化得分的最大值作为基础得分
+            candidate = max(item.vector_score, normalized)
+            item.score = candidate
+            item.similarity = max(item.similarity, normalized)
+        else:
+            # 如果仅在 BM25 结果中，添加为新条目
+            merged[chunk_id] = RetrievedChunk(
+                chunk=chunk,
+                score=normalized,
+                similarity=normalized,
+                retrieval_source="bm25",
+                vector_score=0.0,
+                bm25_score=raw_score,
+            )
+
+    return list(merged.values())
 
 
 async def hybrid_search(
     db: AsyncSession,
     query: str,
     top_k: int,
-    config: DynamicSettingsMapping,
 ) -> List[RetrievedChunk]:
     """Fetch a generous batch of candidates via vector + BM25 and let Gemini digest them.
     通过向量 + BM25 获取大量候选者，并让 Gemini 进行处理。
@@ -254,7 +232,8 @@ async def hybrid_search(
     if top_k <= 0 or not query.strip():
         return []
 
-    rag_config = build_rag_config(config, requested_top_k=top_k)
+    config_map = await _load_dynamic_settings()
+    rag_config = build_rag_config(config_map, requested_top_k=top_k)
     effective_top_k = rag_config.top_k
 
     # 生成查询向量
@@ -263,29 +242,24 @@ async def hybrid_search(
         await run_in_threadpool(embedder.encode, [query], normalize_embeddings=True)
     )[0]
 
-    # 检测查询语言
-    query_lang = detect_language(query)
-    
     # 获取向量检索候选者
     vector_hits = await _vector_candidates(
         db,
         query_embedding,
         effective_top_k,
-        query_lang,
     )
     # 获取 BM25 检索候选者
-    bm25_hits = await _bm25_candidates(db, query, effective_top_k, config)
+    bm25_hits = await _bm25_candidates(db, query, effective_top_k)
 
     # 合并结果
-    merged = _merge_candidates(vector_hits, bm25_hits, query_lang)
+    merged = _merge_candidates(vector_hits, bm25_hits)
 
     # 按得分排序并截断
     merged.sort(key=lambda item: item.score, reverse=True)
     trimmed = merged[:effective_top_k]
 
     logger.debug(
-        "retrieval simplified: query_lang=%s vector=%s bm25=%s delivered=%s",
-        query_lang,
+        "retrieval simplified: vector=%s bm25=%s delivered=%s",
         len(vector_hits),
         len(bm25_hits),
         len(trimmed),

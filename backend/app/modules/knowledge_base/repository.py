@@ -185,7 +185,7 @@ class CRUDKnowledgeBase:
         await db.delete(chunk)
         await db.commit()
 
-    async def fetch_chunk_candidates_by_embedding(
+    async def search_by_vector(
         self,
         db: AsyncSession,
         query_embedding: np.ndarray,

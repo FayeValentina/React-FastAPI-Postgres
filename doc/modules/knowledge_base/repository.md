@@ -29,7 +29,7 @@
 
 这是实现RAG功能的关键所在。
 
-- **`fetch_chunk_candidates_by_embedding(db, query_embedding, limit)`**: **语义搜索**。
+- **`search_by_vector(db, query_embedding, limit)`**: **语义搜索**。
     - **功能**: 根据用户问题的嵌入向量 `query_embedding`，在 `knowledge_chunks` 表中查找语义最相似的区块。
     - **实现**: 
         1.  使用 `pgvector` 提供的 `<=>` 操作符（在SQLAlchemy中表现为 `cosine_distance` 方法）来计算查询向量与数据库中每个区块向量之间的余弦距离。
