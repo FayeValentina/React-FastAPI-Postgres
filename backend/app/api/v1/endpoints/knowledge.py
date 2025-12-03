@@ -4,7 +4,6 @@ from typing import Awaitable, Callable, Dict
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.infrastructure.database.postgres_base import get_async_session
 from app.modules.knowledge_base.schemas import (
     KnowledgeDocumentCreate,
@@ -19,19 +18,13 @@ from app.modules.knowledge_base.schemas import (
 )
 from app.modules.knowledge_base import models
 from app.modules.knowledge_base.repository import crud_knowledge_base
-from app.infrastructure.dynamic_settings import (
-    DynamicSettingsService,
-    get_dynamic_settings_service,
-)
-from app.modules.knowledge_base.bm25 import fetch_bm25_matches
-from app.modules.knowledge_base.language import detect_language
+from app.modules.knowledge_base.retrieval import bm25_search, vector_search
 from app.modules.knowledge_base.ingestion import (
     ingest_document_content,
     ingest_document_file,
     update_chunk,
     delete_chunk,
 )
-from app.infrastructure.utils.coerce_utils import coerce_float, coerce_int
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -92,7 +85,6 @@ async def ingest_content(
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_content(
             db,
-            document_id,
             body.content,
             overwrite=body.overwrite,
             document=doc,
@@ -111,10 +103,9 @@ async def ingest_content_upload(
     async def _operation(doc: models.KnowledgeDocument) -> int:
         return await ingest_document_file(
             db,
-            document_id,
             file,
-            overwrite=overwrite,
             document=doc,
+            overwrite=overwrite,
         )
 
     return await _ingest_document(
@@ -167,80 +158,68 @@ async def patch_document(
 async def search_knowledge(
     payload: KnowledgeSearchRequest,
     db: AsyncSession = Depends(get_async_session),
-    dynamic_settings_service: DynamicSettingsService = Depends(get_dynamic_settings_service),
 ):
-    top_k_value = max(1, min(payload.top_k, 100))
-    language = detect_language(payload.query, None)
-
-    try:
-        config = await dynamic_settings_service.get_all()
-    except Exception:
-        config = settings.dynamic_settings_defaults()
-    if not isinstance(config, dict):
-        config = settings.dynamic_settings_defaults()
-
-    bm25_min_rank = coerce_float(
-        config,
-        "BM25_MIN_RANK",
-        settings.BM25_MIN_RANK,
-        minimum=0.0,
-    )
-    default_bm25_top_k = coerce_int(
-        config,
-        "BM25_TOP_K",
-        settings.BM25_TOP_K,
-        minimum=1,
-        maximum=100,
-    )
-    bm25_limit = default_bm25_top_k
-    bm25_limit = max(1, min(100, bm25_limit))
-    search_limit = min(100, max(bm25_limit, top_k_value))
-
     logger.info(
         "knowledge_search_bm25",
         extra={
-            "top_k": top_k_value,
-            "bm25_limit": search_limit,
-            "bm25_min_rank": bm25_min_rank,
+            "top_k": payload.top_k,
+            "use_bm25": payload.use_bm25,
         },
     )
 
-    search_result = await fetch_bm25_matches(
-        db,
-        payload.query,
-        search_limit,
-        min_rank=bm25_min_rank,
-        language=language,
-    )
+    results: list[KnowledgeSearchResult] = []
 
-    matches = search_result.matches[:top_k_value]
-    response: list[KnowledgeSearchResult] = []
-    for match in matches:
-        chunk = match.chunk
-        response.append(
-            KnowledgeSearchResult(
-                id=chunk.id,
-                document_id=chunk.document_id,
-                chunk_index=chunk.chunk_index,
-                content=chunk.content,
-                language=getattr(chunk, "language", None),
-                created_at=chunk.created_at,
-                score=float(match.normalized_score),
-                similarity=float(match.normalized_score),
-                bm25_score=float(match.raw_score),
-                retrieval_source="bm25",
-            )
+    if payload.use_bm25:
+        search_result = await bm25_search(
+            db,
+            payload.query,
+            requested_top_k=payload.top_k,
         )
 
-    return response
+        for match in search_result.matches:
+            chunk = match.chunk
+            results.append(
+                KnowledgeSearchResult(
+                    id=chunk.id,
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    language=getattr(chunk, "language", None),
+                    created_at=chunk.created_at,
+                    score=float(match.normalized_score),
+                    similarity=float(match.normalized_score),
+                    bm25_score=float(match.raw_score),
+                    retrieval_source="bm25",
+                )
+            )
+    else:
+        vector_matches = await vector_search(
+            db,
+            payload.query,
+            top_k=payload.top_k,
+        )
+        for item in vector_matches:
+            chunk = item.chunk
+            results.append(
+                KnowledgeSearchResult(
+                    id=chunk.id,
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    language=getattr(chunk, "language", None),
+                    created_at=chunk.created_at,
+                    score=float(item.score),
+                    similarity=float(item.similarity),
+                    bm25_score=None,
+                    retrieval_source=item.retrieval_source,
+                )
+            )
+
+    return results
 
 
 @router.get("/documents/{document_id}/chunks", response_model=list[KnowledgeChunkRead])
 async def list_document_chunks(document_id: int, db: AsyncSession = Depends(get_async_session)):
-    # 确认文档存在
-    exist = await db.get(models.KnowledgeDocument, document_id)
-    if not exist:
-        raise HTTPException(status_code=404, detail="Document not found")
     chunks = await crud_knowledge_base.get_chunks_by_document_id(db, document_id)
     return chunks
 
@@ -252,12 +231,6 @@ async def patch_chunk(
     db: AsyncSession = Depends(get_async_session),
 ):
     updates = payload.model_dump(exclude_unset=True)
-    if not updates:
-        chunk = await db.get(models.KnowledgeChunk, chunk_id)
-        if not chunk:
-            raise HTTPException(status_code=404, detail="Chunk not found")
-        return chunk
-
     chunk = await update_chunk(db, chunk_id, updates)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")

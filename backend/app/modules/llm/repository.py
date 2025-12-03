@@ -28,7 +28,7 @@ async def create_conversation(
     user_id: int,
     payload: ConversationCreate,
 ) -> Conversation:
-    title = (payload.title or "New Chat").strip() or "New Chat"
+    title = payload.title or "New Chat"
     requested_model = (payload.model or "").strip()
     conversation_model = requested_model or (settings.CHAT_MODEL or "").strip() or "gpt-4-turbo"
 

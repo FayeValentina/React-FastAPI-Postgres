@@ -110,10 +110,14 @@ const KnowledgeBasePage: React.FC = () => {
     }
   };
 
-  const handleSearch = async (query: string, topK: number) => {
+  const handleSearch = async (query: string, topK: number, useBm25: boolean) => {
     setLoading(true);
     try {
-      const data = await api.post<KnowledgeSearchResult[]>('/v1/knowledge/search', { query, top_k: topK });
+      const data = await api.post<KnowledgeSearchResult[]>('/v1/knowledge/search', {
+        query,
+        top_k: topK,
+        use_bm25: useBm25,
+      });
       setSearchResults(data ?? []);
     } catch (e) {
       error(extractErrorMessage(e as ApiError) || '搜索失败');

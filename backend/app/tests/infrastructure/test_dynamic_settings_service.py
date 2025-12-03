@@ -6,8 +6,6 @@ import asyncio
 import os
 from typing import Any, Dict, List, Tuple
 
-import pytest
-
 # Provide minimal environment so Settings can initialise during import.
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("POSTGRES_USER", "test")
@@ -88,20 +86,20 @@ def test_get_all_merges_stored_overrides():
 
 
 def test_update_persists_and_returns_snapshot():
-    fake = FakeRedis(initial={"RAG_MIN_SIM": 0.25})
+    fake = FakeRedis(initial={"RAG_TOP_K": 10})
     service = DynamicSettingsService(fake, settings)
 
     async def scenario():
-        updated = await service.update({"RAG_MIN_SIM": 0.9, "NEW_KEY": "hello"})
+        updated = await service.update({"RAG_TOP_K": 24, "NEW_KEY": "hello"})
         after = await service.get_all()
         return updated, after
 
     updated, after = _run(scenario())
 
-    assert pytest.approx(0.9) == updated["RAG_MIN_SIM"]
+    assert updated["RAG_TOP_K"] == 24
     assert "NEW_KEY" in updated
-    assert after["RAG_MIN_SIM"] == pytest.approx(0.9)
-    assert fake.store[service.redis_key]["RAG_MIN_SIM"] == pytest.approx(0.9)
+    assert after["RAG_TOP_K"] == 24
+    assert fake.store[service.redis_key]["RAG_TOP_K"] == 24
     assert fake.store[service.redis_key]["NEW_KEY"] == "hello"
     assert fake.set_calls[0][0] == service.redis_key
     assert fake.set_calls[1][0] == service.metadata_key
@@ -120,16 +118,16 @@ def test_update_falls_back_when_redis_write_fails():
 
 
 def test_cached_value_tracks_refresh_and_updates():
-    fake = FakeRedis(initial={"RAG_IVFFLAT_PROBES": 17})
+    fake = FakeRedis(initial={"RAG_TOP_K": 17})
     service = DynamicSettingsService(fake, settings)
 
-    assert service.cached_value("RAG_IVFFLAT_PROBES", None) == settings.RAG_IVFFLAT_PROBES
+    assert service.cached_value("RAG_TOP_K", None) == settings.RAG_TOP_K
 
     refreshed = _run(service.get_all())
 
-    assert refreshed["RAG_IVFFLAT_PROBES"] == 17
-    assert service.cached_value("RAG_IVFFLAT_PROBES") == 17
+    assert refreshed["RAG_TOP_K"] == 17
+    assert service.cached_value("RAG_TOP_K") == 17
 
-    _run(service.update({"RAG_IVFFLAT_PROBES": 33}))
+    _run(service.update({"RAG_TOP_K": 33}))
 
-    assert service.cached_value("RAG_IVFFLAT_PROBES") == 33
+    assert service.cached_value("RAG_TOP_K") == 33

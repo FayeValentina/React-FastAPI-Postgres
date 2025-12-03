@@ -346,44 +346,63 @@ def extract_config_id(job_id: str) -> Optional[int]:
     except (ValueError, IndexError):
         return None
 
-def auto_discover_tasks(package_path: str = "app.modules.tasks.workers"):
+def auto_discover_tasks(
+    package_path: str = "app.modules",
+    module_basename: str = "task",
+) -> None:
     """
     自动发现并导入所有任务模块
-    
+
     Args:
-        package_path: 任务包路径
+        package_path: 用作扫描起点的包路径（默认扫描 app.modules 下的所有子包）
+        module_basename: 认为是“任务模块”的文件名（不带 .py），默认是 "task"
+                         即匹配 app/modules/**/task.py → app.modules.**.task
     """
     try:
-        # 导入任务包
+        # 导入起始包，例如 app.modules
         package = importlib.import_module(package_path)
-        
-        # 遍历包中的所有模块
-        for importer, modname, ispkg in pkgutil.iter_modules(
-            package.__path__, 
-            prefix=package.__name__ + "."
+
+        found_modules = 0
+
+        # 递归遍历该包及所有子包
+        for finder, modname, ispkg in pkgutil.walk_packages(
+            package.__path__,
+            prefix=package.__name__ + ".",
         ):
-            if not ispkg:  # 只导入模块，不导入子包
-                try:
-                    importlib.import_module(modname)
-                    logger.info(f"自动导入任务模块: {modname}")
-                except Exception as e:
-                    logger.warning(f"导入任务模块 {modname} 失败: {e}")
-        
-        logger.info(f"任务自动发现完成，共注册 {len(TASKS)} 个任务: {list(TASKS.keys())}")
-        
-        # 显示每个任务的详细参数信息（调试模式）
+            # 只处理模块（排除子包）
+            if ispkg:
+                continue
+
+            # 只导入最后一段名为 module_basename 的模块，例如 *.task
+            if modname.split(".")[-1] != module_basename:
+                continue
+
+            try:
+                importlib.import_module(modname)
+                logger.info(f"自动导入任务模块: {modname}")
+                found_modules += 1
+            except Exception as e:
+                logger.warning(f"导入任务模块 {modname} 失败: {e}")
+
+        logger.info(
+            f"任务自动发现完成，共导入 {found_modules} 个任务模块，"
+            f"当前已注册 {len(TASKS)} 个任务: {list(TASKS.keys())}"
+        )
+
+        # 调试输出每个任务参数
         for task_name in TASKS.keys():
             task_info = TASKS[task_name]
             params = task_info.get('parameters', [])
             if params:
-                params_summary = ", ".join([
+                params_summary = ", ".join(
                     f"{p['name']}:{p['type']}" + ("" if p['required'] else f"={p['default']}")
                     for p in params
-                ])
+                )
                 logger.debug(f"  {task_name} 参数: {params_summary}")
             else:
                 logger.debug(f"  {task_name} 参数: 无")
-        
+
     except Exception as e:
         logger.error(f"任务自动发现失败: {e}")
         raise
+
