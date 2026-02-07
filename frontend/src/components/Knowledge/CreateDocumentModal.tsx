@@ -22,12 +22,11 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ open, onClose
     title: '',
     source_type: '',
     source_ref: '',
-    language: '',
   });
 
   useEffect(() => {
     if (!open) {
-      setForm({ title: '', source_type: '', source_ref: '', language: '' });
+      setForm({ title: '', source_type: '', source_ref: '' });
     }
   }, [open]);
 
@@ -41,7 +40,6 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ open, onClose
       ...(form.title ? { title: form.title } : {}),
       ...(form.source_type ? { source_type: form.source_type } : {}),
       ...(form.source_ref ? { source_ref: form.source_ref } : {}),
-      ...(form.language ? { language: form.language } : {}),
     };
     await onCreate(payload);
   };
@@ -60,22 +58,13 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ open, onClose
                 onChange={handleChange('title')}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="来源类型"
                 placeholder="upload/url/crawl/api"
                 value={form.source_type || ''}
                 onChange={handleChange('source_type')}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="语言"
-                placeholder="zh/en/ja"
-                value={form.language || ''}
-                onChange={handleChange('language')}
               />
             </Grid>
             <Grid item xs={12}>
@@ -99,4 +88,3 @@ const CreateDocumentModal: React.FC<CreateDocumentModalProps> = ({ open, onClose
 };
 
 export default CreateDocumentModal;
-

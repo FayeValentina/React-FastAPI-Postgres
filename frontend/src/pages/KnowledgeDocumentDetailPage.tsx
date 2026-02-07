@@ -42,12 +42,8 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
   // document editable state
   const [title, setTitle] = useState('');
   const [tagsText, setTagsText] = useState('');
-  const [metaText, setMetaText] = useState('');
-  const [language, setLanguage] = useState('');
   const [sourceType, setSourceType] = useState('');
   const [sourceRef, setSourceRef] = useState('');
-  const [mime, setMime] = useState('');
-  const [checksum, setChecksum] = useState('');
   const [createdBy, setCreatedBy] = useState('');
 
   // per-chunk editable state
@@ -71,12 +67,8 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
       // initialise document fields
       setTitle(doc?.title || '');
       setTagsText((doc?.tags || []).join(', '));
-      setMetaText(doc?.meta ? JSON.stringify(doc.meta, null, 2) : '');
-      setLanguage(doc?.language || '');
       setSourceType(doc?.source_type || '');
       setSourceRef(doc?.source_ref || '');
-      setMime(doc?.mime || '');
-      setChecksum(doc?.checksum || '');
       setCreatedBy(doc?.created_by || '');
 
       const drafts: Record<number, ChunkDraft> = {};
@@ -109,18 +101,6 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-    let meta: unknown = undefined;
-    if (metaText.trim().length > 0) {
-      try {
-        meta = JSON.parse(metaText);
-      } catch {
-        error('Metadata 不是合法的 JSON');
-        return;
-      }
-    } else {
-      meta = null;
-    }
-
     const normalizeOptional = (value: string) => {
       const trimmed = value.trim();
       return trimmed.length > 0 ? trimmed : null;
@@ -130,22 +110,12 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
 
     if (title !== (document.title || '')) payload.title = title;
     if (JSON.stringify(tags) !== JSON.stringify(document.tags || [])) payload.tags = tags;
-    if (JSON.stringify(meta) !== JSON.stringify(document.meta ?? null)) payload.meta = meta;
-
-    const normalizedLanguage = normalizeOptional(language);
-    if (normalizedLanguage !== (document.language ?? null)) payload.language = normalizedLanguage;
 
     const normalizedSourceType = normalizeOptional(sourceType);
     if (normalizedSourceType !== (document.source_type ?? null)) payload.source_type = normalizedSourceType;
 
     const normalizedSourceRef = normalizeOptional(sourceRef);
     if (normalizedSourceRef !== (document.source_ref ?? null)) payload.source_ref = normalizedSourceRef;
-
-    const normalizedMime = normalizeOptional(mime);
-    if (normalizedMime !== (document.mime ?? null)) payload.mime = normalizedMime;
-
-    const normalizedChecksum = normalizeOptional(checksum);
-    if (normalizedChecksum !== (document.checksum ?? null)) payload.checksum = normalizedChecksum;
 
     const normalizedCreatedBy = normalizeOptional(createdBy);
     if (normalizedCreatedBy !== (document.created_by ?? null)) payload.created_by = normalizedCreatedBy;
@@ -257,7 +227,6 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
     }
   };
 
-  const metaPlaceholder = '{\n  "key": "value"\n}';
   const createdAtDisplay = useMemo(() => {
     if (!document?.created_at) return '';
     try {
@@ -299,12 +268,6 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
                 <Stack spacing={2}>
                   <TextField label="标题" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
                   <TextField
-                    label="语言 (language)"
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
-                    fullWidth
-                  />
-                  <TextField
                     label="来源类型 (source_type)"
                     value={sourceType}
                     onChange={(e) => setSourceType(e.target.value)}
@@ -323,27 +286,11 @@ const KnowledgeDocumentDetailPage: React.FC = () => {
                     onChange={(e) => setTagsText(e.target.value)}
                     fullWidth
                   />
-                  <TextField label="MIME 类型" value={mime} onChange={(e) => setMime(e.target.value)} fullWidth />
-                  <TextField
-                    label="Checksum"
-                    value={checksum}
-                    onChange={(e) => setChecksum(e.target.value)}
-                    fullWidth
-                  />
                   <TextField
                     label="创建人 (created_by)"
                     value={createdBy}
                     onChange={(e) => setCreatedBy(e.target.value)}
                     fullWidth
-                  />
-                  <TextField
-                    label="Metadata (JSON)"
-                    placeholder={metaPlaceholder}
-                    value={metaText}
-                    onChange={(e) => setMetaText(e.target.value)}
-                    fullWidth
-                    multiline
-                    minRows={6}
                   />
                   <TextField
                     label="创建时间"

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from sqlalchemy import DateTime, Text, String, func, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -19,10 +19,6 @@ class KnowledgeDocument(Base):
     source_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, comment="来源类型")
     source_ref: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True, comment="来源引用（URL/路径/外部ID/批次ID）")
     title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True, comment="文档标题")
-    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, comment="文档语言")
-    mime: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, comment="MIME 类型")
-    checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, comment="文件校验和")
-    meta: Mapped[Dict[str, Any] | None] = mapped_column(JSONB, nullable=True, comment="自定义元数据")
     tags: Mapped[List[str] | None] = mapped_column(JSONB, nullable=True, comment="标签列表")
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, comment="创建者")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), comment="创建时间")

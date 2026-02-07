@@ -60,11 +60,6 @@ class Message(Base):
         index=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        server_default=func.now(),
-        server_onupdate=func.now(),
-    )
 
     conversation: Mapped["Conversation"] = relationship(
         "Conversation",
