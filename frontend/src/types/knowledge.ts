@@ -4,10 +4,6 @@ export interface KnowledgeDocumentBase {
   source_type?: string | null;
   source_ref?: string | null;
   title?: string | null;
-  language?: string | null;
-  mime?: string | null;
-  checksum?: string | null;
-  meta?: Record<string, unknown> | null;
   tags?: string[] | null;
   created_by?: string | null;
 }
