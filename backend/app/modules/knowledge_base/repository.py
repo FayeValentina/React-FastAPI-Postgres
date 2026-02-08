@@ -24,10 +24,6 @@ class CRUDKnowledgeBase:
             source_type=data.source_type,
             source_ref=data.source_ref,
             title=data.title,
-            language=data.language,
-            mime=data.mime,
-            checksum=data.checksum,
-            meta=data.meta,
             tags=data.tags,
             created_by=data.created_by,
         )
@@ -73,10 +69,6 @@ class CRUDKnowledgeBase:
             "source_type",
             "source_ref",
             "title",
-            "language",
-            "mime",
-            "checksum",
-            "meta",
             "tags",
             "created_by",
         }

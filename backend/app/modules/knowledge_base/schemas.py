@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,10 +10,6 @@ class KnowledgeDocumentBase(BaseModel):
     source_type: Optional[str] = Field(None, description="来源类型：upload/url/crawl/api 等")
     source_ref: Optional[str] = Field(None, description="来源引用：URL/路径/外部ID/批次ID")
     title: Optional[str] = None
-    language: Optional[str] = Field(None, description="文档语言代码，如 zh/en/ja")
-    mime: Optional[str] = None
-    checksum: Optional[str] = None
-    meta: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
     created_by: Optional[str] = None
 
